@@ -1,0 +1,15 @@
+[package]
+name = "pico"
+description = "Pico: a small, local photo organizer in the spirit of Picasa 3"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+eframe = "0.37.0"
+egui = { version = "0.37.0", features = ["monochrome_emoji_fonts"] }
+pico-core = { path = "../pico-core" }
+rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal"] }
+
+[dev-dependencies]
+egui_kittest = { version = "0.37.0", features = ["eframe", "wgpu", "snapshot"] }

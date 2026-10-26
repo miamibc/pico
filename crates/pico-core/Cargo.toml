@@ -1,0 +1,11 @@
+[package]
+name = "pico-core"
+description = "Pico photo library core: .picasa.ini, edit stacks, media scanning"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ab_glyph = "0.2"
+epaint_default_fonts = "0.37"
+image = "0.25.10"

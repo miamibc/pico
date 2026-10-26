@@ -1,0 +1,49 @@
+keymap 0
+  ctrl+N                 New label
+  ctrl+O                 Add File to Picasa
+  ctrl+M                 Import from
+  ctrl+shift+O           Open File in Editor
+  F2                     Rename
+  ctrl+shift+S           Export Picture to Folder
+  ctrl+S                 Save a Copy
+  ctrl+RETURN            Locate on Disk
+  DELETE                 Delete from Disk
+  ctrl+P                 Print
+  ctrl+E                 Email
+  ctrl+T                 Order Prints
+  ctrl+X                 Cut
+  ctrl+C                 Copy
+  ctrl+V                 Paste
+  ctrl+A                 Select All
+  ctrl+I                 Invert Selection
+  ctrl+D                 Clear Selection
+  ctrl+1                 Small Thumbnails
+  ctrl+2                 Normal Thumbnails
+  ctrl+3                 Edit View
+  ctrl+K                 Keywords
+  ctrl+4                 Slideshow
+  ctrl+5                 Timeline
+  ctrl+shift+P           Print Contact Sheet
+  ctrl+W                 Export as Web Page
+  ctrl+R                 Rotate Clockwise
+  ctrl+shift+R           Rotate Counterclockwise
+  alt+RETURN             Properties
+  F1                     Help Contents and Index
+  ctrl+shift+B           Black-and-White
+  ctrl+shift+E           I'm Feeling Lucky
+  ctrl+F                 Search
+  ctrl+H                 Hold in Tray
+  ctrl+shift+H           Flip Horizontal
+  ctrl+shift+V           Flip Vertical
+  ctrl+                  Move to End of Album
+  ctrl+N                 New Album
+  F11                    Full Screen Mode
+  HOME                   Select 1st Picture in Album
+  END                    Select Last Picture in Album
+  /                      Pause/Play Movie
+  ,                      Rewind Movie
+  .                      Fast Forward Movie
+                         Next Picture
+                         Previous Picture
+                         Switch Between Automatic and Manual Modes
+                         Return to Main Library View

@@ -1,0 +1,142 @@
+# Builds Pico for every supported system and, for a pushed `v*` tag, publishes
+# the archives as a GitHub release. Run by hand (Actions > release > Run
+# workflow) to get the same archives as artifacts without a release.
+#
+# Intel and AMD processors share the x86 builds: x86_64 for 64-bit, x86
+# (i686) for 32-bit. Linux builds are cross-compiled with cargo-zigbuild
+# against glibc 2.28, so they run on distributions from 2019 on; Pico links
+# only libc and loads X11/Wayland/GPU libraries at run time.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            name: linux-x86_64
+          - target: i686-unknown-linux-gnu
+            name: linux-x86
+          - target: aarch64-unknown-linux-gnu
+            name: linux-arm64
+          - target: armv7-unknown-linux-gnueabihf
+            name: linux-armv7
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild
+      - name: Build
+        run: cargo zigbuild --release --locked -p pico --target ${{ matrix.target }}.2.28
+      - name: Package
+        run: |
+          dir=pico-${{ matrix.name }}
+          mkdir "$dir"
+          cp target/${{ matrix.target }}/release/pico README.md "$dir"/
+          tar -czf "$dir.tar.gz" "$dir"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pico-${{ matrix.name }}
+          path: pico-${{ matrix.name }}.tar.gz
+
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            name: windows-x86_64
+          - target: i686-pc-windows-msvc
+            name: windows-x86
+          - target: aarch64-pc-windows-msvc
+            name: windows-arm64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --locked -p pico --target ${{ matrix.target }}
+      - name: Package
+        shell: pwsh
+        run: |
+          $dir = "pico-${{ matrix.name }}"
+          New-Item -ItemType Directory $dir | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/pico.exe, README.md $dir
+          Compress-Archive -Path $dir -DestinationPath "$dir.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pico-${{ matrix.name }}
+          path: pico-${{ matrix.name }}.zip
+
+  # One universal app for Apple Silicon and Intel Macs. It is not signed, so
+  # the first start needs right-click > Open (see README).
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: |
+          cargo build --release --locked -p pico --target aarch64-apple-darwin
+          cargo build --release --locked -p pico --target x86_64-apple-darwin
+      - name: Package
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "pico") | .version')
+          app=Pico.app/Contents
+          mkdir -p "$app/MacOS"
+          lipo -create -output "$app/MacOS/pico" \
+            target/aarch64-apple-darwin/release/pico target/x86_64-apple-darwin/release/pico
+          sed "s/@VERSION@/$version/g" packaging/macos/Info.plist > "$app/Info.plist"
+          codesign --force --deep --sign - Pico.app
+          mkdir pico-macos
+          mv Pico.app pico-macos/
+          cp README.md pico-macos/
+          ditto -c -k --keepParent pico-macos pico-macos.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pico-macos
+          path: pico-macos.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS.txt
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Pico $GITHUB_REF_NAME" --generate-notes

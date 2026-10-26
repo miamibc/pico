@@ -1,0 +1,847 @@
+//! UI tests: drive the real app headlessly with egui_kittest and check what
+//! ends up in `.picasa.ini` on disk.
+
+use crate::app::PicoApp;
+use eframe::egui::{self, Key, Modifiers};
+use egui_kittest::Harness;
+use egui_kittest::kittest::Queryable;
+use pico_core::image::{Rgb, RgbImage};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+
+/// UI tests render with wgpu; several GPU devices in one process at once
+/// crash some drivers, so UI tests take turns.
+static GPU: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn gpu_turn() -> std::sync::MutexGuard<'static, ()> {
+    // A failed test poisons the lock; the next one may still run.
+    GPU.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+struct Fixture {
+    dir: PathBuf,
+    _gpu: std::sync::MutexGuard<'static, ()>,
+}
+
+impl Fixture {
+    /// A folder with three small photos and an INI holding a key Pico must keep.
+    fn new(name: &str) -> Self {
+        let gpu = gpu_turn();
+        let dir = std::env::temp_dir().join(format!("pico-ui-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (file, color) in [("a.png", [200, 40, 40]), ("b.png", [40, 200, 40]), ("c.png", [40, 40, 200])] {
+            RgbImage::from_pixel(120, 80, Rgb(color)).save(dir.join(file)).unwrap();
+        }
+        std::fs::write(dir.join(".picasa.ini"), "[Picasa]\r\nname=Holiday\r\n[b.png]\r\nbackuphash=4242\r\n").unwrap();
+        Self { dir, _gpu: gpu }
+    }
+
+    fn ini(&self) -> String {
+        std::fs::read_to_string(self.dir.join(".picasa.ini")).unwrap()
+    }
+}
+
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+fn harness(dir: &Path) -> Harness<'static, PicoApp> {
+    let dir = dir.to_path_buf();
+    Harness::builder().with_size([1000.0, 700.0]).build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![dir], false))
+}
+
+/// Steps the UI until background work (scanning, decoding) satisfies `done`.
+fn wait_until(harness: &mut Harness<'_, PicoApp>, what: &str, done: impl Fn(&PicoApp) -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while !done(harness.state()) {
+        assert!(Instant::now() < deadline, "timed out waiting for {what}");
+        harness.step();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    harness.step();
+}
+
+/// Saves a screenshot for eyeballing; skipped where no GPU adapter exists.
+fn screenshot(harness: &mut Harness<'_, PicoApp>, name: &str) {
+    let Ok(image) = harness.render() else { return };
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/ui-shots");
+    std::fs::create_dir_all(&dir).unwrap();
+    image.save(dir.join(format!("{name}.png"))).unwrap();
+}
+
+#[test]
+fn star_rotate_and_caption_are_saved_to_ini() {
+    let fixture = Fixture::new("viewer");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    assert!(harness.state().selected_file().is_none(), "nothing is selected on startup");
+    screenshot(&mut harness, "library");
+
+    harness.get_by_label("b.png").click();
+    harness.step();
+    assert_eq!(harness.state().selected_file(), Some(1));
+
+    harness.key_press(Key::Enter);
+    wait_until(&mut harness, "the photo to load", |app| app.is_viewing() && app.viewer_loaded());
+
+    harness.key_press(Key::S);
+    harness.step();
+    assert!(fixture.ini().contains("[b.png]\r\nbackuphash=4242\r\nstar=yes\r\n"), "{}", fixture.ini());
+
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::R);
+    harness.step();
+    assert!(fixture.ini().contains("rotate=rotate(1)\r\n"), "{}", fixture.ini());
+    wait_until(&mut harness, "the rotated photo", |app| app.viewer_loaded());
+
+    let caption = harness.get_by_role(egui::Role::TextInput);
+    caption.focus();
+    caption.type_text("Sunny day");
+    harness.step();
+    harness.key_press(Key::Enter);
+    harness.step();
+    assert!(fixture.ini().contains("caption=Sunny day\r\n"), "{}", fixture.ini());
+    screenshot(&mut harness, "viewer");
+
+    // Ctrl+Shift+R undoes the rotation; an unrotated photo has no rotate key.
+    harness.get_by_label("⟲").click();
+    harness.step();
+    assert!(!fixture.ini().contains("rotate="), "{}", fixture.ini());
+
+    harness.key_press(Key::Escape);
+    harness.step();
+    assert!(!harness.state().is_viewing());
+    assert!(fixture.ini().starts_with("[Picasa]\r\nname=Holiday\r\n"), "{}", fixture.ini());
+}
+
+#[test]
+fn arrows_move_through_photos_in_viewer() {
+    let fixture = Fixture::new("arrows");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+
+    harness.key_press(Key::ArrowRight);
+    harness.step();
+    assert_eq!(harness.state().selected_file(), Some(0), "the first arrow press selects the first photo");
+    harness.key_press(Key::Enter);
+    harness.step();
+    harness.key_press(Key::ArrowRight);
+    harness.step();
+    harness.key_press(Key::ArrowRight);
+    harness.step();
+    harness.key_press(Key::ArrowRight);
+    harness.step();
+    assert_eq!(harness.state().selected_file(), Some(2), "stops at the last photo");
+    harness.key_press(Key::ArrowLeft);
+    harness.step();
+    assert_eq!(harness.state().selected_file(), Some(1));
+}
+
+/// Every non-ASCII character in the app's source (icons, typographic
+/// punctuation) must exist in the bundled fonts; otherwise it renders as an
+/// empty box. Scanning the source keeps this honest as the UI grows.
+#[test]
+fn every_non_ascii_character_has_a_glyph() {
+    let _gpu = gpu_turn();
+    let sources = [
+        include_str!("app.rs"),
+        include_str!("grid.rs"),
+        include_str!("main.rs"),
+        include_str!("slideshow.rs"),
+        include_str!("thumbs.rs"),
+        include_str!("tools.rs"),
+        include_str!("viewer.rs"),
+    ];
+    let mut chars: Vec<char> = sources.iter().flat_map(|s| s.chars()).filter(|c| !c.is_ascii()).collect();
+    chars.sort_unstable();
+    chars.dedup();
+    let mut missing = Vec::new();
+    let mut harness = Harness::new_ui(|ui| {
+        for &ch in &chars {
+            if !ui.fonts_mut(|f| f.has_glyphs(&egui::FontId::proportional(14.0), &ch.to_string())) {
+                missing.push(ch);
+            }
+        }
+    });
+    harness.step();
+    drop(harness);
+    assert!(missing.is_empty(), "no glyph for {missing:?}");
+}
+
+/// Counts screenshot pixels of exactly this color; `None` without a GPU.
+fn count_color(harness: &mut Harness<'_, PicoApp>, rgb: [u8; 3]) -> Option<usize> {
+    let image = harness.render().ok()?;
+    Some(image.pixels().filter(|p| p.0[..3] == rgb).count())
+}
+
+#[test]
+fn edit_panel_writes_filters_and_renders_them() {
+    let fixture = Fixture::new("editor");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("b.png").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    harness.state_mut().open_edit_panel();
+    wait_until(&mut harness, "the photo to load", |app| app.viewer_loaded());
+    let green = [40, 200, 40];
+    let gray = [134, 134, 134]; // Rec. 601 luma of the fixture green
+    if let Some(n) = count_color(&mut harness, green) {
+        assert!(n > 1000, "the green photo is on screen");
+    }
+
+    harness.get_by_label("B&W").click();
+    harness.step();
+    assert!(fixture.ini().contains("filters=bw=1;\r\n"), "{}", fixture.ini());
+    wait_until(&mut harness, "the B&W render", |app| app.viewer_loaded());
+    if let (Some(green_left), Some(gray_now)) = (count_color(&mut harness, green), count_color(&mut harness, gray)) {
+        assert_eq!(green_left, 0, "no green left after B&W");
+        assert!(gray_now > 1000, "the photo turned gray");
+    }
+    screenshot(&mut harness, "editor");
+
+    // Slider changes from the keyboard or accessibility are saved at once and
+    // keep editing the same Tuning entry while it is on top of the stack.
+    harness.get_by_label("Fill Light").set_value_accesskit(0.5);
+    harness.step();
+    harness.get_by_label("Shadows").set_value_accesskit(0.1);
+    harness.step();
+    assert!(
+        fixture.ini().contains("filters=bw=1;finetune2=1,0.500000,0.000000,0.100000,00000000,0.000000;\r\n"),
+        "{}",
+        fixture.ini()
+    );
+
+    harness.get_by_label("Undo").click();
+    harness.step();
+    assert!(fixture.ini().contains("filters=bw=1;\r\n"), "{}", fixture.ini());
+    harness.get_by_label("Undo All Edits").click();
+    harness.step();
+    assert!(!fixture.ini().contains("filters="), "{}", fixture.ini());
+    assert!(fixture.ini().contains("backuphash=4242"), "{}", fixture.ini());
+}
+
+/// Opens every folder of `testdata/library` and saves a screenshot of each to
+/// `target/ui-shots/tour-*.png`. Run explicitly after `testdata/make_testdata.py`.
+#[test]
+#[ignore = "needs testdata/library; run with --ignored"]
+fn testdata_tour() {
+    let _gpu = gpu_turn();
+    let library = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/library");
+    assert!(library.is_dir(), "run testdata/make_testdata.py first");
+    let mut harness = Harness::builder()
+        .with_size([1400.0, 900.0])
+        .build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![library], false));
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() > 0);
+    let names = harness.state().folder_names();
+    for (index, name) in names.iter().enumerate() {
+        harness.state_mut().select_folder(index);
+        harness.step();
+        wait_until(&mut harness, "thumbnails", |app| app.thumbnails_pending() == 0);
+        screenshot(&mut harness, &format!("tour-{index:02}"));
+        println!("tour-{index:02}: {name}");
+    }
+}
+
+/// Reads the last `crop64` of `file` from the INI as unit `[left, top, right, bottom]`.
+fn ini_crop(fixture: &Fixture, file: &str) -> [f32; 4] {
+    let ini = pico_core::ini::PicasaIni::parse(&fixture.ini());
+    let meta = pico_core::meta::PhotoMeta::from_section(ini.section(file).expect("section"));
+    meta.filters.crop().expect("a crop").to_unit()
+}
+
+#[test]
+fn crop_tool_drag_on_rotated_photo_and_straighten() {
+    let fixture = Fixture::new("tools");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("b.png").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    harness.state_mut().open_edit_panel();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::R);
+    harness.step();
+    wait_until(&mut harness, "the rotated photo", |app| app.viewer_loaded());
+
+    harness.get_by_label("Crop").click();
+    harness.step();
+    let photo = harness.get_by_label("Photo").rect();
+    // Select the top-left quarter of the photo as shown (rotated clockwise).
+    harness.drag_at(photo.min + egui::vec2(1.0, 1.0));
+    harness.step();
+    harness.hover_at(photo.center() - egui::vec2(10.0, 10.0));
+    harness.step();
+    harness.hover_at(photo.center());
+    harness.step();
+    harness.drop_at(photo.center());
+    harness.step();
+    harness.get_by_label("Apply").click();
+    harness.step();
+
+    // The shown top-left of a clockwise-rotated photo is its bottom-left.
+    let [left, top, right, bottom] = ini_crop(&fixture, "b.png");
+    let near = |a: f32, b: f32| (a - b).abs() < 0.03;
+    assert!(
+        near(left, 0.0) && near(top, 0.5) && near(right, 0.5) && near(bottom, 1.0),
+        "{:?}",
+        [left, top, right, bottom]
+    );
+    assert!(fixture.ini().contains("crop=rect64("), "{}", fixture.ini());
+    assert!(fixture.ini().contains("rotate=rotate(1)"), "{}", fixture.ini());
+    wait_until(&mut harness, "the cropped photo", |app| app.viewer_loaded());
+    screenshot(&mut harness, "crop");
+
+    harness.get_by_label("Straighten").click();
+    // One frame handles the click, the next draws the tool's panel.
+    harness.step();
+    harness.step();
+    // Drag the angle slider from its middle (0°) to three quarters (+6°).
+    let bar = harness.get_by_role(egui::Role::Slider).rect();
+    harness.drag_at(bar.center());
+    harness.step();
+    harness.hover_at(bar.lerp_inside(egui::vec2(0.6, 0.5)));
+    harness.step();
+    harness.drop_at(bar.lerp_inside(egui::vec2(0.75, 0.5)));
+    harness.step();
+    assert!(harness.state().tool_state().starts_with("straighten 0.5"), "{}", harness.state().tool_state());
+    harness.key_press(Key::Enter);
+    harness.step();
+    let ini = fixture.ini();
+    let tilt = ini.split("tilt=1,").nth(1).and_then(|t| t.split(',').next()).and_then(|v| v.parse::<f32>().ok());
+    assert!(tilt.is_some_and(|t| (t - 0.5).abs() < 0.1), "{ini}");
+
+    // Esc closes an open tool without leaving the photo.
+    harness.get_by_label("Crop").click();
+    harness.step();
+    harness.key_press(Key::Escape);
+    harness.step();
+    assert!(harness.state().is_viewing());
+}
+
+#[test]
+fn effect_tool_places_center_on_rotated_photo() {
+    let fixture = Fixture::new("effect");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("b.png").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    harness.state_mut().open_edit_panel();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::R);
+    harness.step();
+    wait_until(&mut harness, "the rotated photo", |app| app.viewer_loaded());
+
+    // One-click effects are added at once.
+    harness.get_by_label("Sepia").click();
+    harness.step();
+    assert!(fixture.ini().contains("filters=sepia=1;\r\n"), "{}", fixture.ini());
+
+    harness.get_by_label("Soft Focus").click();
+    harness.step();
+    harness.step();
+    assert!(harness.state().tool_state().starts_with("effect radblur"), "{}", harness.state().tool_state());
+    // Click near the top-right corner of the clockwise-rotated photo: that is
+    // near the top-left corner of the photo itself.
+    let photo = harness.get_by_label("Photo").rect();
+    harness.get_by_label("Photo").hover();
+    harness.step();
+    harness.event(egui::Event::PointerMoved(photo.right_top() + egui::vec2(-2.0, 2.0)));
+    harness.event(egui::Event::PointerButton {
+        pos: photo.right_top() + egui::vec2(-2.0, 2.0),
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    harness.step();
+    harness.event(egui::Event::PointerButton {
+        pos: photo.right_top() + egui::vec2(-2.0, 2.0),
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    harness.step();
+    wait_until(&mut harness, "the preview", |app| !app.tool_state().is_empty());
+    screenshot(&mut harness, "effect");
+    harness.key_press(Key::Enter);
+    harness.step();
+
+    let ini = fixture.ini();
+    let params = ini.split("radblur=1,").nth(1).expect("radblur saved").split(';').next().unwrap();
+    let values: Vec<f32> = params.split(',').map(|v| v.parse().unwrap()).collect();
+    assert!(values[0] < 0.1 && values[1] < 0.1, "center near the source top-left: {params}");
+    assert!(ini.contains("filters=sepia=1;radblur=1,"), "{ini}");
+}
+
+#[test]
+fn slideshow_advances_pauses_and_returns() {
+    let fixture = Fixture::new("slideshow");
+    let dir = fixture.dir.clone();
+    let mut harness = Harness::builder()
+        .with_size([800.0, 600.0])
+        .with_step_dt(0.1)
+        .build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![dir], false));
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Num4);
+    harness.step();
+    assert_eq!(harness.state().slideshow_index(), Some(0));
+    harness.state_mut().set_slide_seconds(0.5);
+    wait_until(&mut harness, "the next slide", |app| app.slideshow_index() == Some(1));
+    screenshot(&mut harness, "slideshow");
+
+    harness.key_press(Key::Space); // pause
+    harness.step();
+    for _ in 0..20 {
+        harness.step();
+    }
+    assert_eq!(harness.state().slideshow_index(), Some(1), "paused slideshows stay put");
+    harness.key_press(Key::ArrowRight);
+    harness.step();
+    harness.key_press(Key::ArrowRight);
+    harness.step();
+    assert_eq!(harness.state().slideshow_index(), Some(0), "wraps around after the last photo");
+    harness.key_press(Key::ArrowLeft);
+    harness.step();
+    harness.key_press(Key::Escape);
+    harness.step();
+    assert_eq!(harness.state().slideshow_index(), None);
+    assert_eq!(harness.state().selected_file(), Some(2), "the library selects where the slideshow stopped");
+}
+
+#[test]
+fn video_plays_trims_and_saves_a_frame() {
+    let Some(ffmpeg) = pico_core::video::ffmpeg() else { return };
+    let fixture = Fixture::new("video");
+    let made = std::process::Command::new(ffmpeg)
+        .args([
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=160x120:rate=10:duration=4",
+            "-pix_fmt",
+            "yuv420p",
+        ])
+        .arg(fixture.dir.join("clip.mp4"))
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let dir = fixture.dir.clone();
+    let mut harness = Harness::builder()
+        .with_size([900.0, 650.0])
+        .with_step_dt(0.1)
+        .build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![dir], false));
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("clip.mp4").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    wait_until(&mut harness, "the first frame", |app| app.player_state().2);
+    assert!(!harness.state().player_state().0, "videos open paused");
+
+    harness.key_press(Key::Slash);
+    wait_until(&mut harness, "playback", |app| app.player_state().1 >= Duration::from_millis(800));
+    screenshot(&mut harness, "video");
+    harness.key_press(Key::Slash);
+    harness.step();
+    let paused_at = harness.state().player_state().1;
+    assert!(!harness.state().player_state().0);
+
+    harness.get_by_label("Set Start").click();
+    harness.step();
+    let ini = fixture.ini();
+    let hex = ini.split("filters=moviestart=").nth(1).and_then(|r| r.split(';').next()).expect("trim saved");
+    let ticks = u64::from_str_radix(hex, 16).unwrap();
+    assert_eq!(Duration::from_nanos(ticks * 100), paused_at, "{ini}");
+
+    // The trim adds controls to the bar; let it lay out before clicking.
+    harness.step();
+    harness.get_by_label("Save Frame as Photo").click();
+    harness.step();
+    let saved = format!("clip.{}.jpg", paused_at.as_millis());
+    assert!(fixture.dir.join(&saved).is_file(), "{saved} written");
+    assert!(harness.state().file_names().contains(&saved), "{:?}", harness.state().file_names());
+}
+
+#[test]
+fn batch_commands_search_and_filters() {
+    let fixture = Fixture::new("batch");
+    // A second folder, so search and Starred span the library.
+    let other = fixture.dir.join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    RgbImage::from_pixel(60, 40, Rgb([90, 90, 90])).save(other.join("sea.png")).unwrap();
+    std::fs::write(other.join(".picasa.ini"), "[sea.png]\r\nkeywords=beach,summer\r\nstar=yes\r\n").unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 2);
+    // Folders sort naturally by path: the root folder comes first.
+    harness.state_mut().select_folder(0);
+    harness.step();
+
+    // Ctrl-click and Shift-click build a selection; batch commands write once.
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.get_by_label("c.png").click_modifiers(Modifiers::COMMAND);
+    harness.step();
+    assert_eq!(harness.state().selected_count(), 2);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::R);
+    harness.step();
+    let ini = fixture.ini();
+    assert!(ini.contains("[a.png]\r\nrotate=rotate(1)") && ini.contains("[c.png]\r\nrotate=rotate(1)"), "{ini}");
+    assert!(!ini.contains("[b.png]\r\nbackuphash=4242\r\nrotate"), "b.png was not selected: {ini}");
+
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.get_by_label("c.png").click_modifiers(Modifiers::SHIFT);
+    harness.step();
+    assert_eq!(harness.state().selected_count(), 3, "shift-click selects the range");
+    harness.key_press(Key::S);
+    harness.step();
+    assert_eq!(fixture.ini().matches("star=yes").count(), 3, "{}", fixture.ini());
+
+    // Copy one photo's effects and paste them onto the others.
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::B);
+    harness.step();
+    harness.state_mut().copy_and_paste_to_all();
+    harness.step();
+    assert_eq!(fixture.ini().matches("filters=bw=1;").count(), 3, "{}", fixture.ini());
+
+    // Hiding removes the photo from the grid until hidden photos are shown.
+    harness.get_by_label("b.png").click();
+    harness.step();
+    harness.state_mut().hide_current();
+    harness.step();
+    assert!(fixture.ini().contains("hidden=yes"), "{}", fixture.ini());
+    assert_eq!(harness.state().listing_names(), ["a.png", "c.png"]);
+
+    // Search covers every folder: captions, keywords and names.
+    harness.state_mut().set_search("summer");
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["sea.png"]);
+    harness.state_mut().set_search("");
+    harness.state_mut().show_starred();
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["a.png", "c.png", "sea.png"], "hidden b.png stays hidden");
+    screenshot(&mut harness, "starred");
+}
+
+#[test]
+fn save_revert_export_and_rename_from_menus() {
+    let fixture = Fixture::new("fileops");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("b.png").click();
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::B);
+    harness.step();
+    let original = std::fs::read(fixture.dir.join("b.png")).unwrap();
+
+    harness.get_by_label("File").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Save").click();
+    harness.step();
+    assert_eq!(std::fs::read(fixture.dir.join(".picasaoriginals/b.png")).unwrap(), original, "original kept");
+    assert!(!fixture.ini().contains("filters="), "edits are baked in: {}", fixture.ini());
+    let saved = pico_core::image::open(fixture.dir.join("b.png")).unwrap().to_rgb8();
+    let p = saved.get_pixel(5, 5).0;
+    assert!(p[0] == p[1] && p[1] == p[2], "saved file is B&W: {p:?}");
+
+    harness.get_by_label("File").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Revert").click();
+    harness.step();
+    assert_eq!(std::fs::read(fixture.dir.join("b.png")).unwrap(), original);
+    assert!(fixture.ini().contains("filters=bw=1;"), "{}", fixture.ini());
+
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::S);
+    harness.step();
+    let out = fixture.dir.join("exported");
+    harness.step();
+    harness.state_mut().set_export_dir(&out);
+    harness.step();
+    harness.get_by_label("Export 1 picture").click();
+    let target = out.join("b.jpg");
+    wait_until(&mut harness, "the export", move |app| target.is_file() && !app.exporting());
+    let exported = pico_core::image::open(out.join("b.jpg")).expect("exported JPEG").to_rgb8();
+    let p = exported.get_pixel(5, 5).0;
+    assert!(p[0].abs_diff(p[1]) < 6 && p[1].abs_diff(p[2]) < 6, "export has the edits: {p:?}");
+
+    harness.key_press(Key::F2);
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    harness.step();
+    // The rename field has focus; typing replaces the selected old name.
+    harness.event(egui::Event::Text("green.png".into()));
+    harness.step();
+    harness.key_press(Key::Enter);
+    harness.step();
+    assert!(fixture.dir.join("green.png").is_file() && !fixture.dir.join("b.png").exists());
+    assert!(fixture.ini().contains("[green.png]\r\nbackuphash=4242"), "{}", fixture.ini());
+}
+
+#[test]
+fn sorting_by_name_date_and_size() {
+    let fixture = Fixture::new("sort");
+    // Sizes: a tiny, b medium, c large (noise does not compress).
+    RgbImage::from_pixel(4, 4, Rgb([1, 2, 3])).save(fixture.dir.join("a.png")).unwrap();
+    let noise = RgbImage::from_fn(200, 200, |x, y| Rgb([(x * 7 + y * 13) as u8, (x * y) as u8, (x ^ y) as u8]));
+    noise.save(fixture.dir.join("c.png")).unwrap();
+    // Dates: c oldest, then a, then b.
+    let day = Duration::from_secs(86_400);
+    let base = std::time::SystemTime::now() - day * 30;
+    for (name, days) in [("c.png", 0), ("a.png", 1), ("b.png", 2)] {
+        let file = std::fs::File::options().write(true).open(fixture.dir.join(name)).unwrap();
+        file.set_modified(base + day * days).unwrap();
+    }
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+
+    assert_eq!(harness.state().listing_names(), ["a.png", "b.png", "c.png"]);
+    harness.state_mut().sort("date", false);
+    assert_eq!(harness.state().listing_names(), ["c.png", "a.png", "b.png"]);
+    harness.state_mut().sort("size", false);
+    assert_eq!(harness.state().listing_names(), ["a.png", "b.png", "c.png"]);
+    harness.state_mut().sort("date", true);
+    assert_eq!(harness.state().listing_names(), ["b.png", "a.png", "c.png"]);
+}
+
+#[test]
+fn info_panel_tags_selected_photos() {
+    let fixture = Fixture::new("tags");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.get_by_label("b.png").click_modifiers(Modifiers::COMMAND);
+    harness.step();
+
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    harness.step();
+    assert!(!harness.state().is_viewing(), "Alt+Enter shows Info, it does not open the photo");
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::K);
+    harness.step();
+    harness.step();
+    harness.event(egui::Event::Text("holiday".into()));
+    harness.step();
+    harness.key_press(Key::Enter);
+    harness.step();
+    let ini = fixture.ini();
+    assert!(ini.contains("[a.png]\r\nkeywords=holiday") && ini.contains("keywords=holiday"), "{ini}");
+    assert_eq!(harness.state().keywords_of("b.png"), ["holiday"]);
+    assert!(harness.state().keywords_of("c.png").is_empty());
+    screenshot(&mut harness, "info");
+
+    harness.step();
+    harness.get_by_label("holiday (2/2) ×").click();
+    harness.step();
+    assert!(!fixture.ini().contains("keywords="), "{}", fixture.ini());
+}
+
+#[test]
+fn albums_create_open_add_and_remove() {
+    let fixture = Fixture::new("albums");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::N);
+    harness.step();
+    harness.step();
+    harness.event(egui::Event::Text("Trip".into()));
+    harness.step();
+    harness.key_press(Key::Enter);
+    harness.step();
+    let ini = fixture.ini();
+    let token = ini.split("[.album:").nth(1).and_then(|r| r.split(']').next()).expect("album declared").to_owned();
+    assert!(ini.contains(&format!("name=Trip\r\ntoken={token}\r\ndate=")), "{ini}");
+    assert!(ini.contains(&format!("albums={token}")), "{ini}");
+    assert_eq!(harness.state().album_names(), ["Trip (1)"]);
+
+    // Add a second photo through Picture > Add to Album.
+    harness.get_by_label("c.png").click();
+    harness.step();
+    harness.get_by_label("Picture").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Add to Album").hover();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Trip").click();
+    harness.step();
+    assert_eq!(harness.state().album_names(), ["Trip (2)"]);
+
+    harness.state_mut().open_album("Trip");
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["a.png", "c.png"]);
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.get_by_label("Picture").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Remove from Album").click();
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["c.png"]);
+    assert_eq!(fixture.ini().matches(&format!("albums={token}")).count(), 1, "{}", fixture.ini());
+}
+
+#[test]
+fn tools_duplicates_folder_manager_and_options() {
+    let fixture = Fixture::new("tools-menu");
+    std::fs::create_dir_all(fixture.dir.join("copies")).unwrap();
+    std::fs::copy(fixture.dir.join("a.png"), fixture.dir.join("copies/a again.png")).unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 2);
+
+    harness.get_by_label("Tools").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Show Duplicate Files").click();
+    harness.step(); // the click starts the search
+    wait_until(&mut harness, "the duplicate search", |app| !app.finding_duplicates());
+    assert!(harness.state().status_text().contains("1 group"), "{}", harness.state().status_text());
+    assert_eq!(harness.state().listing_names(), ["a.png", "a again.png"]);
+
+    harness.get_by_label("Tools").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Options…").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Clear Thumbnail Cache");
+    screenshot(&mut harness, "options");
+
+    harness.get_by_label("Tools").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Folder Manager…").click();
+    harness.step();
+    harness.step();
+    // The manager opens on the watched folder; typing extends its path.
+    let dir = fixture.dir.display().to_string();
+    let path = harness.get_by(|n| n.role() == egui::accesskit::Role::TextInput && n.value().as_deref() == Some(&dir));
+    path.focus();
+    path.type_text("/copies");
+    harness.step();
+    harness.key_press(Key::Enter);
+    harness.step();
+    harness.step();
+    harness.get_by_label("Leave out of Pico").click();
+    harness.step();
+    screenshot(&mut harness, "folder-manager");
+    harness.get_by_label("Watching 1 folder, leaving out 1 folder.");
+    harness.get_by_label("OK").click();
+    harness.step();
+    wait_until(&mut harness, "the rescan", |app| app.folder_count() == 1);
+    assert_eq!(harness.state().watched_count(), 1);
+
+    harness.get_by_label("Tools").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Folder Manager…").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Leave out of Pico").click();
+    harness.step();
+    harness.get_by_label("OK").click();
+    harness.step();
+    assert_eq!(harness.state().watched_count(), 0);
+    wait_until(&mut harness, "the rescan", |app| app.folder_count() == 0);
+    assert!(fixture.dir.join("a.png").is_file(), "removing a folder from Pico leaves the files alone");
+}
+
+#[test]
+fn timeline_groups_by_month() {
+    let fixture = Fixture::new("timeline");
+    // a and c in March 2021 (c first), b in June 2021; UTC noon avoids date edges.
+    let at = |secs: u64| std::time::UNIX_EPOCH + Duration::from_secs(secs);
+    for (name, when) in [("a.png", at(1_615_896_000)), ("b.png", at(1_623_844_800)), ("c.png", at(1_614_686_400))] {
+        let file = std::fs::File::options().write(true).open(fixture.dir.join(name)).unwrap();
+        file.set_modified(when).unwrap();
+    }
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("Timeline").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("2021  (3)").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("March 2021  (2)").click();
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["c.png", "a.png"], "in the order they were taken");
+    harness.state_mut().open_month("2021:06");
+    assert_eq!(harness.state().listing_names(), ["b.png"]);
+    assert!(harness.state().place_keys().is_empty(), "no GPS, no places");
+}
+
+#[test]
+fn create_movie_from_selection() {
+    if pico_core::video::ffmpeg().is_none() || pico_core::video::ffprobe().is_none() {
+        return;
+    }
+    let fixture = Fixture::new("movie");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    harness.step();
+    harness.get_by_label("Create").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Movie…").click();
+    harness.step();
+    harness.step();
+    let out = fixture.dir.join("holiday.mp4");
+    harness.state_mut().set_movie_output(&out);
+    harness.step();
+    harness.get_by_label("Make the Movie").click();
+    harness.step();
+    let target = out.clone();
+    wait_until(&mut harness, "the movie", move |app| !app.making_movie() && target.is_file());
+    let info = pico_core::video::probe(&out).unwrap();
+    assert_eq!((info.width, info.height), (1280, 720));
+    assert!((info.duration.as_secs_f32() - 3.0).abs() < 0.2, "3 photos x 1 s: {:?}", info.duration);
+    assert!(harness.state().file_names().contains(&"holiday.mp4".to_owned()), "the movie shows up in its folder");
+}
+
+#[test]
+fn picture_collage_previews_saves_and_files_into_album() {
+    let fixture = Fixture::new("collage");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    harness.step();
+    harness.get_by_label("Create").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Picture Collage…").click();
+    harness.step();
+    assert!(harness.state().in_collage());
+    wait_until(&mut harness, "the collage preview", |app| app.collage_ready());
+    screenshot(&mut harness, "collage-mosaic");
+
+    harness.state_mut().collage_layout(pico_core::collage::Layout::Grid);
+    harness.step();
+    wait_until(&mut harness, "the grid preview", |app| app.collage_ready());
+    screenshot(&mut harness, "collage-grid");
+
+    harness.get_by_label("Create Collage").click();
+    harness.step();
+    let saved = fixture.dir.join("Collage 1.jpg");
+    let target = saved.clone();
+    wait_until(&mut harness, "the saved collage", move |app| {
+        target.is_file() && app.status_text().contains("Collage saved")
+    });
+    let image = pico_core::image::open(&saved).unwrap();
+    assert_eq!((image.width(), image.height()), (3000, 2000));
+    assert_eq!(harness.state().album_names(), ["Collages (1)"]);
+
+    harness.key_press(Key::Escape);
+    harness.step();
+    assert!(!harness.state().in_collage());
+}

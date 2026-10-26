@@ -1,0 +1,42 @@
+# Builds and tests Pico on Linux, Windows and macOS, and keeps the binaries
+# as downloadable artifacts. macOS can only be built on a Mac, hence CI.
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            binary: target/release/pico
+          - os: windows-latest
+            binary: target/release/pico.exe
+          - os: macos-latest # Apple Silicon
+            binary: target/release/pico
+          - os: macos-15-intel
+            binary: target/release/pico
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Lint
+        run: |
+          cargo fmt --all --check
+          cargo clippy --all-targets -- -D warnings
+      - name: Core tests
+        run: cargo test -p pico-core
+      - name: Build
+        run: cargo build --release -p pico
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pico-${{ matrix.os }}
+          path: ${{ matrix.binary }}
