@@ -1,6 +1,10 @@
-# Builds Pico for every supported system and, for a pushed `v*` tag, publishes
-# the archives as a GitHub release. Run by hand (Actions > release > Run
-# workflow) to get the same archives as artifacts without a release.
+# Builds Pico and publishes the archives as a GitHub release. Run by hand
+# (Actions > release > Run workflow) to get the archives as artifacts only.
+#
+# For now only Linux x86_64 is built, on every push to main, into a rolling
+# release tagged `latest`. The other systems and the `v*` tag releases are
+# commented out to save Actions minutes; uncomment them (and the `needs` of
+# the release job) to build everything.
 #
 # Intel and AMD processors share the x86 builds: x86_64 for 64-bit, x86
 # (i686) for 32-bit. Linux builds are cross-compiled with cargo-zigbuild
@@ -10,7 +14,8 @@ name: release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    # tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -24,12 +29,12 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             name: linux-x86_64
-          - target: i686-unknown-linux-gnu
-            name: linux-x86
-          - target: aarch64-unknown-linux-gnu
-            name: linux-arm64
-          - target: armv7-unknown-linux-gnueabihf
-            name: linux-armv7
+          # - target: i686-unknown-linux-gnu
+            # name: linux-x86
+          # - target: aarch64-unknown-linux-gnu
+            # name: linux-arm64
+          # - target: armv7-unknown-linux-gnueabihf
+            # name: linux-armv7
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,75 +63,75 @@ jobs:
           name: pico-${{ matrix.name }}
           path: pico-${{ matrix.name }}.tar.gz
 
-  windows:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: x86_64-pc-windows-msvc
-            name: windows-x86_64
-          - target: i686-pc-windows-msvc
-            name: windows-x86
-          - target: aarch64-pc-windows-msvc
-            name: windows-arm64
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-      - name: Build
-        run: cargo build --release --locked -p pico --target ${{ matrix.target }}
-      - name: Package
-        shell: pwsh
-        run: |
-          $dir = "pico-${{ matrix.name }}"
-          New-Item -ItemType Directory $dir | Out-Null
-          Copy-Item target/${{ matrix.target }}/release/pico.exe, README.md $dir
-          Compress-Archive -Path $dir -DestinationPath "$dir.zip"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pico-${{ matrix.name }}
-          path: pico-${{ matrix.name }}.zip
+  # windows:
+    # strategy:
+      # fail-fast: false
+      # matrix:
+        # include:
+          # - target: x86_64-pc-windows-msvc
+            # name: windows-x86_64
+          # - target: i686-pc-windows-msvc
+            # name: windows-x86
+          # - target: aarch64-pc-windows-msvc
+            # name: windows-arm64
+    # runs-on: windows-latest
+    # steps:
+      # - uses: actions/checkout@v4
+      # - uses: dtolnay/rust-toolchain@stable
+        # with:
+          # targets: ${{ matrix.target }}
+      # - uses: Swatinem/rust-cache@v2
+        # with:
+          # key: ${{ matrix.target }}
+      # - name: Build
+        # run: cargo build --release --locked -p pico --target ${{ matrix.target }}
+      # - name: Package
+        # shell: pwsh
+        # run: |
+          # $dir = "pico-${{ matrix.name }}"
+          # New-Item -ItemType Directory $dir | Out-Null
+          # Copy-Item target/${{ matrix.target }}/release/pico.exe, README.md $dir
+          # Compress-Archive -Path $dir -DestinationPath "$dir.zip"
+      # - uses: actions/upload-artifact@v4
+        # with:
+          # name: pico-${{ matrix.name }}
+          # path: pico-${{ matrix.name }}.zip
 
-  # One universal app for Apple Silicon and Intel Macs. It is not signed, so
-  # the first start needs right-click > Open (see README).
-  macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin, x86_64-apple-darwin
-      - uses: Swatinem/rust-cache@v2
-      - name: Build
-        run: |
-          cargo build --release --locked -p pico --target aarch64-apple-darwin
-          cargo build --release --locked -p pico --target x86_64-apple-darwin
-      - name: Package
-        run: |
-          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "pico") | .version')
-          app=Pico.app/Contents
-          mkdir -p "$app/MacOS"
-          lipo -create -output "$app/MacOS/pico" \
-            target/aarch64-apple-darwin/release/pico target/x86_64-apple-darwin/release/pico
-          sed "s/@VERSION@/$version/g" packaging/macos/Info.plist > "$app/Info.plist"
-          codesign --force --deep --sign - Pico.app
-          mkdir pico-macos
-          mv Pico.app pico-macos/
-          cp README.md pico-macos/
-          ditto -c -k --keepParent pico-macos pico-macos.zip
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pico-macos
-          path: pico-macos.zip
+  # # One universal app for Apple Silicon and Intel Macs. It is not signed, so
+  # # the first start needs right-click > Open (see README).
+  # macos:
+    # runs-on: macos-latest
+    # steps:
+      # - uses: actions/checkout@v4
+      # - uses: dtolnay/rust-toolchain@stable
+        # with:
+          # targets: aarch64-apple-darwin, x86_64-apple-darwin
+      # - uses: Swatinem/rust-cache@v2
+      # - name: Build
+        # run: |
+          # cargo build --release --locked -p pico --target aarch64-apple-darwin
+          # cargo build --release --locked -p pico --target x86_64-apple-darwin
+      # - name: Package
+        # run: |
+          # version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "pico") | .version')
+          # app=Pico.app/Contents
+          # mkdir -p "$app/MacOS"
+          # lipo -create -output "$app/MacOS/pico" \
+            # target/aarch64-apple-darwin/release/pico target/x86_64-apple-darwin/release/pico
+          # sed "s/@VERSION@/$version/g" packaging/macos/Info.plist > "$app/Info.plist"
+          # codesign --force --deep --sign - Pico.app
+          # mkdir pico-macos
+          # mv Pico.app pico-macos/
+          # cp README.md pico-macos/
+          # ditto -c -k --keepParent pico-macos pico-macos.zip
+      # - uses: actions/upload-artifact@v4
+        # with:
+          # name: pico-macos
+          # path: pico-macos.zip
 
   release:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [linux, windows, macos]
+    if: github.event_name == 'push'
+    needs: [linux] # [linux, windows, macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -136,7 +141,15 @@ jobs:
       - name: Checksums
         working-directory: dist
         run: sha256sum * > SHA256SUMS.txt
+      # A push to main replaces the `latest` release; a `v*` tag gets its own.
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Pico $GITHUB_REF_NAME" --generate-notes
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Pico $GITHUB_REF_NAME" --generate-notes
+          else
+            gh release delete latest --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+            gh release create latest dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Pico (latest main)" --notes "Built from $GITHUB_SHA." --latest
+          fi

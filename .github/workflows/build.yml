@@ -2,9 +2,11 @@
 # as downloadable artifacts. macOS can only be built on a Mac, hence CI.
 name: build
 
+# Automatic runs are off for now to save Actions minutes (release.yml builds
+# Linux x86_64 on every push to main); run by hand or uncomment the triggers.
 on:
-  push:
-  pull_request:
+  # push:
+  # pull_request:
   workflow_dispatch:
 
 jobs:
