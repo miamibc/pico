@@ -117,6 +117,68 @@ fn star_rotate_and_caption_are_saved_to_ini() {
 }
 
 #[test]
+fn double_click_opens_and_closes_the_photo() {
+    let fixture = Fixture::new("double-click");
+    // Each queued event takes a frame; at the default 0.25 s a frame, two
+    // clicks are too slow to count as a double click.
+    let dir = fixture.dir.clone();
+    let mut harness = Harness::builder()
+        .with_size([1000.0, 700.0])
+        .with_step_dt(0.05)
+        .build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![dir], false));
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+
+    double_click(&mut harness, "b.png");
+    wait_until(&mut harness, "the photo to load", |app| app.is_viewing() && app.viewer_loaded());
+    double_click(&mut harness, "Photo");
+    harness.step();
+    assert!(!harness.state().is_viewing(), "double-clicking the photo goes back to the library");
+
+    // Beside the photo, on the dark backdrop, works the same.
+    double_click(&mut harness, "b.png");
+    wait_until(&mut harness, "the photo to load", |app| app.is_viewing() && app.viewer_loaded());
+    let photo = harness.get_by_label("Photo").rect();
+    let beside = egui::pos2(photo.min.x - 20.0, photo.center().y);
+    double_click_at(&mut harness, beside);
+    harness.step();
+    assert!(!harness.state().is_viewing());
+
+    // While a tool is open, double-clicks belong to the tool.
+    double_click(&mut harness, "b.png");
+    wait_until(&mut harness, "the photo to load", |app| app.is_viewing() && app.viewer_loaded());
+    harness.state_mut().open_edit_panel();
+    harness.step();
+    harness.get_by_label("Crop").click();
+    harness.step();
+    double_click(&mut harness, "Photo");
+    harness.step();
+    assert!(harness.state().is_viewing());
+}
+
+fn double_click(harness: &mut Harness<'_, PicoApp>, label: &str) {
+    let pos = harness.get_by_label(label).rect().center();
+    double_click_at(harness, pos);
+}
+
+fn double_click_at(harness: &mut Harness<'_, PicoApp>, pos: egui::Pos2) {
+    // Pause first, or egui takes it for a triple click after the last one.
+    for _ in 0..10 {
+        harness.step();
+    }
+    harness.hover_at(pos);
+    harness.step();
+    for pressed in [true, false, true, false] {
+        harness.event(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+    }
+    harness.step(); // one frame per event
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);

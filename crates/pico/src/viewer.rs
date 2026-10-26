@@ -101,7 +101,10 @@ impl Viewer {
 
         let meta = self.effective_meta(file);
         self.update_rendering(ui.ctx(), file, &meta);
-        egui::CentralPanel::no_frame().show(ui, |ui| self.picture(ui, &meta));
+        let double_clicked = egui::CentralPanel::no_frame().show(ui, |ui| self.picture(ui, &meta)).inner;
+        if action.is_none() && double_clicked {
+            return Some(ViewerAction::Close);
+        }
 
         // Shortcuts only when no text field is taking the keys.
         let keys_free = action.is_none() && !ui.ctx().egui_wants_keyboard_input();
@@ -369,8 +372,12 @@ impl Viewer {
         meta
     }
 
-    fn picture(&mut self, ui: &mut egui::Ui, meta: &PhotoMeta) {
+    /// Draws the photo; returns whether it was double-clicked outside a tool,
+    /// which takes the user back to the library like in Picasa.
+    fn picture(&mut self, ui: &mut egui::Ui, meta: &PhotoMeta) -> bool {
         let area = ui.max_rect();
+        let background = ui.interact(area, ui.scope_id().with("backdrop"), egui::Sense::click());
+        let mut double_clicked = false;
         ui.painter().rect_filled(area, 0.0, egui::Color32::from_gray(16));
         if let Some((_, texture)) = &self.texture {
             let size = texture.size_vec2();
@@ -381,6 +388,7 @@ impl Viewer {
             ui.painter().image(texture.id(), rect, grid::full_uv(), egui::Color32::WHITE);
             let response = ui.interact(rect, ui.scope_id().with("photo"), egui::Sense::click_and_drag());
             response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, "Photo"));
+            double_clicked = response.double_clicked();
             match &mut self.tool {
                 Some((_, Tool::Crop(crop))) => {
                     crop.interact(&response, rect, size);
@@ -414,6 +422,7 @@ impl Viewer {
         if meta.star {
             grid::paint_star(ui.painter(), area.left_bottom() + egui::vec2(12.0, -12.0), 28.0);
         }
+        self.tool.is_none() && (double_clicked || background.double_clicked())
     }
 
     /// Decodes the working copy when the file changes and re-renders whenever
