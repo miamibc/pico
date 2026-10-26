@@ -1,4 +1,5 @@
 use crate::collage_view::{CollageAction, CollageView};
+use crate::filmstrip;
 use crate::folder_manager::{FolderManager, FolderManagerAction};
 use crate::grid::{self, CaptionMode, FileRef, GridAction, GridView, MAX_THUMB, MIN_THUMB};
 use crate::info::{InfoPanel, TagAction};
@@ -74,6 +75,8 @@ pub struct PicoApp {
     sort_by: SortBy,
     reverse: bool,
     show_info: bool,
+    /// Picasa's strip of neighbouring photos above the viewer.
+    show_filmstrip: bool,
     info: InfoPanel,
     /// "Copy All Effects" clipboard.
     copied_filters: Option<FilterStack>,
@@ -124,6 +127,7 @@ impl PicoApp {
             sort_by: SortBy::Name,
             reverse: false,
             show_info: false,
+            show_filmstrip: true,
             info: InfoPanel::default(),
             copied_filters: None,
             view: View::Library,
@@ -753,6 +757,8 @@ impl PicoApp {
                 });
                 ui.checkbox(&mut self.starred_only, "Only Starred Photos");
                 ui.checkbox(&mut self.show_info, "Properties and Tags").on_hover_text("Alt+Enter, Ctrl+K");
+                ui.checkbox(&mut self.show_filmstrip, "Filmstrip")
+                    .on_hover_text("Neighbouring photos above the open one");
                 ui.checkbox(&mut self.show_hidden, "Hidden Pictures");
             });
             ui.menu_button("Picture", |ui| {
@@ -1354,6 +1360,19 @@ impl PicoApp {
             return;
         };
         let position = listing.iter().position(|&r| r == at).unwrap_or(0);
+        if self.show_filmstrip {
+            let items: Vec<(FileRef, &MediaFile)> = listing
+                .iter()
+                .filter_map(|&r| Some((r, self.folders.get(r.0).and_then(|f| f.files.get(r.1))?)))
+                .collect();
+            let picked =
+                egui::Panel::top("filmstrip").show(ui, |ui| filmstrip::show(ui, &items, at, &mut self.thumbs)).inner;
+            if let Some(other) = picked {
+                self.current = Some(other);
+                self.selection = BTreeSet::from([other]);
+                return;
+            }
+        }
         match self.viewer.show(ui, file, (position, listing.len().max(1))) {
             Some(ViewerAction::Close) => self.view = View::Library,
             Some(ViewerAction::Previous) => self.step(-1),
@@ -1696,6 +1715,10 @@ impl PicoApp {
         if let Some(show) = &mut self.slideshow {
             show.seconds = seconds;
         }
+    }
+
+    pub fn set_filmstrip(&mut self, on: bool) {
+        self.show_filmstrip = on;
     }
 
     pub fn viewer_loaded(&self) -> bool {

@@ -2,6 +2,7 @@
 
 mod app;
 mod collage_view;
+mod filmstrip;
 mod folder_manager;
 mod grid;
 mod info;

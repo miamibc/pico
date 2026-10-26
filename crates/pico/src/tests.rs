@@ -4,7 +4,7 @@
 use crate::app::PicoApp;
 use eframe::egui::{self, Key, Modifiers};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use pico_core::image::{Rgb, RgbImage};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -176,6 +176,39 @@ fn double_click_at(harness: &mut Harness<'_, PicoApp>, pos: egui::Pos2) {
         });
     }
     harness.step(); // one frame per event
+}
+
+#[test]
+fn filmstrip_switches_photos() {
+    let fixture = Fixture::new("filmstrip");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    wait_until(&mut harness, "the photo to load", |app| app.is_viewing() && app.viewer_loaded());
+    // The strip lists the folder; only the open photo is marked.
+    assert!(marked(&harness, "a.png"));
+    assert!(!marked(&harness, "c.png"));
+    wait_until(&mut harness, "the strip's thumbnails", |app| app.thumbnails_pending() == 0);
+    screenshot(&mut harness, "filmstrip");
+
+    harness.get_by_label("c.png").click();
+    harness.step();
+    assert_eq!(harness.state().selected_file(), Some(2));
+    assert!(harness.state().is_viewing(), "the strip switches photos, it does not close the viewer");
+    harness.step();
+    assert!(marked(&harness, "c.png"));
+
+    harness.state_mut().set_filmstrip(false);
+    harness.step();
+    assert!(harness.query_by_label("a.png").is_none(), "no strip, no thumbnails");
+}
+
+/// Whether a thumbnail button shows as the current one.
+fn marked(harness: &Harness<'_, PicoApp>, label: &str) -> bool {
+    harness.get_by_label(label).accesskit_node().toggled() == Some(egui::accesskit::Toggled::True)
 }
 
 #[test]
