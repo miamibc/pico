@@ -107,6 +107,8 @@ pub struct PicoApp {
     search: String,
     focus_search: bool,
     starred_only: bool,
+    /// Show only videos (the ▶ filter).
+    videos_only: bool,
     show_hidden: bool,
     captions: CaptionMode,
     sort_by: SortBy,
@@ -170,6 +172,7 @@ impl PicoApp {
             search: String::new(),
             focus_search: false,
             starred_only: false,
+            videos_only: false,
             show_hidden: false,
             captions: CaptionMode::None,
             sort_by: SortBy::Name,
@@ -456,7 +459,8 @@ impl PicoApp {
                         && in_month
                         && in_place
                         && (self.show_hidden || !f.meta.hidden)
-                        && (!starred || f.meta.star);
+                        && (!starred || f.meta.star)
+                        && (!self.videos_only || f.kind == pico_core::media::MediaKind::Video);
                     let matches = query.is_empty() || matches_query(folder, f, query);
                     (visible && matches).then_some((fi, i))
                 })
@@ -1026,6 +1030,7 @@ impl PicoApp {
                     ui.checkbox(&mut self.reverse, "Reverse Order");
                 });
                 ui.checkbox(&mut self.starred_only, "Only Starred Photos");
+                ui.checkbox(&mut self.videos_only, "Only Videos");
                 ui.checkbox(&mut self.show_info, "Properties and Tags").on_hover_text("Alt+Enter, Ctrl+K");
                 ui.menu_button("Folder List", |ui| self.folder_list_options(ui));
                 ui.checkbox(&mut self.show_filmstrip, "Filmstrip")
@@ -1834,6 +1839,7 @@ impl PicoApp {
                     self.selection.clear();
                     self.current = None;
                 }
+                ui.toggle_value(&mut self.videos_only, "▶").on_hover_text("Only videos");
                 ui.toggle_value(&mut self.starred_only, "★").on_hover_text("Only starred photos");
                 let count = self.selection.len();
                 if count > 1 {

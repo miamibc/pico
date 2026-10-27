@@ -751,6 +751,26 @@ fn folder_list_as_tree_by_year_and_by_size() {
 }
 
 #[test]
+fn only_videos_filter() {
+    let fixture = Fixture::new("videos-only");
+    // Only the name matters for the filter; ffmpeg need not understand it.
+    std::fs::write(fixture.dir.join("clip.mp4"), b"not really a video").unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().select_folder(0);
+    harness.step();
+    assert_eq!(harness.state().listing_names().len(), 4);
+    harness.get_by_label("▶").click();
+    harness.step();
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["clip.mp4"]);
+    assert!(harness.query_by_label("a.png").is_none(), "photos are hidden from the grid too");
+    harness.get_by_label("▶").click();
+    harness.step();
+    assert_eq!(harness.state().listing_names().len(), 4);
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);
