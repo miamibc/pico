@@ -787,12 +787,36 @@ fn edited_photos_are_marked() {
         harness
             .query_all(egui_kittest::kittest::by().role(egui::accesskit::Role::Label))
             .filter_map(|n| n.accesskit_node().value())
-            .find(|v| v.starts_with(name))
+            // The tooltip: the name alone, or the name and more lines.
+            .find(|v| v == name || v.starts_with(&format!("{name}\n")))
             .unwrap_or_default()
     };
     assert_eq!(tooltip(&mut harness, "c.png"), "c.png\nEdited");
     screenshot(&mut harness, "badges");
     assert_eq!(tooltip(&mut harness, "a.png"), "a.png");
+}
+
+#[test]
+fn status_bar_tells_about_the_photo_and_the_selection() {
+    let fixture = Fixture::new("status-bar");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    assert_eq!(harness.state().status_details_text(), "");
+    harness.hover_at(harness.get_by_label("b.png").rect().center());
+    harness.step();
+    let text = harness.state().status_details_text();
+    assert!(text.starts_with("b.png  ·  ") && text.ends_with(" bytes"), "{text}");
+
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.get_by_label("c.png").click_modifiers(Modifiers::COMMAND);
+    harness.step();
+    harness.remove_cursor();
+    harness.step();
+    harness.step();
+    let text = harness.state().status_details_text();
+    assert!(text.starts_with("2 selected  ·  ") && text.ends_with(" bytes"), "{text}");
+    screenshot(&mut harness, "status-bar");
 }
 
 #[test]

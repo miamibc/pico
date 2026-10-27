@@ -106,6 +106,12 @@ pub fn scan(root: &Path) -> Vec<Folder> {
 
 /// Like [`scan`], but leaves out the `excluded` folders and everything in them.
 pub fn scan_excluding(root: &Path, excluded: &[PathBuf]) -> Vec<Folder> {
+    scan_counting(root, excluded, &std::sync::atomic::AtomicUsize::new(0))
+}
+
+/// Like [`scan_excluding`], adding each media file found to `found`, so
+/// another thread can show progress.
+pub fn scan_counting(root: &Path, excluded: &[PathBuf], found: &std::sync::atomic::AtomicUsize) -> Vec<Folder> {
     let mut folders = Vec::new();
     let mut pending = vec![root.to_path_buf()];
     while let Some(dir) = pending.pop() {
@@ -123,6 +129,7 @@ pub fn scan_excluding(root: &Path, excluded: &[PathBuf]) -> Vec<Folder> {
                 }
             } else if let Some(kind) = MediaKind::of(&path) {
                 files.push(MediaFile::new(path, kind));
+                found.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
         }
         if files.is_empty() {

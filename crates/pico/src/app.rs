@@ -127,6 +127,10 @@ pub struct PicoApp {
     slideshow: Option<Slideshow>,
     collage: Option<CollageView>,
     scan: Option<Receiver<Vec<Folder>>>,
+    /// Media files found so far by the running scan.
+    scan_found: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    /// The photo under the pointer in the grid, last frame.
+    hovered: Option<FileRef>,
     thumbs: ThumbCache,
     thumb_size: f32,
     export: Option<ExportDialog>,
@@ -188,6 +192,8 @@ impl PicoApp {
             slideshow: None,
             collage: None,
             scan: None,
+            scan_found: Default::default(),
+            hovered: None,
             thumbs: ThumbCache::new(ctx, persist_settings),
             thumb_size: 160.0,
             export: None,
@@ -230,9 +236,11 @@ impl PicoApp {
         let (tx, rx) = channel();
         let rules = self.rules.clone();
         let ctx = ctx.clone();
+        let found = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        self.scan_found = found.clone();
         std::thread::spawn(move || {
             let mut folders: Vec<Folder> =
-                rules.watched.iter().flat_map(|root| library::scan_excluding(root, &rules.excluded)).collect();
+                rules.watched.iter().flat_map(|root| library::scan_counting(root, &rules.excluded, &found)).collect();
             folders.sort_by(|a, b| a.path.cmp(&b.path));
             folders.dedup_by(|a, b| a.path == b.path);
             library::sort_folders(&mut folders);
@@ -1650,6 +1658,7 @@ impl PicoApp {
     }
 
     fn library(&mut self, ui: &mut egui::Ui) {
+        self.hovered = None;
         egui::Panel::left("folders").resizable(true).default_size(260.0).show(ui, |ui| self.folder_list(ui));
         let tray = egui::Panel::bottom("tray").show(ui, |ui| self.tray_panel(ui)).response;
         if let Some(drag) = drop_target(ui, &tray) {
@@ -1716,6 +1725,7 @@ impl PicoApp {
                 reveal,
             };
             let output = grid::show(ui, view, &mut self.thumbs);
+            self.hovered = output.hovered;
             // Scrolling by hand moves the folder highlight along. A scroll the
             // grid made itself shows in the offset a frame later; skip those.
             let scrolled = (output.offset - self.ribbon_offset).abs() > 0.5;
@@ -2014,13 +2024,47 @@ impl PicoApp {
 
     fn status_bar(&self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.label(&self.status);
+            if self.scan.is_some() {
+                ui.spinner();
+                let found = self.scan_found.load(std::sync::atomic::Ordering::Relaxed);
+                ui.label(format!("{}  ({} found so far)", self.status, found));
+                // The count changes on its own; keep it fresh.
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+            } else {
+                ui.label(&self.status);
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if video::ffmpeg().is_none() {
                     ui.label(egui::RichText::new("ffmpeg not found: videos will stay mysterious").weak());
+                    ui.separator();
+                }
+                if self.view == View::Library {
+                    ui.label(egui::RichText::new(self.status_details()).weak());
                 }
             });
         });
+    }
+
+    /// The photo under the pointer, else the selection: name, date and size.
+    fn status_details(&self) -> String {
+        let describe = |file: &MediaFile| {
+            let date = file.taken.as_deref().map(library::date_label);
+            let mut parts = vec![file.name()];
+            parts.extend(date);
+            parts.push(crate::info::human_size(file.size));
+            parts.join("  ·  ")
+        };
+        if let Some(file) = self.hovered.and_then(|at| self.file(at)) {
+            return describe(file);
+        }
+        match self.selection.len() {
+            0 => String::new(),
+            1 => self.selection.first().and_then(|&at| self.file(at)).map(describe).unwrap_or_default(),
+            n => {
+                let bytes: u64 = self.selection.iter().filter_map(|&at| self.file(at)).map(|f| f.size).sum();
+                format!("{n} selected  ·  {}", crate::info::human_size(bytes))
+            }
+        }
     }
 
     fn dialogs(&mut self, ctx: &egui::Context) {
@@ -2407,6 +2451,10 @@ impl PicoApp {
             Some(Source::Folder(i)) => self.folders.get(i).map(|f| f.name.clone()),
             _ => None,
         }
+    }
+
+    pub fn status_details_text(&self) -> String {
+        self.status_details()
     }
 
     pub fn confirming_move(&self) -> bool {

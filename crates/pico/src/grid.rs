@@ -95,6 +95,8 @@ pub struct GridOutput {
     pub offset: f32,
     /// Whether the grid itself scrolled this frame (to a section or photo).
     pub programmatic: bool,
+    /// The photo under the pointer.
+    pub hovered: Option<FileRef>,
 }
 
 pub fn columns_for(width: f32, thumb_size: f32) -> usize {
@@ -147,6 +149,7 @@ pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> G
     let layout = Layout::new(&view, ui.available_width(), ui.spacing().item_spacing);
     let mut action = None;
     let mut cells = Vec::new();
+    let mut hovered = None;
     let band_id = ui.scope_id().with("selection band");
     let view_id = band_id.with("view");
     // Offset and height of the view last frame.
@@ -218,6 +221,9 @@ pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> G
                     tip = format!("{tip}\n{}", marks.join(", "));
                 }
                 let response = response.on_hover_text(tip);
+                if response.hovered() {
+                    hovered = Some(at);
+                }
                 if response.double_clicked() {
                     action = Some(GridAction::Open(at));
                 } else if response.clicked() {
@@ -294,7 +300,7 @@ pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> G
             }
         }
     }
-    GridOutput { action, cells, top_section, offset, programmatic }
+    GridOutput { action, cells, top_section, offset, programmatic, hovered }
 }
 
 fn paint_header(ui: &egui::Ui, header: &SectionHeader, rect: egui::Rect) {
