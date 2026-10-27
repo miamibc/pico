@@ -365,6 +365,49 @@ fn histogram_and_camera_in_edit_panel() {
 }
 
 #[test]
+fn undo_and_redo_edits() {
+    let fixture = Fixture::new("undo-redo");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().open_file_named("a.png");
+    harness.state_mut().open_edit_panel();
+    wait_until(&mut harness, "the photo to load", |app| app.viewer_loaded());
+    let filters = |fixture: &Fixture| {
+        let ini = fixture.ini();
+        ini.split("[a.png]").nth(1).and_then(|s| s.lines().find(|l| l.starts_with("filters=")).map(str::to_owned))
+    };
+    harness.get_by_label("B&W").click();
+    harness.step();
+    harness.get_by_label("Sepia").click();
+    harness.step();
+    assert_eq!(filters(&fixture).as_deref(), Some("filters=bw=1;sepia=1;"));
+
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    harness.step();
+    assert_eq!(filters(&fixture).as_deref(), Some("filters=bw=1;"));
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Y);
+    harness.step();
+    assert_eq!(filters(&fixture).as_deref(), Some("filters=bw=1;sepia=1;"));
+
+    harness.get_by_label("Undo All Edits").click();
+    harness.step();
+    assert_eq!(filters(&fixture), None);
+    harness.step(); // Redo is enabled from the next frame on
+    harness.get_by_label("Redo").click();
+    harness.step();
+    assert_eq!(filters(&fixture).as_deref(), Some("filters=bw=1;"), "redo brings edits back oldest first");
+
+    // A new edit ends the redo history.
+    harness.get_by_label("Warmify").click();
+    harness.step();
+    harness.step();
+    assert!(harness.get_by_label("Redo").accesskit_node().is_disabled());
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Y);
+    harness.step();
+    assert_eq!(filters(&fixture).as_deref(), Some("filters=bw=1;warm=1;"));
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);

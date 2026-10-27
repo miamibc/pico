@@ -96,6 +96,9 @@ pub struct Viewer {
     original_job: Option<(RenderKey, Receiver<egui::ColorImage>)>,
     /// Whether "Original" is held down this frame.
     show_original: bool,
+    /// Edits taken off by Undo, newest last, for Redo. Any other edit
+    /// clears them, as in every editor.
+    redo: Vec<Filter>,
     /// Pixel size from the file header, for the info line.
     header_size: Option<(PathBuf, Option<Size>)>,
 }
@@ -117,6 +120,7 @@ impl Viewer {
             self.detail_job = None;
             self.original = None;
             self.original_job = None;
+            self.redo.clear();
             let size =
                 (file.kind == MediaKind::Photo).then(|| pico_core::image::image_dimensions(&file.path).ok()).flatten();
             self.header_size = Some((file.path.clone(), size));
@@ -146,7 +150,7 @@ impl Viewer {
                     PlayerAction::SavedFrame(path) => ViewerAction::FileAdded(path),
                     PlayerAction::Error(message) => ViewerAction::Status(message),
                 }))
-                .or_else(|| self.navigation_keys(ui));
+                .or_else(|| self.navigation_keys(ui, file));
         }
         if self.show_edit_panel || self.tool.is_some() {
             egui::Panel::left("edit_panel").resizable(false).default_size(240.0).show(ui, |ui| {
@@ -192,15 +196,31 @@ impl Viewer {
             return tool_action.and_then(|a| self.finish_tool(a, file));
         }
         if keys_free {
-            action = self.navigation_keys(ui);
+            action = self.navigation_keys(ui, file);
         }
         action
     }
 
-    /// Keys shared by photos and videos, ignored while a text field has focus.
-    fn navigation_keys(&self, ui: &egui::Ui) -> Option<ViewerAction> {
+    /// Keys shared by photos and videos, ignored while a text field has focus
+    /// (which has its own Ctrl+Z).
+    fn navigation_keys(&mut self, ui: &egui::Ui, file: &MediaFile) -> Option<ViewerAction> {
         if ui.ctx().egui_wants_keyboard_input() {
             return None;
+        }
+        let (undo, redo) = ui.input(|i| {
+            let command = i.modifiers.command;
+            (
+                command && !i.modifiers.shift && i.key_pressed(egui::Key::Z),
+                command && (i.key_pressed(egui::Key::Y) || (i.modifiers.shift && i.key_pressed(egui::Key::Z))),
+            )
+        });
+        if file.kind != MediaKind::Video {
+            if undo {
+                return self.undo(file);
+            }
+            if redo {
+                return self.redo(file);
+            }
         }
         ui.input(|i| {
             if i.key_pressed(egui::Key::Escape) {
@@ -386,11 +406,30 @@ impl Viewer {
         }
     }
 
+    /// Takes the last saved edit off the stack.
+    fn undo(&mut self, file: &MediaFile) -> Option<ViewerAction> {
+        let mut stack = file.meta.filters.clone();
+        let filter = stack.0.pop()?;
+        self.redo.push(filter);
+        self.draft = None;
+        Some(ViewerAction::SetFilters(stack))
+    }
+
+    /// Puts the last undone edit back.
+    fn redo(&mut self, file: &MediaFile) -> Option<ViewerAction> {
+        let filter = self.redo.pop()?;
+        let mut stack = file.meta.filters.clone();
+        stack.0.push(filter);
+        self.draft = None;
+        Some(ViewerAction::SetFilters(stack))
+    }
+
     /// Ends the open tool, turning an applied tool into a new edit on the stack.
     fn finish_tool(&mut self, action: ToolAction, file: &MediaFile) -> Option<ViewerAction> {
         self.tool = None;
         match action {
             ToolAction::Apply(filter) => {
+                self.redo.clear();
                 let mut stack = file.meta.filters.clone();
                 stack.0.push(filter);
                 Some(ViewerAction::SetFilters(stack))
@@ -520,23 +559,37 @@ impl Viewer {
             ui.label(egui::RichText::new(format!("{hidden} not shown yet (kept in the file)")).weak())
                 .on_hover_text("Pico keeps edits it cannot draw yet, so Picasa still sees them.");
         }
+        let mut history = None;
         ui.horizontal(|ui| {
-            if ui.add_enabled(count > 0, egui::Button::new("Undo")).on_hover_text("Remove the last edit").clicked() {
-                stack.0.pop();
-                commit = true;
+            let undo = ui.add_enabled(!committed.0.is_empty(), egui::Button::new("Undo"));
+            if undo.on_hover_text("Remove the last edit (Ctrl+Z)").clicked() {
+                history = self.undo(file);
             }
-            if ui.add_enabled(count > 0, egui::Button::new("Undo All Edits")).clicked() {
-                stack.0.clear();
-                commit = true;
+            let redo = ui.add_enabled(!self.redo.is_empty(), egui::Button::new("Redo"));
+            if redo.on_hover_text("Bring the edit back (Ctrl+Y)").clicked() {
+                history = self.redo(file);
             }
         });
+        if ui.add_enabled(count > 0, egui::Button::new("Undo All Edits")).clicked() {
+            // Redo brings them back one by one, oldest first.
+            self.redo.extend(committed.0.iter().rev().cloned());
+            self.draft = None;
+            history = Some(ViewerAction::SetFilters(FilterStack::default()));
+        }
 
         ui.separator();
         self.levels_and_camera(ui, file);
 
+        if history.is_some() {
+            return history;
+        }
         if commit {
             self.draft = None;
-            return (stack != committed).then_some(ViewerAction::SetFilters(stack));
+            if stack != committed {
+                self.redo.clear();
+                return Some(ViewerAction::SetFilters(stack));
+            }
+            return None;
         }
         self.draft = (stack != committed).then(|| (file.path.clone(), stack));
         None
