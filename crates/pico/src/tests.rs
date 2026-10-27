@@ -452,6 +452,51 @@ fn home_end_and_full_screen_in_viewer() {
 }
 
 #[test]
+fn a_star_flies_onto_a_photo_when_starred() {
+    let fixture = Fixture::new("star-flight");
+    let dir = fixture.dir.clone();
+    let mut harness = Harness::builder()
+        .with_size([1000.0, 800.0])
+        .with_step_dt(0.05)
+        .build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![dir], false));
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    double_click(&mut harness, "b.png");
+    wait_until(&mut harness, "the photo to load", |app| app.is_viewing() && app.viewer_loaded());
+
+    harness.get_by_label("☆ Star").click();
+    for frame in 1..=30 {
+        harness.step();
+        if [4, 6, 8, 14].contains(&frame) {
+            assert!(harness.state().star_flying(), "frame {frame}");
+            screenshot(&mut harness, &format!("star-flight-{frame:02}"));
+        }
+    }
+    assert!(!harness.state().star_flying(), "the star has landed");
+    assert!(fixture.ini().contains("star=yes"), "{}", fixture.ini());
+
+    // Unstarring makes the badge vanish in smoke, without a flight.
+    harness.get_by_label("★ Starred").click();
+    harness.step();
+    assert!(!harness.state().star_flying());
+    assert!(harness.state().star_puffing());
+    harness.step();
+    harness.step();
+    screenshot(&mut harness, "star-puff");
+    for _ in 0..20 {
+        harness.step();
+    }
+    assert!(!harness.state().star_puffing(), "the smoke has cleared");
+
+    // Moving to another photo mid-flight drops the flight.
+    harness.get_by_label("☆ Star").click();
+    harness.step();
+    assert!(harness.state().star_flying());
+    harness.key_press(Key::ArrowRight);
+    harness.step();
+    assert!(!harness.state().star_flying(), "the flight belongs to the photo before");
+}
+
+#[test]
 fn context_menus_on_photos_and_folders() {
     let fixture = Fixture::new("context-menu");
     let mut harness = harness(&fixture.dir);

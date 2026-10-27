@@ -9,6 +9,7 @@ mod info;
 mod logo;
 mod player;
 mod slideshow;
+mod star;
 mod system_theme;
 #[cfg(test)]
 mod tests;

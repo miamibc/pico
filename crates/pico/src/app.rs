@@ -2850,6 +2850,14 @@ impl PicoApp {
         self.show_filmstrip = on;
     }
 
+    pub fn star_flying(&self) -> bool {
+        self.viewer.star_flying()
+    }
+
+    pub fn star_puffing(&self) -> bool {
+        self.viewer.star_puffing()
+    }
+
     pub fn viewer_loaded(&self) -> bool {
         self.current.and_then(|at| self.file(at)).is_some_and(|file| self.viewer.is_loaded(file))
     }

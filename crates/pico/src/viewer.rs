@@ -6,6 +6,7 @@
 use crate::grid;
 use crate::info;
 use crate::player::{Player, PlayerAction};
+use crate::star;
 use crate::tools::{self, CropTool, Tool, ToolAction};
 use eframe::egui;
 use pico_core::adjust;
@@ -107,10 +108,63 @@ pub struct Viewer {
     redo: Vec<Filter>,
     /// Pixel size from the file header, for the info line.
     header_size: Option<(PathBuf, Option<Size>)>,
+    /// Where the Star button was this frame, for the star to fly from.
+    star_button: Option<egui::Rect>,
+    /// The star flying onto a photo just starred.
+    star_flight: Option<star::Flight>,
+    /// The badge vanishing from a photo just unstarred.
+    star_puff: Option<star::Puff>,
+    /// The space the photo or video is shown in.
+    photo_area: Option<egui::Rect>,
 }
 
 impl Viewer {
     pub fn show(&mut self, ui: &mut egui::Ui, file: &MediaFile, position: (usize, usize)) -> Option<ViewerAction> {
+        self.star_button = None;
+        let action = self.show_photo(ui, file, position);
+        let now = ui.input(|i| i.time);
+        let Some(area) = self.photo_area else { return action };
+        if matches!(action, Some(ViewerAction::ToggleStar)) {
+            if file.meta.star {
+                self.star_flight = None;
+                self.star_puff = Some(star::Puff::new(now));
+            } else {
+                let from = self.star_button.map_or(area.center_bottom(), |r| r.center());
+                self.star_flight = Some(star::Flight::new(now, from));
+                self.star_puff = None;
+            }
+        }
+        let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::unique("star")));
+        // The badge is painted from its left bottom corner (see `picture`).
+        let badge = area.left_bottom() + egui::vec2(24.0, -26.0);
+        if let Some(flight) = &self.star_flight {
+            if flight.paint(&painter, now, area, badge) {
+                ui.ctx().request_repaint();
+            } else {
+                self.star_flight = None;
+            }
+        }
+        if let Some(puff) = &self.star_puff {
+            if puff.paint(&painter, now, badge) {
+                ui.ctx().request_repaint();
+            } else {
+                self.star_puff = None;
+            }
+        }
+        action
+    }
+
+    #[cfg(test)]
+    pub fn star_flying(&self) -> bool {
+        self.star_flight.is_some()
+    }
+
+    #[cfg(test)]
+    pub fn star_puffing(&self) -> bool {
+        self.star_puff.is_some()
+    }
+
+    fn show_photo(&mut self, ui: &mut egui::Ui, file: &MediaFile, position: (usize, usize)) -> Option<ViewerAction> {
         if self.draft.as_ref().is_some_and(|(path, _)| path != &file.path) {
             self.draft = None;
         }
@@ -119,6 +173,9 @@ impl Viewer {
         }
         if self.view_for.as_ref() != Some(&file.path) {
             self.view_for = Some(file.path.clone());
+            // A star flying for the photo before would land on this one.
+            self.star_flight = None;
+            self.star_puff = None;
             self.zoom = None;
             self.pan = egui::Vec2::ZERO;
             self.wheel = 0.0;
@@ -150,6 +207,7 @@ impl Viewer {
             egui::Panel::top("viewer_info").show(ui, |ui| self.info_line(ui, file));
         }
         if file.kind == MediaKind::Video {
+            self.photo_area = Some(ui.available_rect_before_wrap());
             // Videos get the player instead of the photo editor.
             let player_action = self.player.show(ui, file);
             return action
@@ -278,7 +336,9 @@ impl Viewer {
             }
             ui.separator();
             let star = if file.meta.star { "★ Starred" } else { "☆ Star" };
-            if ui.button(star).on_hover_text("S").clicked() {
+            let button = ui.button(star).on_hover_text("S");
+            self.star_button = Some(button.rect);
+            if button.clicked() {
                 action = Some(ViewerAction::ToggleStar);
             }
             if ui.button("⟲").on_hover_text("Rotate counterclockwise (Ctrl+Shift+R)").clicked() {
@@ -633,6 +693,7 @@ impl Viewer {
     /// the mouse to themselves and always see the whole photo.
     fn picture(&mut self, ui: &mut egui::Ui, meta: &PhotoMeta) -> Option<ViewerAction> {
         let area = ui.max_rect();
+        self.photo_area = Some(area);
         let background = ui.interact(area, ui.scope_id().with("backdrop"), egui::Sense::click());
         let mut double_clicked = false;
         let mut action = None;
@@ -745,7 +806,9 @@ impl Viewer {
         } else {
             ui.centered_and_justified(|ui| ui.spinner());
         }
-        if meta.star {
+        // While the star flies, the badge waits for it to land.
+        let now = ui.input(|i| i.time);
+        if meta.star && self.star_flight.as_ref().is_none_or(|flight| flight.landed(now)) {
             grid::paint_star(ui.painter(), area.left_bottom() + egui::vec2(12.0, -12.0), 28.0);
         }
         if self.tool.is_none() && (double_clicked || background.double_clicked()) {
