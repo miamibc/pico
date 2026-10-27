@@ -852,6 +852,41 @@ fn home_end_pages_and_ctrl_3_in_the_grid() {
 }
 
 #[test]
+fn settings_come_back_next_time() {
+    let fixture = Fixture::new("settings");
+    std::fs::create_dir_all(fixture.dir.join("more")).unwrap();
+    RgbImage::from_pixel(60, 40, Rgb([200, 200, 0])).save(fixture.dir.join("more/d.png")).unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 2);
+    harness.get_by_label("more  (1)").click();
+    harness.step();
+    harness.hover_at(harness.get_by_label("d.png").rect().center());
+    harness.event(egui::Event::Zoom(1.25));
+    harness.step();
+    harness.state_mut().set_folder_list(true, "size");
+    harness.step();
+    let ctx = harness.ctx.clone();
+    let settings = harness.state().settings_for_test(&ctx);
+    assert_eq!(settings.get("thumb_size").map(String::as_str), Some("200"));
+    assert_eq!(settings.get("folder_tree").map(String::as_str), Some("true"));
+    assert!(settings.get("last_folder").is_some_and(|p| p.ends_with("more")), "{settings:?}");
+    // (The window size comes from eframe, which the test harness does not report.)
+    assert_eq!(settings.get("sidebar_width").map(String::as_str), Some("260"));
+    drop(harness);
+
+    // A new window with those settings opens where the last one was.
+    let dir = fixture.dir.clone();
+    let mut harness = Harness::builder().with_size([1000.0, 700.0]).build_eframe(move |cc| {
+        let mut app = PicoApp::new(&cc.egui_ctx, vec![dir], false);
+        app.apply_settings_for_test(&settings);
+        app
+    });
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 2);
+    assert_eq!(harness.state().current_folder_name().as_deref(), Some("more"));
+    assert_eq!(harness.state().thumbnail_size(), 200.0);
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);

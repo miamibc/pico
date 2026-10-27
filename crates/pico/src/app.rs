@@ -152,6 +152,13 @@ pub struct PicoApp {
     confirm_move: Option<(Vec<FileRef>, usize)>,
     show_about: bool,
     status: String,
+    /// Width of the folder panel, remembered between runs.
+    sidebar_width: f32,
+    /// The folder to open once the first scan is done.
+    last_folder: Option<PathBuf>,
+    /// Settings as last saved, and since when they have differed.
+    saved_settings: config::Settings,
+    settings_changed: Option<f64>,
     /// Whether the folder lists are written to the user's config.
     persist_settings: bool,
 }
@@ -213,7 +220,15 @@ impl PicoApp {
             show_about: false,
             status: String::new(),
             persist_settings,
+            sidebar_width: 260.0,
+            last_folder: None,
+            saved_settings: config::Settings::new(),
+            settings_changed: None,
         };
+        if persist_settings {
+            app.saved_settings = config::load_settings();
+            app.apply_settings(&app.saved_settings.clone());
+        }
         app.rescan(ctx);
         app
     }
@@ -251,6 +266,108 @@ impl PicoApp {
         self.status = "Looking for photos… (they're usually hiding in Downloads)".into();
     }
 
+    /// What Pico remembers between runs.
+    fn settings(&self, ctx: &egui::Context) -> config::Settings {
+        let mut s = self.saved_settings.clone();
+        let mut set = |key: &str, value: String| {
+            s.insert(key.to_owned(), value);
+        };
+        set("thumb_size", format!("{}", self.thumb_size.round()));
+        set("captions", self.captions.key().to_owned());
+        set(
+            "sort",
+            match self.sort_by {
+                SortBy::Name => "name",
+                SortBy::Date => "date",
+                SortBy::Size => "size",
+            }
+            .into(),
+        );
+        set("reverse", self.reverse.to_string());
+        set("filmstrip", self.show_filmstrip.to_string());
+        set("info_panel", self.show_info.to_string());
+        set("folder_tree", self.folder_tree.to_string());
+        let folder_sort = match self.folder_sort {
+            FolderSort::Name => "name",
+            FolderSort::Date => "date",
+            FolderSort::Recent => "recent",
+            FolderSort::Size => "size",
+        };
+        set("folder_sort", folder_sort.into());
+        set("sidebar_width", format!("{}", self.sidebar_width));
+        if let Some(Source::Folder(i)) = self.source
+            && let Some(folder) = self.folders.get(i)
+        {
+            set("last_folder", folder.path.display().to_string());
+        }
+        // Not the size of a full-screen slideshow or photo.
+        let viewport = ctx.input(|i| i.viewport().clone());
+        if !viewport.fullscreen.unwrap_or(false) {
+            set("maximized", viewport.maximized.unwrap_or(false).to_string());
+            if !viewport.maximized.unwrap_or(false)
+                && let Some(rect) = viewport.inner_rect
+            {
+                set("window_width", format!("{}", rect.width().round()));
+                set("window_height", format!("{}", rect.height().round()));
+            }
+        }
+        s
+    }
+
+    fn apply_settings(&mut self, s: &config::Settings) {
+        let get = |key: &str| s.get(key).map(String::as_str);
+        let flag = |key: &str, default: bool| get(key).map_or(default, |v| v == "true");
+        if let Some(size) = get("thumb_size").and_then(|v| v.parse::<f32>().ok()) {
+            self.thumb_size = size.clamp(MIN_THUMB, MAX_THUMB);
+        }
+        if let Some(mode) = get("captions").and_then(CaptionMode::from_key) {
+            self.captions = mode;
+        }
+        self.sort_by = match get("sort") {
+            Some("date") => SortBy::Date,
+            Some("size") => SortBy::Size,
+            _ => SortBy::Name,
+        };
+        self.reverse = flag("reverse", false);
+        self.show_filmstrip = flag("filmstrip", true);
+        self.show_info = flag("info_panel", false);
+        self.folder_tree = flag("folder_tree", false);
+        self.folder_sort = match get("folder_sort") {
+            Some("date") => FolderSort::Date,
+            Some("recent") => FolderSort::Recent,
+            Some("size") => FolderSort::Size,
+            _ => FolderSort::Name,
+        };
+        if let Some(width) = get("sidebar_width").and_then(|v| v.parse::<f32>().ok()) {
+            self.sidebar_width = width.clamp(150.0, 600.0);
+        }
+        self.last_folder = get("last_folder").map(PathBuf::from);
+    }
+
+    /// Saves the settings a second after they last changed, so dragging a
+    /// window edge does not write the file every frame.
+    fn save_settings_when_settled(&mut self, ctx: &egui::Context) {
+        if !self.persist_settings {
+            return;
+        }
+        let now = ctx.input(|i| i.time);
+        let settings = self.settings(ctx);
+        if settings == self.saved_settings {
+            self.settings_changed = None;
+            return;
+        }
+        let since = *self.settings_changed.get_or_insert(now);
+        if now - since < 1.0 {
+            ctx.request_repaint_after(std::time::Duration::from_millis(1100));
+            return;
+        }
+        if let Err(e) = config::save_settings(&settings) {
+            self.status = format!("Could not save the settings: {e}");
+        }
+        self.saved_settings = settings;
+        self.settings_changed = None;
+    }
+
     fn poll_scan(&mut self) {
         let Some(rx) = &self.scan else { return };
         let Ok(folders) = rx.try_recv() else { return };
@@ -258,7 +375,8 @@ impl PicoApp {
         self.status = format!("{}, {}", plural(folders.len(), "folder"), plural(total, "file"));
         let previous = match self.source {
             Some(Source::Folder(i)) => self.folders.get(i).map(|f| f.path.clone()),
-            _ => None,
+            // On the first scan, the folder open when Pico was last closed.
+            _ => self.last_folder.take(),
         };
         self.folders = folders;
         self.source = match previous.and_then(|p| self.folders.iter().position(|f| f.path == p)) {
@@ -268,6 +386,9 @@ impl PicoApp {
             None if self.source == Some(Source::Tray) => Some(Source::Tray),
             None => (!self.folders.is_empty()).then_some(Source::Folder(0)),
         };
+        if let Some(Source::Folder(i)) = self.source {
+            self.ribbon_jump = Some(i);
+        }
         self.current = None;
         self.selection.clear();
         self.view = View::Library;
@@ -1659,7 +1780,11 @@ impl PicoApp {
 
     fn library(&mut self, ui: &mut egui::Ui) {
         self.hovered = None;
-        egui::Panel::left("folders").resizable(true).default_size(260.0).show(ui, |ui| self.folder_list(ui));
+        let sidebar = egui::Panel::left("folders")
+            .resizable(true)
+            .default_size(self.sidebar_width)
+            .show(ui, |ui| self.folder_list(ui));
+        self.sidebar_width = sidebar.response.rect.width().round();
         let tray = egui::Panel::bottom("tray").show(ui, |ui| self.tray_panel(ui)).response;
         if let Some(drag) = drop_target(ui, &tray) {
             self.selection = drag.0.iter().copied().collect();
@@ -2476,6 +2601,14 @@ impl PicoApp {
         self.status_details()
     }
 
+    pub fn settings_for_test(&self, ctx: &egui::Context) -> config::Settings {
+        self.settings(ctx)
+    }
+
+    pub fn apply_settings_for_test(&mut self, settings: &config::Settings) {
+        self.apply_settings(settings);
+    }
+
     pub fn confirming_move(&self) -> bool {
         self.confirm_move.is_some()
     }
@@ -2679,6 +2812,7 @@ impl eframe::App for PicoApp {
         self.poll_movie();
         self.thumbs.poll(ctx);
         self.take_dropped_files(ctx);
+        self.save_settings_when_settled(ctx);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {

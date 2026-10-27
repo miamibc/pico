@@ -22,6 +22,26 @@ pub enum CaptionMode {
 }
 
 impl CaptionMode {
+    /// The name in the settings file.
+    pub fn key(self) -> &'static str {
+        match self {
+            CaptionMode::None => "none",
+            CaptionMode::Filename => "filename",
+            CaptionMode::Caption => "caption",
+            CaptionMode::Tags => "tags",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Self> {
+        Some(match key {
+            "none" => CaptionMode::None,
+            "filename" => CaptionMode::Filename,
+            "caption" => CaptionMode::Caption,
+            "tags" => CaptionMode::Tags,
+            _ => return None,
+        })
+    }
+
     pub const ALL: [(CaptionMode, &'static str); 4] = [
         (CaptionMode::None, "None"),
         (CaptionMode::Filename, "Filename"),
