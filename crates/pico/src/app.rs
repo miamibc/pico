@@ -138,6 +138,8 @@ pub struct PicoApp {
     /// Pictures exported so far, and in all, for the progress window.
     export_count: (usize, usize),
     rename: Option<(FileRef, String)>,
+    /// The photo clicked in the tray strip; Unhold works on it.
+    tray_pick: Option<PathBuf>,
     new_album: Option<String>,
     /// Duplicate files, group after group, once a search finished.
     duplicates: Vec<FileRef>,
@@ -219,6 +221,7 @@ impl PicoApp {
             export_job: None,
             export_count: (0, 0),
             rename: None,
+            tray_pick: None,
             new_album: None,
             duplicates: Vec::new(),
             duplicate_job: None,
@@ -485,6 +488,14 @@ impl PicoApp {
             .collect()
     }
 
+    /// What the tray shows and its buttons work on, as in Picasa: the held
+    /// photos, then the selection not held yet.
+    fn tray_contents(&self) -> Vec<FileRef> {
+        let held = self.tray_refs();
+        let more = self.selection.iter().copied().filter(|at| !held.contains(at));
+        held.iter().copied().chain(more).collect()
+    }
+
     /// Holds the selection in the tray (Ctrl+H).
     fn hold(&mut self) {
         for at in self.targets() {
@@ -496,14 +507,22 @@ impl PicoApp {
         }
     }
 
-    /// Picks the photos tray actions work on: the held tray, else the
-    /// selection. A held tray becomes the listing and the selection, so the
-    /// existing commands (slideshow, export, collage, movie) see it.
-    fn take_tray(&mut self) -> bool {
-        if self.tray.is_empty() {
-            return !self.targets().is_empty();
+    /// Opens a tray photo in the viewer; with photos held, the viewer steps
+    /// through the tray, else through the photos around it.
+    fn view_in_tray(&mut self, at: FileRef) {
+        if !self.tray.is_empty() {
+            self.select_source(Source::Tray);
         }
-        let refs = self.tray_refs();
+        self.current = Some(at);
+        self.selection = BTreeSet::from([at]);
+        self.view = View::Photo;
+    }
+
+    /// Picks the photos tray actions work on: everything in the tray. It
+    /// becomes the listing and the selection, so the existing commands
+    /// (slideshow, export, collage, movie) see it.
+    fn take_tray(&mut self) -> bool {
+        let refs = self.tray_contents();
         self.select_source(Source::Tray);
         self.selection = refs.iter().copied().collect();
         self.current = refs.first().copied();
@@ -511,18 +530,28 @@ impl PicoApp {
     }
 
     fn tray_panel(&mut self, ui: &mut egui::Ui) {
+        // Held photos first, then the selection not held yet, as in Picasa.
+        let held_refs = self.tray_refs();
         let held = !self.tray.is_empty();
-        let refs = if held { self.tray_refs() } else { self.selection.iter().copied().collect() };
+        let refs = self.tray_contents();
+        let path_of = |app: &Self, at: FileRef| app.file(at).map(|f| f.path.clone());
+        let picked = self
+            .tray_pick
+            .as_ref()
+            .and_then(|p| refs.iter().copied().find(|&at| path_of(self, at).as_ref() == Some(p)));
+        if picked.is_none() {
+            self.tray_pick = None;
+        }
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.set_width(150.0);
                 ui.strong("Photo Tray");
-                let note = if held {
-                    format!("{} held", plural(refs.len(), "photo"))
-                } else if refs.is_empty() {
-                    "Select photos, then Hold".to_owned()
-                } else {
-                    format!("{} selected", plural(refs.len(), "photo"))
+                let more = refs.len() - held_refs.len();
+                let note = match (held_refs.len(), more) {
+                    (0, 0) => "Select photos, then Hold".to_owned(),
+                    (0, n) => format!("{} selected", plural(n, "photo")),
+                    (h, 0) => format!("{} held", plural(h, "photo")),
+                    (h, n) => format!("{} held, {n} selected", plural(h, "photo")),
                 };
                 ui.label(egui::RichText::new(note).weak());
                 ui.horizontal(|ui| {
@@ -530,6 +559,17 @@ impl PicoApp {
                     let hold = ui.add_enabled(any, egui::Button::new("Hold"));
                     if hold.on_hover_text("Keep the selection in the tray (Ctrl+H)").clicked() {
                         self.hold();
+                    }
+                    // The photo picked in the tray, else the held ones selected.
+                    let picked_held = picked.filter(|at| held_refs.contains(at));
+                    let leaving: Vec<PathBuf> = match picked_held {
+                        Some(at) => path_of(self, at).into_iter().collect(),
+                        None => self.selection.iter().filter_map(|&at| path_of(self, at)).collect(),
+                    };
+                    let any_held = leaving.iter().any(|p| self.tray.contains(p));
+                    let unhold = ui.add_enabled(any_held, egui::Button::new("Unhold"));
+                    if unhold.on_hover_text("Take the picked or selected photos out of the tray").clicked() {
+                        self.tray.retain(|p| !leaving.contains(p));
                     }
                     let clear = ui.add_enabled(held, egui::Button::new("Clear"));
                     if clear.on_hover_text("Empty the tray; the photos stay where they are").clicked() {
@@ -544,13 +584,48 @@ impl PicoApp {
             let items: Vec<(FileRef, &MediaFile)> =
                 refs.iter().filter_map(|&at| Some((at, self.folders.get(at.0)?.files.get(at.1)?))).collect();
             let strip_width = (ui.available_width() - 480.0).max(100.0);
-            let picked = ui
+            let mut chosen = None;
+            let mut menu = |ui: &mut egui::Ui, at: FileRef| {
+                if ui.button("View").clicked() {
+                    chosen = Some(TrayChoice::View(at));
+                }
+                if held_refs.contains(&at) {
+                    if ui.button("Unhold").on_hover_text("Take the photo out of the tray").clicked() {
+                        chosen = Some(TrayChoice::Unhold(at));
+                    }
+                } else if ui.button("Hold").on_hover_text("Keep the photo in the tray").clicked() {
+                    chosen = Some(TrayChoice::Hold(at));
+                }
+            };
+            let clicked = ui
                 .allocate_ui(egui::vec2(strip_width, filmstrip::CELL), |ui| {
-                    filmstrip::show(ui, &items, None, &mut self.thumbs, |name| format!("Tray: {name}"))
+                    let label = |name: &str| format!("Tray: {name}");
+                    filmstrip::show(ui, &items, picked, &held_refs, &mut self.thumbs, label, Some(&mut menu))
                 })
                 .inner;
-            if let Some(at) = picked {
-                self.current = Some(at);
+            match clicked {
+                Some(filmstrip::Pick::Clicked(at)) => {
+                    self.tray_pick = path_of(self, at);
+                    self.current = Some(at);
+                }
+                Some(filmstrip::Pick::DoubleClicked(at)) => chosen = Some(TrayChoice::View(at)),
+                None => {}
+            }
+            match chosen {
+                Some(TrayChoice::View(at)) => self.view_in_tray(at),
+                Some(TrayChoice::Hold(at)) => {
+                    if let Some(path) = path_of(self, at)
+                        && !self.tray.contains(&path)
+                    {
+                        self.tray.push(path);
+                    }
+                }
+                Some(TrayChoice::Unhold(at)) => {
+                    if let Some(path) = path_of(self, at) {
+                        self.tray.retain(|p| p != &path);
+                    }
+                }
+                None => {}
             }
             ui.separator();
             ui.add_enabled_ui(!refs.is_empty(), |ui| {
@@ -571,15 +646,6 @@ impl PicoApp {
                     ui.end_row();
                     if held && ui.button("Show Tray").clicked() {
                         self.select_source(Source::Tray);
-                    }
-                    let remove = held && {
-                        let button = ui.button("Remove");
-                        button.on_hover_text("Take the selected photos out of the tray").clicked()
-                    };
-                    if remove {
-                        let paths: Vec<PathBuf> =
-                            self.selection.iter().filter_map(|&at| self.file(at).map(|f| f.path.clone())).collect();
-                        self.tray.retain(|p| !paths.contains(p));
                     }
                 });
             });
@@ -613,7 +679,7 @@ impl PicoApp {
             return self.duplicates.iter().copied().filter(|&at| self.file(at).is_some()).collect();
         }
         if source == Some(&Source::Tray) && query.is_empty() {
-            return self.tray_refs();
+            return self.tray_contents();
         }
         let month = match source {
             Some(Source::Month(key)) if query.is_empty() => Some(key.as_str()),
@@ -2200,9 +2266,9 @@ impl PicoApp {
                 .filter_map(|&r| Some((r, self.folders.get(r.0).and_then(|f| f.files.get(r.1))?)))
                 .collect();
             let picked = egui::Panel::top("filmstrip")
-                .show(ui, |ui| filmstrip::show(ui, &items, Some(at), &mut self.thumbs, str::to_owned))
+                .show(ui, |ui| filmstrip::show(ui, &items, Some(at), &[], &mut self.thumbs, str::to_owned, None))
                 .inner;
-            if let Some(other) = picked {
+            if let Some(filmstrip::Pick::Clicked(other) | filmstrip::Pick::DoubleClicked(other)) = picked {
                 self.current = Some(other);
                 self.selection = BTreeSet::from([other]);
                 return;
@@ -2676,6 +2742,13 @@ struct MovieDialog {
     fade: f32,
     audio: String,
     pick_audio: Option<Receiver<Option<PathBuf>>>,
+}
+
+/// A choice from a tray thumbnail's menu or a double click on it.
+enum TrayChoice {
+    View(FileRef),
+    Hold(FileRef),
+    Unhold(FileRef),
 }
 
 enum MovieProgress {

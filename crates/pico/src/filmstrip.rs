@@ -10,16 +10,31 @@ use pico_core::media::MediaKind;
 /// Height of a cell, thumbnail plus margin.
 pub const CELL: f32 = 64.0;
 
+const PIN_GREEN: egui::Color32 = egui::Color32::from_rgb(47, 158, 91);
+
+/// What happened to a thumbnail in the strip.
+pub enum Pick {
+    Clicked(FileRef),
+    DoubleClicked(FileRef),
+}
+
+/// Fills the right-click menu of a thumbnail.
+pub type ContextMenu<'a> = &'a mut dyn FnMut(&mut egui::Ui, FileRef);
+
 /// Draws the strip and returns the photo clicked, if any. The current photo
-/// is scrolled to the middle whenever it changes. `label` names each
-/// thumbnail for screen readers, from the file name.
+/// is scrolled to the middle whenever it changes; `pinned` photos get a green
+/// pin, as held photos did in Picasa's tray. `label` names each thumbnail for
+/// screen readers, from the file name.
+#[allow(clippy::too_many_arguments)]
 pub fn show(
     ui: &mut egui::Ui,
     items: &[(FileRef, &MediaFile)],
     current: Option<FileRef>,
+    pinned: &[FileRef],
     thumbs: &mut ThumbCache,
     label: impl Fn(&str) -> String,
-) -> Option<FileRef> {
+    mut menu: Option<ContextMenu>,
+) -> Option<Pick> {
     let centered_on = ui.scope_id().with("filmstrip centered on");
     let mut area = egui::ScrollArea::horizontal().id_salt("filmstrip").auto_shrink([false, true]);
     if let Some(current) = current
@@ -50,19 +65,25 @@ pub fn show(
             } else if response.hovered() {
                 painter.rect_filled(rect, 4.0, ui.visuals().widgets.hovered.weak_bg_fill);
             }
-            match thumbs.get(&file.path, file.kind, &file.meta) {
+            let image = match thumbs.get(&file.path, file.kind, &file.meta) {
                 Thumb::Ready(texture) => {
                     let size = texture.size_vec2();
                     let scale = (inner.width() / size.x).min(inner.height() / size.y);
                     let image = egui::Rect::from_center_size(inner.center(), size * scale);
                     painter.image(texture.id(), image, grid::full_uv(), egui::Color32::WHITE);
+                    image
                 }
                 Thumb::Pending | Thumb::Failed => {
                     painter.rect_filled(inner, 2.0, ui.visuals().faint_bg_color);
+                    inner
                 }
-            }
+            };
             if file.meta.star {
                 grid::paint_star(&painter, inner.left_bottom() + egui::vec2(1.0, -1.0), 12.0);
+            }
+            if pinned.contains(&at) {
+                let center = image.right_top() + egui::vec2(-5.0, 5.0);
+                painter.circle(center, 4.5, PIN_GREEN, egui::Stroke::new(1.5, egui::Color32::WHITE));
             }
             if file.kind == MediaKind::Video {
                 painter.text(
@@ -76,8 +97,14 @@ pub fn show(
             let name = file.name();
             let label = label(&name);
             response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, Some(at) == current, &label));
-            if response.on_hover_text(&name).clicked() && Some(at) != current {
-                clicked = Some(at);
+            let response = response.on_hover_text(&name);
+            if response.double_clicked() {
+                clicked = Some(Pick::DoubleClicked(at));
+            } else if response.clicked() && Some(at) != current {
+                clicked = Some(Pick::Clicked(at));
+            }
+            if let Some(menu) = menu.as_mut() {
+                response.context_menu(|ui| menu(ui, at));
             }
         }
     });

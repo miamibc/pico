@@ -515,6 +515,14 @@ fn photo_tray_holds_photos_across_folders() {
     harness.step();
     assert_eq!(harness.state().tray_len(), 2, "held photos stay when the folder changes");
     harness.step();
+    harness.get_by_label("Unhold").click();
+    harness.step();
+    assert_eq!(harness.state().tray_len(), 1, "the selected photo leaves the tray");
+    harness.step();
+    harness.get_by_label("Hold").click();
+    harness.step();
+    assert_eq!(harness.state().tray_len(), 2);
+    harness.step();
 
     harness.get_by_label("Photo Tray  (2)").click();
     harness.step();
@@ -533,6 +541,71 @@ fn photo_tray_holds_photos_across_folders() {
     harness.step();
     assert_eq!(harness.state().tray_len(), 0);
     assert!(fixture.dir.join("more/d.png").is_file());
+}
+
+#[test]
+fn tray_thumbnails_open_the_viewer_and_unhold() {
+    let fixture = Fixture::new("tray-menu");
+    // Short frames, so two clicks count as a double click.
+    let dir = fixture.dir.clone();
+    let mut harness = Harness::builder()
+        .with_size([1000.0, 800.0])
+        .with_step_dt(0.05)
+        .build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![dir], false));
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.get_by_label("c.png").click_modifiers(Modifiers::COMMAND);
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::H);
+    harness.step();
+    assert_eq!(harness.state().tray_len(), 2);
+
+    double_click(&mut harness, "Tray: c.png");
+    wait_until(&mut harness, "the photo to load", |app| app.is_viewing() && app.viewer_loaded());
+    assert_eq!(harness.state().selected_file(), Some(2), "c.png");
+    assert_eq!(harness.state().listing_names(), ["a.png", "c.png"], "the viewer steps through the tray");
+    double_click(&mut harness, "Photo");
+    harness.step();
+    assert!(!harness.state().is_viewing());
+
+    // A photo picked in the tray can be unheld. Pause first, or the click
+    // counts as a double click with the last one.
+    for _ in 0..10 {
+        harness.step();
+    }
+    harness.get_by_label("Tray: a.png").click();
+    harness.step();
+    harness.get_by_label("Unhold").click();
+    harness.step();
+    assert_eq!(harness.state().tray_len(), 1);
+    harness.step();
+    assert!(harness.query_by_label("Tray: a.png").is_none(), "a.png left the tray");
+
+    // The selection not held yet joins the tray on the right; its menu holds it.
+    harness.get_by_label("Holiday  (3)").click();
+    harness.step();
+    harness.get_by_label("b.png").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Tray: c.png");
+    wait_until(&mut harness, "the thumbnails", |app| app.thumbnails_pending() == 0);
+    screenshot(&mut harness, "tray-held");
+    // The tray's buttons work on all of it, held or not.
+    harness.get_by_label("Export…").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Export 2 pictures");
+    harness.key_press(Key::Escape);
+    harness.step();
+    harness.step();
+    harness.get_by_label("Tray: b.png").click_secondary();
+    harness.step();
+    harness.step();
+    // The menu item, drawn after the tray's own Hold button.
+    harness.get_all_by_label("Hold").last().unwrap().click();
+    harness.step();
+    assert_eq!(harness.state().tray_len(), 2, "b.png is held now");
 }
 
 #[test]
