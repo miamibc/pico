@@ -708,6 +708,49 @@ fn ribbon_of_folders_follows_the_list_and_the_scroll() {
 }
 
 #[test]
+fn folder_list_as_tree_by_year_and_by_size() {
+    let fixture = Fixture::new("folder-list");
+    let at = |secs: u64| std::time::UNIX_EPOCH + Duration::from_secs(secs);
+    for (dir, when, count) in [("2019/summer", at(1_561_896_000), 1), ("2021", at(1_623_844_800), 4)] {
+        let dir = fixture.dir.join(dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for k in 0..count {
+            let path = dir.join(format!("p{k}.png"));
+            RgbImage::from_fn(300, 200, |x, y| Rgb([x as u8, y as u8, 40 * k as u8])).save(&path).unwrap();
+            std::fs::File::options().write(true).open(&path).unwrap().set_modified(when).unwrap();
+        }
+    }
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 3);
+    let top = |harness: &Harness<'_, PicoApp>, label: &str| harness.get_by_label(label).rect().top();
+
+    harness.state_mut().set_folder_list(false, "date");
+    harness.step();
+    harness.step();
+    // Newest first, under year headers.
+    assert!(top(&harness, "2026  (1 folder)") < top(&harness, "2021  (1 folder)"));
+    assert!(top(&harness, "2021  (1 folder)") < top(&harness, "2019  (1 folder)"));
+    assert!(top(&harness, "2021  (4)") < top(&harness, "summer  (1)"));
+
+    harness.state_mut().set_folder_list(false, "size");
+    harness.step();
+    harness.step();
+    assert!(top(&harness, "2021  (4)") < top(&harness, "Holiday  (3)"), "biggest first");
+
+    // In the tree, 2019 has no photos of its own and holds summer.
+    harness.state_mut().set_folder_list(true, "name");
+    harness.step();
+    harness.step();
+    let year = harness.get_by_label("2019");
+    assert!(year.rect().top() < top(&harness, "summer  (1)"));
+    assert!(year.rect().left() < harness.get_by_label("summer  (1)").rect().left(), "summer is indented");
+    screenshot(&mut harness, "folder-tree");
+    harness.get_by_label("summer  (1)").click();
+    harness.step();
+    assert_eq!(harness.state().current_folder_name().as_deref(), Some("summer"));
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);

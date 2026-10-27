@@ -17,7 +17,7 @@ use pico_core::meta::PhotoMeta;
 use pico_core::movie::{self, MovieOptions};
 use pico_core::{config, fileops, video};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, channel};
 
 #[derive(PartialEq, Clone, Copy)]
@@ -42,6 +42,26 @@ enum SortBy {
     /// Date taken (EXIF), else file date.
     Date,
     Size,
+}
+
+/// How the folder list is ordered.
+#[derive(PartialEq, Clone, Copy)]
+enum FolderSort {
+    Name,
+    /// By the date of the first photo, newest first, in year groups.
+    Date,
+    /// By the latest file change, newest first.
+    Recent,
+    /// Biggest first.
+    Size,
+}
+
+/// A folder in the tree view; folders without photos of their own (just
+/// subfolders) have no index.
+struct FolderNode {
+    name: String,
+    folder: Option<usize>,
+    children: Vec<FolderNode>,
 }
 
 /// What the grid lists when the search box is empty.
@@ -94,6 +114,9 @@ pub struct PicoApp {
     show_info: bool,
     /// Picasa's strip of neighbouring photos above the viewer.
     show_filmstrip: bool,
+    /// Folders as a tree of their places on disk, rather than a flat list.
+    folder_tree: bool,
+    folder_sort: FolderSort,
     info: InfoPanel,
     /// "Copy All Effects" clipboard.
     copied_filters: Option<FilterStack>,
@@ -153,6 +176,8 @@ impl PicoApp {
             reverse: false,
             show_info: false,
             show_filmstrip: true,
+            folder_tree: false,
+            folder_sort: FolderSort::Name,
             info: InfoPanel::default(),
             copied_filters: None,
             view: View::Library,
@@ -1002,6 +1027,7 @@ impl PicoApp {
                 });
                 ui.checkbox(&mut self.starred_only, "Only Starred Photos");
                 ui.checkbox(&mut self.show_info, "Properties and Tags").on_hover_text("Alt+Enter, Ctrl+K");
+                ui.menu_button("Folder List", |ui| self.folder_list_options(ui));
                 ui.checkbox(&mut self.show_filmstrip, "Filmstrip")
                     .on_hover_text("Neighbouring photos above the open one");
                 ui.checkbox(&mut self.show_hidden, "Hidden Pictures");
@@ -1389,18 +1415,22 @@ impl PicoApp {
         let albums = library::albums(&self.folders);
         let mut picked_album = None;
         if !albums.is_empty() {
-            ui.label(egui::RichText::new("Albums").strong());
-            for album in &albums {
-                let open = self.source == Some(Source::Album(album.token.clone()));
-                let response = ui.selectable_label(open, format!("{}  ({})", album.name, album.members.len()));
-                if response.clicked() {
-                    picked_album = Some(album.token.clone());
-                }
-                if let Some(drag) = drop_target(ui, &response) {
-                    self.selection = drag.0.iter().copied().collect();
-                    self.add_to_album(&album.token, &album.name);
-                }
-            }
+            egui::CollapsingHeader::new(egui::RichText::new("Albums").strong())
+                .id_salt("albums")
+                .default_open(true)
+                .show(ui, |ui| {
+                    for album in &albums {
+                        let open = self.source == Some(Source::Album(album.token.clone()));
+                        let response = ui.selectable_label(open, format!("{}  ({})", album.name, album.members.len()));
+                        if response.clicked() {
+                            picked_album = Some(album.token.clone());
+                        }
+                        if let Some(drag) = drop_target(ui, &response) {
+                            self.selection = drag.0.iter().copied().collect();
+                            self.add_to_album(&album.token, &album.name);
+                        }
+                    }
+                });
         }
         if let Some(token) = picked_album {
             self.select_source(Source::Album(token));
@@ -1446,38 +1476,172 @@ impl PicoApp {
             self.select_source(source);
         }
         ui.separator();
-        ui.label(egui::RichText::new("Folders").strong());
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            let mut picked = None;
-            let mut menus = Vec::new();
-            let mut moves = None;
-            for (index, folder) in self.folders.iter().enumerate() {
-                let label = format!("{}  ({})", folder.name, folder.files.len());
-                let response = ui
-                    .selectable_label(self.source == Some(Source::Folder(index)), label)
-                    .on_hover_text(folder.path.display().to_string());
-                if response.clicked() {
-                    picked = Some(index);
-                }
-                if let Some(drag) = drop_target(ui, &response) {
-                    let elsewhere: Vec<FileRef> = drag.0.iter().copied().filter(|at| at.0 != index).collect();
-                    if !elsewhere.is_empty() {
-                        moves = Some((elsewhere, index));
+        let id = ui.make_persistent_id("folders");
+        egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
+            .show_header(ui, |ui| {
+                ui.strong("Folders");
+                ui.menu_button("…", |ui| self.folder_list_options(ui))
+                    .response
+                    .on_hover_text("Tree or list, and order");
+            })
+            .body(|ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    let mut rows = Vec::new();
+                    if self.folder_tree {
+                        for node in self.folder_nodes() {
+                            self.folder_node(ui, &node, &mut rows);
+                        }
+                    } else if self.folder_sort == FolderSort::Date {
+                        let order = self.folder_order();
+                        let mut years: Vec<(String, Vec<usize>)> = Vec::new();
+                        for index in order {
+                            let year = self.folder_first_date(index).get(..4).unwrap_or("?").to_owned();
+                            match years.last_mut() {
+                                Some((y, list)) if *y == year => list.push(index),
+                                _ => years.push((year, vec![index])),
+                            }
+                        }
+                        for (year, list) in years {
+                            let title = format!("{year}  ({})", plural(list.len(), "folder"));
+                            egui::CollapsingHeader::new(title).id_salt(("year", &year)).default_open(true).show(
+                                ui,
+                                |ui| {
+                                    for index in list {
+                                        rows.push((index, self.folder_row(ui, index)));
+                                    }
+                                },
+                            );
+                        }
+                    } else {
+                        for index in self.folder_order() {
+                            rows.push((index, self.folder_row(ui, index)));
+                        }
                     }
-                }
-                menus.push((index, response));
-            }
-            if let Some(index) = picked {
+                    self.folder_rows_done(ui, rows);
+                });
+            });
+    }
+
+    /// One folder in the list: name and count, a drop target for photos.
+    fn folder_row(&self, ui: &mut egui::Ui, index: usize) -> egui::Response {
+        let folder = &self.folders[index];
+        let label = format!("{}  ({})", folder.name, folder.files.len());
+        ui.selectable_label(self.source == Some(Source::Folder(index)), label)
+            .on_hover_text(folder.path.display().to_string())
+    }
+
+    /// Clicks, drops and context menus on the folder rows drawn this frame.
+    fn folder_rows_done(&mut self, ui: &egui::Ui, rows: Vec<(usize, egui::Response)>) {
+        for (index, response) in rows {
+            if response.clicked() {
                 self.select_source(Source::Folder(index));
                 self.ribbon_jump = Some(index);
             }
-            for (index, response) in menus {
-                response.context_menu(|ui| self.folder_context_menu(ui, index));
+            if let Some(drag) = drop_target(ui, &response) {
+                let elsewhere: Vec<FileRef> = drag.0.iter().copied().filter(|at| at.0 != index).collect();
+                if !elsewhere.is_empty() {
+                    self.confirm_move = Some((elsewhere, index));
+                }
             }
-            if moves.is_some() {
-                self.confirm_move = moves;
+            response.context_menu(|ui| self.folder_context_menu(ui, index));
+        }
+    }
+
+    fn folder_node(&self, ui: &mut egui::Ui, node: &FolderNode, rows: &mut Vec<(usize, egui::Response)>) {
+        let mut row = |ui: &mut egui::Ui| match node.folder {
+            Some(index) => rows.push((index, self.folder_row(ui, index))),
+            None => {
+                ui.label(egui::RichText::new(&node.name).weak());
+            }
+        };
+        if node.children.is_empty() {
+            ui.horizontal(|ui| {
+                ui.add_space(ui.spacing().indent);
+                row(ui);
+            });
+            return;
+        }
+        let id = ui.make_persistent_id(("folder tree", &node.name, node.folder));
+        let header = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
+            .show_header(ui, |ui| row(ui));
+        header.body(|ui| {
+            for child in &node.children {
+                self.folder_node(ui, child, rows);
             }
         });
+    }
+
+    fn folder_list_options(&mut self, ui: &mut egui::Ui) {
+        ui.radio_value(&mut self.folder_tree, false, "Flat List");
+        ui.radio_value(&mut self.folder_tree, true, "Tree").on_hover_text("Folders where they are on disk");
+        ui.separator();
+        ui.add_enabled_ui(!self.folder_tree, |ui| {
+            ui.radio_value(&mut self.folder_sort, FolderSort::Name, "Sort by Name");
+            ui.radio_value(&mut self.folder_sort, FolderSort::Date, "Sort by Date")
+                .on_hover_text("Newest first, by year");
+            ui.radio_value(&mut self.folder_sort, FolderSort::Recent, "Sort by Recent Changes");
+            ui.radio_value(&mut self.folder_sort, FolderSort::Size, "Sort by Size");
+        });
+    }
+
+    /// Folder indices in list order (the ribbon follows it too).
+    fn folder_order(&self) -> Vec<usize> {
+        let mut order: Vec<usize> = (0..self.folders.len()).collect();
+        if self.folder_tree {
+            return order;
+        }
+        match self.folder_sort {
+            FolderSort::Name => {}
+            FolderSort::Date => order.sort_by_cached_key(|&i| std::cmp::Reverse(self.folder_first_date(i))),
+            FolderSort::Recent => order.sort_by_cached_key(|&i| {
+                std::cmp::Reverse(self.folders[i].files.iter().filter_map(|f| f.modified).max())
+            }),
+            FolderSort::Size => order
+                .sort_by_cached_key(|&i| std::cmp::Reverse(self.folders[i].files.iter().map(|f| f.size).sum::<u64>())),
+        }
+        order
+    }
+
+    /// When the folder's first photo was taken (or its file date).
+    fn folder_first_date(&self, index: usize) -> String {
+        self.folders[index].files.iter().map(|f| f.sort_date()).min().unwrap_or_default()
+    }
+
+    /// The folders as a tree under each watched folder.
+    fn folder_nodes(&self) -> Vec<FolderNode> {
+        let mut roots: Vec<FolderNode> = Vec::new();
+        let mut watched = self.rules.watched.clone();
+        watched.sort();
+        for (index, folder) in self.folders.iter().enumerate() {
+            // The closest watched folder holds it.
+            let Some(root) =
+                watched.iter().filter(|w| folder.path.starts_with(w)).max_by_key(|w| w.components().count())
+            else {
+                continue;
+            };
+            let root_name = Folder::file_name(root);
+            let top = match roots.iter().position(|n| n.name == root_name) {
+                Some(i) => i,
+                None => {
+                    roots.push(FolderNode { name: root_name, folder: None, children: Vec::new() });
+                    roots.len() - 1
+                }
+            };
+            let mut node = &mut roots[top];
+            for part in folder.path.strip_prefix(root).unwrap_or(Path::new("")).components() {
+                let name = part.as_os_str().to_string_lossy().into_owned();
+                let i = match node.children.iter().position(|c| c.name == name) {
+                    Some(i) => i,
+                    None => {
+                        node.children.push(FolderNode { name, folder: None, children: Vec::new() });
+                        node.children.len() - 1
+                    }
+                };
+                node = &mut node.children[i];
+            }
+            node.folder = Some(index);
+        }
+        roots
     }
 
     fn library(&mut self, ui: &mut egui::Ui) {
@@ -1502,7 +1666,8 @@ impl PicoApp {
             // A folder shows in the ribbon of all folders, as in Picasa.
             let ribbon = matches!(self.source, Some(Source::Folder(_))) && self.search.trim().is_empty();
             let parts: Vec<(Option<usize>, Vec<FileRef>)> = if ribbon {
-                (0..self.folders.len())
+                self.folder_order()
+                    .into_iter()
                     .map(|fi| (Some(fi), self.listing_of(Some(&Source::Folder(fi)))))
                     .filter(|(_, refs)| !refs.is_empty())
                     .collect()
@@ -2217,6 +2382,17 @@ impl PicoApp {
 
     pub fn thumbnail_size(&self) -> f32 {
         self.thumb_size
+    }
+
+    /// `sort`: "name", "date", "recent" or "size".
+    pub fn set_folder_list(&mut self, tree: bool, sort: &str) {
+        self.folder_tree = tree;
+        self.folder_sort = match sort {
+            "date" => FolderSort::Date,
+            "recent" => FolderSort::Recent,
+            "size" => FolderSort::Size,
+            _ => FolderSort::Name,
+        };
     }
 
     /// The folder highlighted in the list, by name.
