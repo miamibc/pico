@@ -351,13 +351,16 @@ fn hold_original_to_compare() {
 }
 
 #[test]
-fn histogram_and_camera_in_edit_panel() {
+fn histogram_and_camera_over_the_photo() {
     let fixture = Fixture::new("histogram");
     let mut harness = harness(&fixture.dir);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
     harness.state_mut().open_file_named("a.png");
-    harness.state_mut().open_edit_panel();
     wait_until(&mut harness, "the photo to load", |app| app.viewer_loaded());
+    harness.step();
+    assert!(harness.query_by_label("Histogram").is_none(), "hidden until asked for");
+    harness.get_by_label("Info").click();
+    harness.step();
     harness.step();
     harness.get_by_label("Histogram");
     harness.get_by_label("No camera details. A screenshot, perhaps?");

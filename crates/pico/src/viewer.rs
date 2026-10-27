@@ -79,6 +79,9 @@ pub struct Viewer {
     /// Uncommitted edits while a slider is being dragged.
     draft: Option<(PathBuf, FilterStack)>,
     show_edit_panel: bool,
+    /// Histogram and camera settings over the photo, as Picasa's "Histogram &
+    /// Camera Information".
+    show_camera_info: bool,
     /// The open Crop or Straighten tool and the file it belongs to.
     tool: Option<(PathBuf, Tool)>,
     player: Player,
@@ -232,6 +235,9 @@ impl Viewer {
         self.update_rendering(ui.ctx(), file, &meta);
         self.update_original(ui.ctx(), file);
         let picture_action = egui::CentralPanel::no_frame().show(ui, |ui| self.picture(ui, &meta)).inner;
+        if self.show_camera_info {
+            self.camera_info(ui.ctx(), file);
+        }
         self.update_detail(ui.ctx(), file, &meta);
         if action.is_none() && picture_action.is_some() {
             return picture_action;
@@ -319,6 +325,7 @@ impl Viewer {
             }
             if file.kind != MediaKind::Video {
                 ui.toggle_value(&mut self.show_edit_panel, "Edit").on_hover_text("Show the edit panel");
+                ui.toggle_value(&mut self.show_camera_info, "Info").on_hover_text("Histogram & Camera Information");
             }
             if ui.button("▶ Slideshow").on_hover_text("Ctrl+4").clicked() {
                 action = Some(ViewerAction::Slideshow);
@@ -423,8 +430,29 @@ impl Viewer {
         Some(if near(edited.0, same.0) && near(edited.1, same.1) { (same, None) } else { (edited, Some(same)) })
     }
 
-    /// The histogram of the picture as edited, and the camera settings, as on
-    /// Picasa's Tuning tab.
+    /// A see-through box in the photo's top right corner with its levels and
+    /// camera settings.
+    fn camera_info(&self, ctx: &egui::Context, file: &MediaFile) {
+        let Some(area) = self.photo_area else { return };
+        egui::Area::new(egui::Id::unique("camera info"))
+            .pivot(egui::Align2::RIGHT_TOP)
+            .fixed_pos(area.right_top() + egui::vec2(-10.0, 10.0))
+            .interactable(false)
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(egui::Color32::from_black_alpha(170))
+                    .corner_radius(6.0)
+                    .inner_margin(10.0)
+                    .show(ui, |ui| {
+                        ui.set_width(220.0);
+                        ui.visuals_mut().override_text_color = Some(egui::Color32::from_gray(230));
+                        self.levels_and_camera(ui, file);
+                    });
+            });
+    }
+
+    /// The histogram of the picture as edited, and the camera settings, one
+    /// to a line as in Picasa.
     fn levels_and_camera(&self, ui: &mut egui::Ui, file: &MediaFile) {
         let shown = self.texture.as_ref().map(|(key, _)| key);
         if let Some((_, histogram)) = self.histogram.as_ref().filter(|(key, _)| Some(key) == shown) {
@@ -435,14 +463,21 @@ impl Viewer {
         if let Some(camera) = value("Camera") {
             ui.label(camera);
         }
-        let settings: Vec<String> = ["Exposure", "Aperture", "ISO", "Focal length"]
+        let settings: Vec<String> = ["Focal length", "Exposure", "Aperture", "ISO"]
             .iter()
-            .filter_map(|label| value(label).map(|v| if *label == "ISO" { format!("ISO {v}") } else { v }))
+            .filter_map(|label| {
+                value(label).map(|v| match *label {
+                    "ISO" => format!("ISO {v}"),
+                    "Focal length" => format!("Focal length: {v}"),
+                    _ => v,
+                })
+            })
             .collect();
         if settings.is_empty() && value("Camera").is_none() {
-            ui.label(egui::RichText::new("No camera details. A screenshot, perhaps?").weak());
-        } else if !settings.is_empty() {
-            ui.label(egui::RichText::new(settings.join("  ·  ")).weak());
+            ui.label("No camera details. A screenshot, perhaps?");
+        }
+        for setting in settings {
+            ui.label(setting);
         }
     }
 
@@ -653,9 +688,6 @@ impl Viewer {
             self.draft = None;
             history = Some(ViewerAction::SetFilters(FilterStack::default()));
         }
-
-        ui.separator();
-        self.levels_and_camera(ui, file);
 
         if history.is_some() {
             return history;
