@@ -72,6 +72,8 @@ pub struct PicoApp {
     /// Photos held in the Photo Tray across folders (Ctrl+H), by path so they
     /// survive rescans.
     tray: Vec<PathBuf>,
+    /// The selection before a selection rectangle started.
+    band_base: Option<BTreeSet<FileRef>>,
     search: String,
     focus_search: bool,
     starred_only: bool,
@@ -125,6 +127,7 @@ impl PicoApp {
             current: None,
             selection: BTreeSet::new(),
             tray: Vec::new(),
+            band_base: None,
             search: String::new(),
             focus_search: false,
             starred_only: false,
@@ -1409,6 +1412,19 @@ impl PicoApp {
             }
             match action {
                 Some(GridAction::Click { at, toggle, range }) => self.click(at, toggle, range),
+                Some(GridAction::Band { hits, toggle, done }) => {
+                    // With Ctrl the band adds to what was selected before it.
+                    let base = self
+                        .band_base
+                        .get_or_insert_with(|| if toggle { self.selection.clone() } else { BTreeSet::new() });
+                    self.selection = base.iter().copied().chain(hits.iter().copied()).collect();
+                    if let Some(&last) = hits.last() {
+                        self.current = Some(last);
+                    }
+                    if done {
+                        self.band_base = None;
+                    }
+                }
                 Some(GridAction::Open(at)) => {
                     self.current = Some(at);
                     self.selection = BTreeSet::from([at]);

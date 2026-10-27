@@ -40,8 +40,19 @@ impl CaptionMode {
 }
 
 pub enum GridAction {
-    Click { at: FileRef, toggle: bool, range: bool },
+    Click {
+        at: FileRef,
+        toggle: bool,
+        range: bool,
+    },
     Open(FileRef),
+    /// A selection rectangle is being dragged over these photos; `done` once
+    /// the button is let go. With `toggle` (Ctrl) it adds to the selection.
+    Band {
+        hits: Vec<FileRef>,
+        toggle: bool,
+        done: bool,
+    },
 }
 
 pub struct GridView<'a> {
@@ -69,8 +80,20 @@ pub fn show(
     let rows = view.items.len().div_ceil(columns);
     let mut action = None;
     let mut cells = Vec::new();
+    let step = egui::vec2(cell + ui.spacing().item_spacing.x, cell + text_height + ui.spacing().item_spacing.y);
+    let band_id = ui.scope_id().with("selection band");
+    // Dragging the band past the top or bottom edge scrolls; set last frame.
+    // Mouse drags draw the band rather than scrolling.
+    let mut area = egui::ScrollArea::vertical()
+        .auto_shrink(false)
+        .scroll_source(egui::scroll_area::ScrollSource::SCROLL_BAR | egui::scroll_area::ScrollSource::MOUSE_WHEEL);
+    if let Some(offset) = ui.data_mut(|d| d.remove_temp::<f32>(band_id.with("scroll"))) {
+        area = area.vertical_scroll_offset(offset);
+    }
 
-    egui::ScrollArea::vertical().auto_shrink(false).show_rows(ui, cell + text_height, rows, |ui, row_range| {
+    // Under the thumbnails, so clicks reach them and drags reach the band.
+    let band = ui.interact(ui.available_rect_before_wrap(), band_id, egui::Sense::drag());
+    let output = area.show_rows(ui, cell + text_height, rows, |ui, row_range| {
         for row in row_range {
             ui.horizontal(|ui| {
                 for &(at, file) in view.items.iter().skip(row * columns).take(columns) {
@@ -153,6 +176,66 @@ pub fn show(
             });
         }
     });
+
+    // The band lives in content coordinates, so it keeps photos that scrolled away.
+    let viewport = output.inner_rect;
+    let origin = viewport.min - output.state.clamped_offset();
+    if band.drag_started()
+        && let Some(pos) = band.interact_pointer_pos()
+    {
+        ui.data_mut(|d| d.insert_temp(band_id, pos - origin));
+    }
+    let start = ui.data(|d| d.get_temp::<egui::Vec2>(band_id));
+    let moving = band.dragged() || band.drag_stopped();
+    // egui counts a press on a drag-only area as a drag at once; a plain click
+    // must stay a click, so the band starts only after the pointer moves.
+    let active_id = band_id.with("active");
+    let pos = ui.ctx().pointer_latest_pos();
+    if let (Some(start), Some(pos), true) = (start, pos, moving)
+        && !ui.data(|d| d.get_temp::<bool>(active_id).unwrap_or(false))
+        && (pos - origin - start).length() > 6.0
+    {
+        ui.data_mut(|d| d.insert_temp(active_id, true));
+    }
+    if !moving {
+        ui.data_mut(|d| d.remove_temp::<bool>(active_id));
+    }
+    let active = ui.data(|d| d.get_temp::<bool>(active_id).unwrap_or(false));
+    if let (Some(start), Some(pos), true) = (start, pos, moving && active && action.is_none()) {
+        let area = egui::Rect::from_two_pos(start.to_pos2(), (pos - origin).to_pos2());
+        let hits = view
+            .items
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| {
+                let at = egui::pos2((i % columns) as f32 * step.x, (i / columns) as f32 * step.y);
+                egui::Rect::from_min_size(at, egui::vec2(cell, cell + text_height)).intersects(area)
+            })
+            .map(|(_, &(at, _))| at)
+            .collect();
+        let screen = area.translate(origin.to_vec2()).intersect(viewport);
+        let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Foreground, band_id));
+        let color = ui.visuals().selection.bg_fill;
+        painter.rect_filled(screen, 2.0, color.gamma_multiply(0.25));
+        painter.rect_stroke(screen, 2.0, egui::Stroke::new(1.0, color), egui::StrokeKind::Inside);
+        let toggle = ui.input(|i| i.modifiers.command);
+        let done = band.drag_stopped();
+        action = Some(GridAction::Band { hits, toggle, done });
+        if done {
+            ui.data_mut(|d| {
+                d.remove_temp::<egui::Vec2>(band_id);
+                d.remove_temp::<bool>(active_id);
+            });
+        } else {
+            let past =
+                if pos.y < viewport.top() { pos.y - viewport.top() } else { (pos.y - viewport.bottom()).max(0.0) };
+            if past != 0.0 {
+                let offset = (output.state.clamped_offset().y + past * 0.5).max(0.0);
+                ui.data_mut(|d| d.insert_temp(band_id.with("scroll"), offset));
+                ui.ctx().request_repaint();
+            }
+        }
+    }
     (action, cells)
 }
 

@@ -552,6 +552,52 @@ fn thumbnail_size_by_slider_and_ctrl_wheel() {
 }
 
 #[test]
+fn drag_a_rectangle_to_select() {
+    let fixture = Fixture::new("band");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    let (b, c) = (harness.get_by_label("b.png").rect(), harness.get_by_label("c.png").rect());
+
+    // From the empty space below c, up and left into b.
+    let start = c.right_bottom() + egui::vec2(10.0, 30.0);
+    harness.drag_at(start);
+    harness.step();
+    harness.hover_at(start - egui::vec2(20.0, 20.0));
+    harness.step();
+    harness.hover_at(b.center());
+    harness.step();
+    screenshot(&mut harness, "band");
+    harness.drop_at(b.center());
+    harness.step();
+    assert_eq!(harness.state().selected_count(), 2);
+
+    // Ctrl adds the next band to the selection.
+    let a = harness.get_by_label("a.png").rect();
+    let start = a.left_bottom() + egui::vec2(-2.0, 30.0);
+    harness.event(egui::Event::ModifiersChanged(Modifiers::COMMAND));
+    harness.event(egui::Event::PointerButton {
+        pos: start,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::COMMAND,
+    });
+    harness.step();
+    harness.event(egui::Event::PointerMoved(start + egui::vec2(10.0, -10.0)));
+    harness.step();
+    harness.event(egui::Event::PointerMoved(a.center()));
+    harness.step();
+    harness.event(egui::Event::PointerButton {
+        pos: a.center(),
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::COMMAND,
+    });
+    harness.event(egui::Event::ModifiersChanged(Modifiers::NONE));
+    harness.step();
+    assert_eq!(harness.state().selected_count(), 3);
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);
