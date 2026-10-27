@@ -1,11 +1,14 @@
 # Builds Pico and publishes the archives as a GitHub release. Run by hand
 # (Actions > release > Run workflow) to get the archives as artifacts only.
 #
-# For now only Linux x86_64 and Windows x86_64 are built: every push to main
-# updates a rolling release tagged `latest`, and a `v*` tag gets its own
-# release with the notes from docs/releases/<tag>.md (English, then
-# Russian). The other systems are commented out to save Actions minutes;
-# uncomment them (and the `needs` of the release job) to build everything.
+# For now only Linux x86_64 and Windows x86_64 are built, once per push to
+# main. The archives go to a rolling pre-release tagged `latest`. When the
+# version in Cargo.toml has no release yet, the same archives also become
+# release `v<version>`, with the notes from docs/releases/v<version>.md
+# (English, then Russian); the tag is created on the pushed commit. So a new
+# version is: bump it, add its notes, merge. The other systems are commented
+# out to save Actions minutes; uncomment them (and the `needs` of the release
+# job) to build everything.
 #
 # Intel and AMD processors share the x86 builds: x86_64 for 64-bit, x86
 # (i686) for 32-bit. Linux builds are cross-compiled with cargo-zigbuild
@@ -16,7 +19,6 @@ name: release
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -153,17 +155,20 @@ jobs:
       - name: Checksums
         working-directory: dist
         run: sha256sum * > SHA256SUMS.txt
-      # A push to main replaces the `latest` release; a `v*` tag gets its own.
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
-            notes=docs/releases/$GITHUB_REF_NAME.md
-            if [ -f "$notes" ]; then notes=(--notes-file "$notes"); else notes=(--generate-notes); fi
-            gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Pico $GITHUB_REF_NAME" "${notes[@]}"
+          repo=$GITHUB_REPOSITORY
+          version=v$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          if gh release view "$version" --repo "$repo" > /dev/null 2>&1; then
+            echo "$version is already released; updating latest only."
           else
-            gh release delete latest --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
-            gh release create latest dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --title "Pico (latest main)" --notes "Built from $GITHUB_SHA." --latest
+            notes=docs/releases/$version.md
+            if [ -f "$notes" ]; then notes=(--notes-file "$notes"); else notes=(--generate-notes); fi
+            gh release create "$version" dist/* --repo "$repo" --target "$GITHUB_SHA" \
+              --title "Pico $version" "${notes[@]}" --latest
           fi
+          gh release delete latest --repo "$repo" --cleanup-tag --yes || true
+          gh release create latest dist/* --repo "$repo" --target "$GITHUB_SHA" \
+            --title "Pico (latest main)" --notes "Built from $GITHUB_SHA." --prerelease --latest=false
