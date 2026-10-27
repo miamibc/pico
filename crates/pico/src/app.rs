@@ -308,7 +308,7 @@ impl PicoApp {
             ui.separator();
             let items: Vec<(FileRef, &MediaFile)> =
                 refs.iter().filter_map(|&at| Some((at, self.folders.get(at.0)?.files.get(at.1)?))).collect();
-            let strip_width = (ui.available_width() - 330.0).max(100.0);
+            let strip_width = (ui.available_width() - 480.0).max(100.0);
             let picked = ui
                 .allocate_ui(egui::vec2(strip_width, filmstrip::CELL), |ui| {
                     filmstrip::show(ui, &items, None, &mut self.thumbs, |name| format!("Tray: {name}"))
@@ -347,6 +347,11 @@ impl PicoApp {
                         self.tray.retain(|p| !paths.contains(p));
                     }
                 });
+            });
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let slider = egui::Slider::new(&mut self.thumb_size, MIN_THUMB..=MAX_THUMB).show_value(false);
+                ui.add_sized([110.0, 18.0], slider).on_hover_text("Thumbnail size (Ctrl+wheel over the photos)");
+                ui.label(egui::RichText::new("🗖").weak());
             });
         });
     }
@@ -1377,6 +1382,11 @@ impl PicoApp {
                 });
                 return;
             }
+            // Ctrl+wheel or a pinch over the grid resizes the thumbnails.
+            let zoom = ui.input(|i| i.zoom_delta());
+            if zoom != 1.0 && ui.rect_contains_pointer(ui.max_rect()) {
+                self.thumb_size = (self.thumb_size * zoom).clamp(MIN_THUMB, MAX_THUMB);
+            }
             let items: Vec<(FileRef, &MediaFile)> =
                 listing.iter().filter_map(|&at| Some((at, self.folders.get(at.0)?.files.get(at.1)?))).collect();
             let view = GridView {
@@ -1996,6 +2006,10 @@ impl PicoApp {
 
     pub fn is_full_screen(&self) -> bool {
         self.viewer.is_full_screen()
+    }
+
+    pub fn thumbnail_size(&self) -> f32 {
+        self.thumb_size
     }
 
     pub fn tray_len(&self) -> usize {

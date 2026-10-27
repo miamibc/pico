@@ -535,6 +535,23 @@ fn photo_tray_holds_photos_across_folders() {
 }
 
 #[test]
+fn thumbnail_size_by_slider_and_ctrl_wheel() {
+    let fixture = Fixture::new("thumb-size");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    assert_eq!(harness.state().thumbnail_size(), 160.0);
+    harness.hover_at(harness.get_by_label("b.png").rect().center());
+    harness.event(egui::Event::Zoom(1.25));
+    harness.step();
+    assert_eq!(harness.state().thumbnail_size(), 200.0);
+    harness.event(egui::Event::Zoom(4.0));
+    harness.step();
+    assert_eq!(harness.state().thumbnail_size(), 256.0, "no bigger than the largest size");
+    harness.get_by_label("Thumbnail size (Ctrl+wheel over the photos)");
+    screenshot(&mut harness, "thumb-size");
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);
