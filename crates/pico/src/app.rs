@@ -2834,10 +2834,13 @@ fn folder_header(folder: &Folder, items: &[(FileRef, &MediaFile)]) -> SectionHea
         (Some(only), _) => library::month_label(only),
         _ => String::new(),
     };
-    let count = plural(
-        items.len(),
-        if items.iter().all(|(_, f)| f.kind == pico_core::media::MediaKind::Video) { "video" } else { "photo" },
-    );
+    let videos = items.iter().filter(|(_, f)| f.kind == pico_core::media::MediaKind::Video).count();
+    let photos = items.len() - videos;
+    let count = match (photos, videos) {
+        (_, 0) => plural(photos, "photo"),
+        (0, _) => plural(videos, "video"),
+        _ => format!("{}, {}", plural(photos, "photo"), plural(videos, "video")),
+    };
     SectionHeader {
         title: folder.name.clone(),
         detail: if span.is_empty() { count } else { format!("{count}  ·  {span}") },

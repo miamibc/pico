@@ -764,6 +764,7 @@ fn only_videos_filter() {
     harness.step();
     harness.step();
     assert_eq!(harness.state().listing_names(), ["clip.mp4"]);
+    harness.get_by_label("Holiday, 1 video  ·  October 2026");
     assert!(harness.query_by_label("a.png").is_none(), "photos are hidden from the grid too");
     harness.get_by_label("▶").click();
     harness.step();
