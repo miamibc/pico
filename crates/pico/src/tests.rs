@@ -932,6 +932,19 @@ fn light_theme_in_options() {
     let ctx = harness.ctx.clone();
     assert_eq!(harness.state().settings_for_test(&ctx).get("theme").map(String::as_str), Some("light"));
 
+    // "As the system" follows the desktop, both ways.
+    harness.get_by_label("As the system").click();
+    harness.step();
+    let ctx = harness.ctx.clone();
+    harness.state_mut().set_system_dark(&ctx, false);
+    harness.step();
+    assert!(!harness.ctx.global_style().visuals.dark_mode, "the desktop says light");
+    harness.state_mut().set_system_dark(&ctx, true);
+    harness.step();
+    assert!(harness.ctx.global_style().visuals.dark_mode, "the desktop says dark");
+    harness.get_by_label("Light").click();
+    harness.step();
+
     harness.key_press(Key::Escape);
     harness.step();
     assert!(harness.query_by_label("Look").is_none(), "Esc closes Options");

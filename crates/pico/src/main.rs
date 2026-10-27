@@ -8,6 +8,7 @@ mod grid;
 mod info;
 mod player;
 mod slideshow;
+mod system_theme;
 #[cfg(test)]
 mod tests;
 mod thumbs;

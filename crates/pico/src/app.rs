@@ -155,6 +155,9 @@ pub struct PicoApp {
     status: String,
     /// Light, dark, or as the system says.
     theme: egui::ThemePreference,
+    /// The desktop's light or dark wish, where Pico reads it itself (Linux).
+    system_dark: Option<bool>,
+    system_theme: Option<Receiver<bool>>,
     /// Width of the folder panel, remembered between runs.
     sidebar_width: f32,
     /// The folder to open once the first scan is done.
@@ -225,6 +228,8 @@ impl PicoApp {
             status: String::new(),
             persist_settings,
             theme: egui::ThemePreference::System,
+            system_dark: None,
+            system_theme: None,
             sidebar_width: 260.0,
             last_folder: None,
             saved_settings: config::Settings::new(),
@@ -234,7 +239,10 @@ impl PicoApp {
             app.saved_settings = config::load_settings();
             app.apply_settings(&app.saved_settings.clone());
         }
-        ctx.set_theme(app.theme);
+        if persist_settings {
+            app.system_theme = crate::system_theme::watch(ctx);
+        }
+        app.apply_theme(ctx);
         app.rescan(ctx);
         app
     }
@@ -359,6 +367,29 @@ impl PicoApp {
             Some("light") => egui::ThemePreference::Light,
             _ => egui::ThemePreference::System,
         };
+    }
+
+    /// Sets the chosen theme; "as the system" uses the desktop's wish when
+    /// Pico knows it, else egui's own guess from the window system.
+    fn apply_theme(&self, ctx: &egui::Context) {
+        let theme = match (self.theme, self.system_dark) {
+            (egui::ThemePreference::System, Some(true)) => egui::ThemePreference::Dark,
+            (egui::ThemePreference::System, Some(false)) => egui::ThemePreference::Light,
+            (theme, _) => theme,
+        };
+        ctx.set_theme(theme);
+    }
+
+    fn poll_system_theme(&mut self, ctx: &egui::Context) {
+        let Some(rx) = &self.system_theme else { return };
+        let mut changed = false;
+        while let Ok(dark) = rx.try_recv() {
+            self.system_dark = Some(dark);
+            changed = true;
+        }
+        if changed {
+            self.apply_theme(ctx);
+        }
     }
 
     /// Saves the settings a second after they last changed, so dragging a
@@ -2408,7 +2439,7 @@ impl PicoApp {
                     ui.radio_value(&mut self.theme, egui::ThemePreference::Dark, "Dark");
                     ui.radio_value(&mut self.theme, egui::ThemePreference::Light, "Light");
                     if self.theme != before {
-                        ctx.set_theme(self.theme);
+                        self.apply_theme(ctx);
                     }
                 });
                 ui.label(egui::RichText::new("Photos keep their dark backdrop either way.").weak());
@@ -2665,6 +2696,14 @@ impl PicoApp {
         self.apply_settings(settings);
     }
 
+    /// As if the desktop had said light (`false`) or dark (`true`).
+    pub fn set_system_dark(&mut self, ctx: &egui::Context, dark: bool) {
+        let (tx, rx) = channel();
+        let _ = tx.send(dark);
+        self.system_theme = Some(rx);
+        self.poll_system_theme(ctx);
+    }
+
     pub fn confirming_move(&self) -> bool {
         self.confirm_move.is_some()
     }
@@ -2917,6 +2956,7 @@ impl eframe::App for PicoApp {
         self.poll_movie();
         self.thumbs.poll(ctx);
         self.take_dropped_files(ctx);
+        self.poll_system_theme(ctx);
         self.save_settings_when_settled(ctx);
     }
 
