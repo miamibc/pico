@@ -153,6 +153,8 @@ pub struct PicoApp {
     show_about: bool,
     show_shortcuts: bool,
     status: String,
+    /// Light, dark, or as the system says.
+    theme: egui::ThemePreference,
     /// Width of the folder panel, remembered between runs.
     sidebar_width: f32,
     /// The folder to open once the first scan is done.
@@ -222,6 +224,7 @@ impl PicoApp {
             show_shortcuts: false,
             status: String::new(),
             persist_settings,
+            theme: egui::ThemePreference::System,
             sidebar_width: 260.0,
             last_folder: None,
             saved_settings: config::Settings::new(),
@@ -231,6 +234,7 @@ impl PicoApp {
             app.saved_settings = config::load_settings();
             app.apply_settings(&app.saved_settings.clone());
         }
+        ctx.set_theme(app.theme);
         app.rescan(ctx);
         app
     }
@@ -297,6 +301,12 @@ impl PicoApp {
         };
         set("folder_sort", folder_sort.into());
         set("sidebar_width", format!("{}", self.sidebar_width));
+        let theme = match self.theme {
+            egui::ThemePreference::Dark => "dark",
+            egui::ThemePreference::Light => "light",
+            egui::ThemePreference::System => "system",
+        };
+        set("theme", theme.into());
         if let Some(Source::Folder(i)) = self.source
             && let Some(folder) = self.folders.get(i)
         {
@@ -344,6 +354,11 @@ impl PicoApp {
             self.sidebar_width = width.clamp(150.0, 600.0);
         }
         self.last_folder = get("last_folder").map(PathBuf::from);
+        self.theme = match get("theme") {
+            Some("dark") => egui::ThemePreference::Dark,
+            Some("light") => egui::ThemePreference::Light,
+            _ => egui::ThemePreference::System,
+        };
     }
 
     /// Saves the settings a second after they last changed, so dragging a
@@ -2386,6 +2401,18 @@ impl PicoApp {
         if self.show_options {
             let mut open = true;
             egui::Window::new("Options").open(&mut open).collapsible(false).show(ctx, |ui| {
+                ui.heading("Look");
+                ui.horizontal(|ui| {
+                    let before = self.theme;
+                    ui.radio_value(&mut self.theme, egui::ThemePreference::System, "As the system");
+                    ui.radio_value(&mut self.theme, egui::ThemePreference::Dark, "Dark");
+                    ui.radio_value(&mut self.theme, egui::ThemePreference::Light, "Light");
+                    if self.theme != before {
+                        ctx.set_theme(self.theme);
+                    }
+                });
+                ui.label(egui::RichText::new("Photos keep their dark backdrop either way.").weak());
+                ui.separator();
                 ui.heading("Thumbnails");
                 let dir = config::cache_dir().map(|d| d.join("thumbs"));
                 let size = dir.as_deref().map_or(0, dir_size);
@@ -2408,7 +2435,7 @@ impl PicoApp {
                     ui.label(text);
                 }
             });
-            self.show_options = open;
+            self.show_options = open && !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         }
 
         if ctx.input(|i| i.key_pressed(egui::Key::F1)) {

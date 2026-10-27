@@ -909,6 +909,38 @@ fn keyboard_shortcuts_window() {
 }
 
 #[test]
+fn light_theme_in_options() {
+    let fixture = Fixture::new("theme");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("Tools").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Options…").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Dark").click();
+    harness.step();
+    harness.step();
+    assert!(harness.ctx.global_style().visuals.dark_mode);
+    harness.get_by_label("Light").click();
+    harness.step();
+    harness.step();
+    assert!(!harness.ctx.global_style().visuals.dark_mode, "light visuals");
+    screenshot(&mut harness, "light-theme");
+    let ctx = harness.ctx.clone();
+    assert_eq!(harness.state().settings_for_test(&ctx).get("theme").map(String::as_str), Some("light"));
+
+    harness.key_press(Key::Escape);
+    harness.step();
+    assert!(harness.query_by_label("Look").is_none(), "Esc closes Options");
+    harness.state_mut().open_file_named("b.png");
+    harness.state_mut().open_edit_panel();
+    wait_until(&mut harness, "the photo to load", |app| app.viewer_loaded());
+    screenshot(&mut harness, "light-viewer");
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);
