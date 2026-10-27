@@ -272,6 +272,49 @@ fn zoom_pan_and_wheel_in_viewer() {
 }
 
 #[test]
+fn info_line_above_the_photo() {
+    let fixture = Fixture::new("info-line");
+    let ini = fixture.ini() + "[c.png]\r\nfilters=crop64=1,7fffffff;\r\n";
+    std::fs::write(fixture.dir.join(".picasa.ini"), ini).unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    wait_until(&mut harness, "the photo to load", |app| app.viewer_loaded());
+    harness.step();
+    let line = info_line(&harness, "a.png");
+    assert!(line.contains("120 × 80"), "{line}");
+    assert!(line.contains("file date"), "no EXIF, so the file's own date: {line}");
+    assert!(line.ends_with(" bytes") || line.ends_with(" KB"), "{line}");
+
+    // Turned sideways the photo is 80 wide; that is not a new size.
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::R);
+    wait_until(&mut harness, "the rotated photo", |app| app.viewer_loaded());
+    harness.step();
+    let line = info_line(&harness, "a.png");
+    assert!(line.contains("80 × 120") && !line.contains("original"), "{line}");
+    screenshot(&mut harness, "info-line");
+
+    // c.png was cropped to its left half in Picasa.
+    harness.key_press(Key::ArrowRight);
+    harness.key_press(Key::ArrowRight);
+    wait_until(&mut harness, "the cropped photo", |app| app.selected_file() == Some(2) && app.viewer_loaded());
+    harness.step();
+    let line = info_line(&harness, "c.png");
+    assert!(line.contains("60 × 80 (original 120 × 80)"), "{line}");
+}
+
+fn info_line(harness: &Harness<'_, PicoApp>, name: &str) -> String {
+    let prefix = format!("{name}   ·");
+    harness
+        .get_by(|n| n.role() == egui::accesskit::Role::Label && n.value().is_some_and(|v| v.starts_with(&prefix)))
+        .accesskit_node()
+        .value()
+        .unwrap_or_default()
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);

@@ -4,6 +4,7 @@
 //! from that copy in the background, so slider changes preview quickly.
 
 use crate::grid;
+use crate::info;
 use crate::player::{Player, PlayerAction};
 use crate::tools::{self, CropTool, Tool, ToolAction};
 use eframe::egui;
@@ -12,7 +13,7 @@ use pico_core::effects::{self, Group, ParamValue};
 use pico_core::filters::{Filter, FilterStack, Value};
 use pico_core::image::DynamicImage;
 use pico_core::image::imageops::FilterType;
-use pico_core::library::MediaFile;
+use pico_core::library::{self, MediaFile};
 use pico_core::media::MediaKind;
 use pico_core::meta::PhotoMeta;
 use pico_core::render;
@@ -45,6 +46,9 @@ pub enum ViewerAction {
 
 /// A decoded working copy and its scale, or why decoding failed.
 type BaseResult = Result<(DynamicImage, f32), String>;
+
+/// Width and height in pixels.
+type Size = (u32, u32);
 
 /// What a texture shows: the file plus the edits it was rendered with.
 type RenderKey = (PathBuf, String);
@@ -79,6 +83,8 @@ pub struct Viewer {
     /// working copy.
     detail: Option<(RenderKey, egui::TextureHandle)>,
     detail_job: Option<(RenderKey, Receiver<egui::ColorImage>)>,
+    /// Pixel size from the file header, for the info line.
+    header_size: Option<(PathBuf, Option<Size>)>,
 }
 
 impl Viewer {
@@ -96,6 +102,9 @@ impl Viewer {
             self.wheel = 0.0;
             self.detail = None;
             self.detail_job = None;
+            let size =
+                (file.kind == MediaKind::Photo).then(|| pico_core::image::image_dimensions(&file.path).ok()).flatten();
+            self.header_size = Some((file.path.clone(), size));
         }
         if self.caption_for.as_ref() != Some(&file.path) {
             self.caption = file.meta.caption.clone().unwrap_or_default();
@@ -108,6 +117,7 @@ impl Viewer {
                 action = Some(a);
             }
         });
+        egui::Panel::top("viewer_info").show(ui, |ui| self.info_line(ui, file));
         if file.kind == MediaKind::Video {
             // Videos get the player instead of the photo editor.
             let player_action = self.player.show(ui, file);
@@ -235,6 +245,54 @@ impl Viewer {
             }
         });
         action
+    }
+
+    /// Name, date taken, pixel size and file size, like the line above the
+    /// photo in Picasa.
+    fn info_line(&self, ui: &mut egui::Ui, file: &MediaFile) {
+        let mut parts = vec![file.name()];
+        parts.push(match &file.taken {
+            Some(taken) => library::date_label(taken),
+            None => format!("file date {}", library::date_label(&file.sort_date())),
+        });
+        if file.kind == MediaKind::Video {
+            if let Some(video) = self.player.info() {
+                parts.push(format!("{} × {}", video.width, video.height));
+                let secs = video.duration.as_secs();
+                parts.push(format!("{}:{:02}", secs / 60, secs % 60));
+            }
+        } else if let Some(((w, h), original)) = self.pixel_size(file) {
+            parts.push(match original {
+                Some((ow, oh)) => format!("{w} × {h} (original {ow} × {oh})"),
+                None => format!("{w} × {h}"),
+            });
+        }
+        parts.push(info::human_size(file.size));
+        ui.label(egui::RichText::new(parts.join("   ·   ")).weak()).on_hover_text(file.path.display().to_string());
+    }
+
+    /// The photo's size in pixels as edited, and its original size when a crop
+    /// changed it; known once the photo is decoded.
+    fn pixel_size(&self, file: &MediaFile) -> Option<(Size, Option<Size>)> {
+        let (path, base, scale) = self.base.as_ref().filter(|(path, ..)| path == &file.path)?;
+        let (key, texture) = self.texture.as_ref().filter(|(key, _)| &key.0 == path)?;
+        // The file header has the exact size; the working copy may be scaled
+        // down. EXIF orientation can swap the header's sides.
+        let header = self.header_size.as_ref().filter(|(p, _)| p == path).and_then(|(_, size)| *size);
+        let original = match header {
+            Some((w, h)) if (w > h) != (base.width() > base.height()) && w != h => (h, w),
+            Some(size) => size,
+            None => ((base.width() as f32 / scale).round() as u32, (base.height() as f32 / scale).round() as u32),
+        };
+        let per_px = original.0 as f32 / base.width() as f32;
+        let [w, h] = texture.size();
+        let edited = ((w as f32 * per_px).round() as u32, (h as f32 * per_px).round() as u32);
+        // Turning the photo swaps its sides without changing its size.
+        let turned = key.1.starts_with('1') || key.1.starts_with('3');
+        let same = if turned { (original.1, original.0) } else { original };
+        let slack = per_px.ceil() as u32 + 1;
+        let near = |a: u32, b: u32| a.abs_diff(b) <= slack;
+        Some(if near(edited.0, same.0) && near(edited.1, same.1) { (same, None) } else { (edited, Some(same)) })
     }
 
     fn zoom_controls(&mut self, ui: &mut egui::Ui) {

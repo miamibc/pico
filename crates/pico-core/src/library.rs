@@ -507,12 +507,26 @@ pub fn month_label(key: &str) -> String {
     format!("{} {}", NAMES[month.clamp(1, 12) - 1], &key[..4])
 }
 
+/// "14 March 2021, 09:05" for a `YYYY:MM:DD HH:MM:SS` date.
+pub fn date_label(date: &str) -> String {
+    let day = date.get(8..10).and_then(|d| d.parse::<u32>().ok());
+    let time = date.get(11..16).filter(|t| *t != "00:00");
+    match (day, time) {
+        (Some(day), Some(time)) => format!("{day} {}, {time}", month_label(date)),
+        (Some(day), None) => format!("{day} {}", month_label(date)),
+        _ => date.to_owned(),
+    }
+}
+
 #[cfg(test)]
 mod place_tests {
     use super::*;
 
     #[test]
     fn keys_and_labels() {
+        assert_eq!(date_label("2021:03:14 09:05:59"), "14 March 2021, 09:05");
+        assert_eq!(date_label("2021:12:01 00:00:00"), "1 December 2021", "no time when the camera gave none");
+        assert_eq!(date_label("garbage"), "garbage");
         assert_eq!(place_key(59.393503, 24.666169), "59.4,24.7");
         assert_eq!(place_key(59.43, 24.74), "59.4,24.7", "same ~10 km cell");
         assert_eq!(place_label((-33.86, 151.21)), "33.9° S, 151.2° E");
