@@ -1725,6 +1725,20 @@ impl PicoApp {
         self.current.and_then(|at| self.file(at)).is_some_and(|file| self.viewer.is_loaded(file))
     }
 
+    pub fn open_file_named(&mut self, name: &str) {
+        let found = self
+            .folders
+            .iter()
+            .enumerate()
+            .find_map(|(fi, f)| f.files.iter().position(|m| m.name() == name).map(|i| (fi, i)));
+        self.current = found;
+        self.view = View::Photo;
+    }
+
+    pub fn zoom_state(&self) -> (Option<f32>, egui::Vec2, bool) {
+        self.viewer.zoom_state()
+    }
+
     pub fn open_edit_panel(&mut self) {
         self.viewer.open_edit_panel();
     }

@@ -23,6 +23,12 @@ use std::sync::mpsc::{Receiver, channel};
 /// Longest side of the working copy; larger photos are downscaled for display.
 const WORKING_SIDE: u32 = 2560;
 
+/// Strongest zoom, in screen pixels per photo pixel.
+const MAX_ZOOM: f32 = 8.0;
+
+/// Wheel travel, in points, that moves to the next or previous photo.
+const WHEEL_STEP: f32 = 40.0;
+
 pub enum ViewerAction {
     Previous,
     Next,
@@ -59,6 +65,20 @@ pub struct Viewer {
     /// The open Crop or Straighten tool and the file it belongs to.
     tool: Option<(PathBuf, Tool)>,
     player: Player,
+    /// Screen pixels per photo pixel (1.0 is 1:1); `None` fits the window.
+    zoom: Option<f32>,
+    /// Offset of the zoomed photo's centre from the middle of the view.
+    pan: egui::Vec2,
+    /// The zoom that fits the photo, as of the last frame.
+    fit_zoom: f32,
+    /// Wheel travel not yet turned into a photo change.
+    wheel: f32,
+    /// The file the zoom, pan and detail belong to.
+    view_for: Option<PathBuf>,
+    /// The photo at full resolution with its edits, for zooming past the
+    /// working copy.
+    detail: Option<(RenderKey, egui::TextureHandle)>,
+    detail_job: Option<(RenderKey, Receiver<egui::ColorImage>)>,
 }
 
 impl Viewer {
@@ -68,6 +88,14 @@ impl Viewer {
         }
         if self.tool.as_ref().is_some_and(|(path, _)| path != &file.path) {
             self.tool = None;
+        }
+        if self.view_for.as_ref() != Some(&file.path) {
+            self.view_for = Some(file.path.clone());
+            self.zoom = None;
+            self.pan = egui::Vec2::ZERO;
+            self.wheel = 0.0;
+            self.detail = None;
+            self.detail_job = None;
         }
         if self.caption_for.as_ref() != Some(&file.path) {
             self.caption = file.meta.caption.clone().unwrap_or_default();
@@ -101,9 +129,10 @@ impl Viewer {
 
         let meta = self.effective_meta(file);
         self.update_rendering(ui.ctx(), file, &meta);
-        let double_clicked = egui::CentralPanel::no_frame().show(ui, |ui| self.picture(ui, &meta)).inner;
-        if action.is_none() && double_clicked {
-            return Some(ViewerAction::Close);
+        let picture_action = egui::CentralPanel::no_frame().show(ui, |ui| self.picture(ui, &meta)).inner;
+        self.update_detail(ui.ctx(), file, &meta);
+        if action.is_none() && picture_action.is_some() {
+            return picture_action;
         }
 
         // Shortcuts only when no text field is taking the keys.
@@ -189,6 +218,10 @@ impl Viewer {
             if ui.button("⟳").on_hover_text("Rotate clockwise (Ctrl+R)").clicked() {
                 action = Some(ViewerAction::Rotate(1));
             }
+            if file.kind != MediaKind::Video && self.tool.is_none() && self.texture.is_some() {
+                ui.separator();
+                self.zoom_controls(ui);
+            }
             ui.separator();
             let edit = ui.add(
                 egui::TextEdit::singleline(&mut self.caption)
@@ -202,6 +235,43 @@ impl Viewer {
             }
         });
         action
+    }
+
+    fn zoom_controls(&mut self, ui: &mut egui::Ui) {
+        let fit = self.fit_zoom.max(0.01);
+        if ui.selectable_label(self.zoom.is_none(), "Fit").on_hover_text("Fit the photo in the window").clicked() {
+            self.zoom = None;
+            self.pan = egui::Vec2::ZERO;
+        }
+        if ui
+            .selectable_label(self.zoom == Some(1.0), "1:1")
+            .on_hover_text("One photo pixel per screen pixel")
+            .clicked()
+        {
+            self.set_zoom(1.0);
+        }
+        let current = self.zoom.unwrap_or(fit);
+        let mut percent = current * 100.0;
+        let slider = egui::Slider::new(&mut percent, fit * 100.0..=MAX_ZOOM.max(fit) * 100.0)
+            .logarithmic(true)
+            .suffix("%")
+            .fixed_decimals(0)
+            .show_value(true);
+        if ui.add(slider).on_hover_text("Zoom (Ctrl+wheel; drag the photo to look around)").changed() {
+            self.set_zoom(percent / 100.0);
+        }
+    }
+
+    /// Zooms around the middle of the view.
+    fn set_zoom(&mut self, zoom: f32) {
+        let fit = self.fit_zoom.max(0.01);
+        let old = self.zoom.unwrap_or(fit);
+        let zoom = zoom.clamp(fit, MAX_ZOOM.max(fit));
+        self.pan *= zoom / old;
+        self.zoom = (zoom > fit * 1.001).then_some(zoom);
+        if self.zoom.is_none() {
+            self.pan = egui::Vec2::ZERO;
+        }
     }
 
     /// Ends the open tool, turning an applied tool into a new edit on the stack.
@@ -372,23 +442,72 @@ impl Viewer {
         meta
     }
 
-    /// Draws the photo; returns whether it was double-clicked outside a tool,
-    /// which takes the user back to the library like in Picasa.
-    fn picture(&mut self, ui: &mut egui::Ui, meta: &PhotoMeta) -> bool {
+    /// Draws the photo and handles the mouse on it: double-click (back to the
+    /// library, like in Picasa), the wheel (next or previous photo), Ctrl+wheel
+    /// or pinch (zoom) and dragging (look around a zoomed photo). Tools get
+    /// the mouse to themselves and always see the whole photo.
+    fn picture(&mut self, ui: &mut egui::Ui, meta: &PhotoMeta) -> Option<ViewerAction> {
         let area = ui.max_rect();
         let background = ui.interact(area, ui.scope_id().with("backdrop"), egui::Sense::click());
         let mut double_clicked = false;
+        let mut action = None;
         ui.painter().rect_filled(area, 0.0, egui::Color32::from_gray(16));
-        if let Some((_, texture)) = &self.texture {
+        // Handles are cheap to clone and keep `self` free for the zoom state.
+        if let Some((key, texture)) = self.texture.clone() {
             let size = texture.size_vec2();
+            // Working-copy pixels per photo pixel.
+            let base_scale = match &self.base {
+                Some((path, _, scale)) if path == &key.0 => *scale,
+                _ => 1.0,
+            };
             // Small photos are not blown up, except while cropping, where room to aim helps.
             let max_scale = if matches!(self.tool, Some((_, Tool::Crop(_)))) { f32::INFINITY } else { 1.0 };
-            let scale = (area.width() / size.x).min(area.height() / size.y).min(max_scale);
-            let rect = egui::Rect::from_center_size(area.center(), size * scale);
-            ui.painter().image(texture.id(), rect, grid::full_uv(), egui::Color32::WHITE);
-            let response = ui.interact(rect, ui.scope_id().with("photo"), egui::Sense::click_and_drag());
+            let fit = (area.width() / size.x).min(area.height() / size.y).min(max_scale);
+            self.fit_zoom = fit * base_scale;
+            let zoomable = self.tool.is_none();
+            if !zoomable {
+                self.zoom = None;
+                self.pan = egui::Vec2::ZERO;
+            }
+            let hovered = ui.rect_contains_pointer(area);
+            if zoomable && hovered {
+                let (zoom_delta, scroll, pointer, command) = ui
+                    .input(|i| (i.zoom_delta(), i.smooth_scroll_delta().y, i.pointer.hover_pos(), i.modifiers.command));
+                if zoom_delta != 1.0 {
+                    let old = self.zoom.unwrap_or(self.fit_zoom);
+                    // Keep the point under the pointer in place.
+                    let pivot = pointer.map_or(egui::Vec2::ZERO, |p| p - area.center());
+                    let target = (old * zoom_delta).clamp(self.fit_zoom, MAX_ZOOM.max(self.fit_zoom));
+                    self.pan = pivot - (pivot - self.pan) * (target / old);
+                    self.set_zoom(target);
+                } else if !command && scroll != 0.0 {
+                    self.wheel += scroll;
+                    if self.wheel.abs() >= WHEEL_STEP {
+                        action = Some(if self.wheel > 0.0 { ViewerAction::Previous } else { ViewerAction::Next });
+                        self.wheel = 0.0;
+                    }
+                }
+            }
+            let scale = self.zoom.map_or(fit, |zoom| zoom / base_scale);
+            let shown = size * scale;
+            let slack = ((shown - area.size()) / 2.0).max(egui::Vec2::ZERO);
+            self.pan = self.pan.clamp(-slack, slack);
+            let rect = egui::Rect::from_center_size(area.center() + self.pan, shown);
+            // The full-resolution picture, once ready, replaces the magnified working copy.
+            let detail = self.detail.as_ref().filter(|(detail_key, _)| detail_key == &key && self.zoom.is_some());
+            let shown_texture = detail.map_or(texture.id(), |(_, t)| t.id());
+            ui.painter().with_clip_rect(area).image(shown_texture, rect, grid::full_uv(), egui::Color32::WHITE);
+            let response =
+                ui.interact(rect.intersect(area), ui.scope_id().with("photo"), egui::Sense::click_and_drag());
             response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, "Photo"));
             double_clicked = response.double_clicked();
+            if zoomable && self.zoom.is_some() {
+                if response.dragged() {
+                    self.pan += response.drag_delta();
+                }
+                let icon = if response.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab };
+                response.clone().on_hover_cursor(icon);
+            }
             match &mut self.tool {
                 Some((_, Tool::Crop(crop))) => {
                     crop.interact(&response, rect, size);
@@ -422,7 +541,47 @@ impl Viewer {
         if meta.star {
             grid::paint_star(ui.painter(), area.left_bottom() + egui::vec2(12.0, -12.0), 28.0);
         }
-        self.tool.is_none() && (double_clicked || background.double_clicked())
+        if self.tool.is_none() && (double_clicked || background.double_clicked()) {
+            return Some(ViewerAction::Close);
+        }
+        action
+    }
+
+    /// Renders the photo at full resolution in the background when the zoom
+    /// magnifies the working copy, so 1:1 shows the real pixels.
+    fn update_detail(&mut self, ctx: &egui::Context, file: &MediaFile, meta: &PhotoMeta) {
+        if let Some((key, rx)) = &self.detail_job
+            && let Ok(image) = rx.try_recv()
+        {
+            let texture = ctx.load_texture("viewer detail", image, egui::TextureOptions::LINEAR);
+            self.detail = Some((key.clone(), texture));
+            self.detail_job = None;
+        }
+        let Some((path, _, base_scale)) = &self.base else { return };
+        let magnified = self.zoom.is_some_and(|zoom| zoom > *base_scale);
+        if path != &file.path || *base_scale >= 1.0 || !magnified || self.detail_job.is_some() {
+            return;
+        }
+        let wanted: RenderKey = (file.path.clone(), format!("{}|{}", meta.rotate, meta.filters));
+        if self.detail.as_ref().is_some_and(|(key, _)| key == &wanted) {
+            return;
+        }
+        let (tx, rx) = channel();
+        let (path, kind, meta) = (file.path.clone(), file.kind, meta.clone());
+        let max_side = ctx.input(|i| i.max_texture_side) as u32;
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let Ok(img) = render::decode(&path, kind, &meta) else { return };
+            let mut img = render::apply_edits_scaled(img, &meta, 1.0);
+            if img.width().max(img.height()) > max_side {
+                img = img.resize(max_side, max_side, FilterType::Triangle);
+            }
+            let rgba = img.to_rgba8();
+            let size = [rgba.width() as usize, rgba.height() as usize];
+            let _ = tx.send(egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()));
+            ctx.request_repaint();
+        });
+        self.detail_job = Some((wanted, rx));
     }
 
     /// Decodes the working copy when the file changes and re-renders whenever
@@ -436,15 +595,17 @@ impl Viewer {
             self.error = None;
             let (tx, rx) = channel();
             let (path, kind, meta) = (file.path.clone(), file.kind, file.meta.clone());
+            // Some GPUs take no textures over 2048 pixels.
+            let working_side = WORKING_SIDE.min(ctx.input(|i| i.max_texture_side) as u32);
             let ctx = ctx.clone();
             std::thread::spawn(move || {
                 let result = render::decode(&path, kind, &meta)
                     .map(|img| {
                         let side = img.width().max(img.height());
-                        if side > WORKING_SIDE {
+                        if side > working_side {
                             (
-                                img.resize(WORKING_SIDE, WORKING_SIDE, FilterType::Triangle),
-                                WORKING_SIDE as f32 / side as f32,
+                                img.resize(working_side, working_side, FilterType::Triangle),
+                                working_side as f32 / side as f32,
                             )
                         } else {
                             (img, 1.0)
@@ -515,6 +676,16 @@ impl Viewer {
     #[cfg(test)]
     pub fn player_state(&self) -> (bool, std::time::Duration, bool) {
         self.player.state()
+    }
+
+    /// Zoom in percent (`None` while fitting) and whether the
+    /// full-resolution picture is on screen.
+    #[cfg(test)]
+    pub fn zoom_state(&self) -> (Option<f32>, egui::Vec2, bool) {
+        let detail = self.zoom.is_some()
+            && self.detail.is_some()
+            && self.detail.as_ref().map(|(k, _)| k) == self.texture.as_ref().map(|(k, _)| k);
+        (self.zoom.map(|z| (z * 100.0).round()), self.pan, detail)
     }
 
     #[cfg(test)]

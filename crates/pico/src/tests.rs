@@ -212,6 +212,66 @@ fn marked(harness: &Harness<'_, PicoApp>, label: &str) -> bool {
 }
 
 #[test]
+fn zoom_pan_and_wheel_in_viewer() {
+    let fixture = Fixture::new("zoom");
+    // Wider than the working copy, so 1:1 needs the full-resolution picture.
+    RgbImage::from_fn(3000, 2000, |x, y| Rgb([(x % 256) as u8, (y % 256) as u8, 90]))
+        .save(fixture.dir.join("big.png"))
+        .unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    wait_until(&mut harness, "the photo to load", |app| app.viewer_loaded());
+
+    // Pinch or Ctrl+wheel zooms; a small photo fits at 100%, so zoom in.
+    let photo = harness.get_by_label("Photo").rect();
+    harness.hover_at(photo.center());
+    harness.event(egui::Event::Zoom(2.0));
+    harness.step();
+    assert_eq!(harness.state().zoom_state().0, Some(200.0));
+    harness.event(egui::Event::Zoom(10.0));
+    harness.step();
+    assert_eq!(harness.state().zoom_state().0, Some(800.0), "zoom stops at 800%");
+    // Dragging looks around the zoomed photo.
+    let start = harness.get_by_label("Photo").rect().center();
+    harness.drag_at(start);
+    harness.step();
+    harness.hover_at(start + egui::vec2(30.0, 20.0));
+    harness.step();
+    harness.drop_at(start + egui::vec2(30.0, 20.0));
+    harness.step();
+    assert_ne!(harness.state().zoom_state().1, egui::Vec2::ZERO, "the photo moved");
+    harness.get_by_label("Fit").click();
+    harness.step();
+    assert_eq!(harness.state().zoom_state(), (None, egui::Vec2::ZERO, false));
+
+    // The plain wheel turns pages, like in Picasa.
+    harness.hover_at(photo.center());
+    harness.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Line,
+        delta: egui::vec2(0.0, -3.0),
+        phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Unknown,
+        modifiers: Modifiers::NONE,
+    });
+    for _ in 0..10 {
+        harness.step();
+    }
+    assert_eq!(harness.state().selected_file(), Some(1), "one notch down, one photo on");
+
+    // At 1:1 a big photo is shown from its full-resolution picture.
+    harness.state_mut().open_file_named("big.png");
+    wait_until(&mut harness, "the big photo", |app| app.viewer_loaded());
+    harness.get_by_label("1:1").click();
+    harness.step();
+    assert_eq!(harness.state().zoom_state().0, Some(100.0));
+    wait_until(&mut harness, "the full-resolution picture", |app| app.zoom_state().2);
+    screenshot(&mut harness, "zoom");
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);
