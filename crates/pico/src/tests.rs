@@ -290,6 +290,7 @@ fn info_line_above_the_photo() {
 
     // Turned sideways the photo is 80 wide; that is not a new size.
     harness.key_press_modifiers(Modifiers::COMMAND, Key::R);
+    harness.step(); // the key press starts the new render
     wait_until(&mut harness, "the rotated photo", |app| app.viewer_loaded());
     harness.step();
     let line = info_line(&harness, "a.png");
@@ -347,6 +348,20 @@ fn hold_original_to_compare() {
     harness.key_up(Key::Backslash);
     harness.step();
     assert!(!harness.state().showing_original().1);
+}
+
+#[test]
+fn histogram_and_camera_in_edit_panel() {
+    let fixture = Fixture::new("histogram");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().open_file_named("a.png");
+    harness.state_mut().open_edit_panel();
+    wait_until(&mut harness, "the photo to load", |app| app.viewer_loaded());
+    harness.step();
+    harness.get_by_label("Histogram");
+    harness.get_by_label("No camera details. A screenshot, perhaps?");
+    screenshot(&mut harness, "histogram");
 }
 
 #[test]
