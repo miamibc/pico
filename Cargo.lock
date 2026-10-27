@@ -2872,6 +2872,7 @@ dependencies = [
 name = "pico"
 version = "0.2.0"
 dependencies = [
+ "arboard",
  "eframe",
  "egui",
  "egui_kittest",

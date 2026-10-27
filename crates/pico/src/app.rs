@@ -122,6 +122,11 @@ pub struct PicoApp {
     info: InfoPanel,
     /// "Copy All Effects" clipboard.
     copied_filters: Option<FilterStack>,
+    /// Kept open: on X11 the clipboard is served by whoever set it.
+    clipboard: Option<arboard::Clipboard>,
+    /// What Ctrl+C put on the clipboard, for tests (which leave the real one alone).
+    #[cfg(test)]
+    clipboard_files: Vec<PathBuf>,
     view: View,
     viewer: Viewer,
     slideshow: Option<Slideshow>,
@@ -208,6 +213,9 @@ impl PicoApp {
             folder_sort: FolderSort::Name,
             info: InfoPanel::default(),
             copied_filters: None,
+            clipboard: None,
+            #[cfg(test)]
+            clipboard_files: Vec::new(),
             view: View::Library,
             viewer: Viewer::default(),
             slideshow: None,
@@ -807,6 +815,38 @@ impl PicoApp {
         self.edit_targets(|meta| meta.filters.0.push(filter.clone()));
     }
 
+    /// Ctrl+C: the selected files (or the open one) go on the clipboard as
+    /// files, as a file manager copies them, for pasting into a chat, a mail
+    /// or a folder.
+    fn copy_files(&mut self) {
+        let paths: Vec<PathBuf> =
+            self.targets().iter().filter_map(|&at| self.file(at)).map(|f| f.path.clone()).collect();
+        if paths.is_empty() {
+            return;
+        }
+        self.status = match self.put_on_clipboard(&paths) {
+            Ok(()) if paths.len() == 1 => "Copied 1 file to the clipboard".to_owned(),
+            Ok(()) => format!("Copied {} files to the clipboard", paths.len()),
+            Err(e) => format!("Could not copy to the clipboard: {e}"),
+        };
+    }
+
+    #[cfg(not(test))]
+    fn put_on_clipboard(&mut self, paths: &[PathBuf]) -> Result<(), arboard::Error> {
+        let clipboard = match &mut self.clipboard {
+            Some(clipboard) => clipboard,
+            None => self.clipboard.insert(arboard::Clipboard::new()?),
+        };
+        clipboard.set().file_list(paths)
+    }
+
+    #[cfg(test)]
+    fn put_on_clipboard(&mut self, paths: &[PathBuf]) -> Result<(), arboard::Error> {
+        let _ = &self.clipboard;
+        self.clipboard_files = paths.to_vec();
+        Ok(())
+    }
+
     fn copy_effects(&mut self) {
         if let Some(filters) = self.current.and_then(|at| self.file(at)).map(|f| f.meta.filters.clone()) {
             self.status = format!("Copied {}", plural(filters.0.len(), "effect"));
@@ -1263,6 +1303,10 @@ impl PicoApp {
                     self.selection.clear();
                 }
                 ui.separator();
+                let copy = ui.add_enabled(!self.targets().is_empty(), egui::Button::new("Copy"));
+                if copy.on_hover_text("Ctrl+C: copy the files, to paste into a chat or a folder").clicked() {
+                    self.copy_files();
+                }
                 if ui.add_enabled(self.current.is_some(), egui::Button::new("Copy All Effects")).clicked() {
                     self.copy_effects();
                 }
@@ -2854,6 +2898,10 @@ impl PicoApp {
         self.show_filmstrip = on;
     }
 
+    pub fn clipboard_files(&self) -> Vec<String> {
+        self.clipboard_files.iter().filter_map(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).collect()
+    }
+
     pub fn star_flying(&self) -> bool {
         self.viewer.star_flying()
     }
@@ -3159,6 +3207,7 @@ const SHORTCUTS: &[(&str, &[(&str, &str)])] = &[
         &[
             ("Ctrl+R / Ctrl+Shift+R", "Rotate clockwise / counterclockwise"),
             ("Ctrl+Shift+E / Ctrl+Shift+B", "I'm Feeling Lucky / black and white"),
+            ("Ctrl+C", "Copy the files, to paste into a chat or a folder"),
             ("Alt+Enter / Ctrl+K", "Properties and tags / add a tag"),
             ("Ctrl+4", "Slideshow (arrows, Space, -/+ and Esc in it)"),
             ("F1", "This list"),
@@ -3214,6 +3263,11 @@ impl eframe::App for PicoApp {
         if tags_key {
             self.show_info = true;
             self.info.focus_tag_field = true;
+        }
+        // Text fields copy their own text.
+        let copy = ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Copy)));
+        if copy && matches!(self.view, View::Library | View::Photo) && !ui.ctx().egui_wants_keyboard_input() {
+            self.copy_files();
         }
         if self.show_info {
             self.info_panel(ui);

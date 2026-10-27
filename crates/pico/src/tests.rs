@@ -500,6 +500,29 @@ fn a_star_flies_onto_a_photo_when_starred() {
 }
 
 #[test]
+fn ctrl_c_copies_the_files() {
+    let fixture = Fixture::new("copy");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.get_by_label("c.png").click_modifiers(Modifiers::COMMAND);
+    harness.step();
+    harness.event(egui::Event::Copy);
+    harness.step();
+    assert_eq!(harness.state().clipboard_files(), ["a.png", "c.png"]);
+
+    // In the viewer it is the open photo.
+    harness.key_press(Key::Enter);
+    wait_until(&mut harness, "the photo to load", |app| app.is_viewing() && app.viewer_loaded());
+    harness.key_press(Key::ArrowLeft);
+    harness.step();
+    harness.event(egui::Event::Copy);
+    harness.step();
+    assert_eq!(harness.state().clipboard_files(), ["b.png"]);
+}
+
+#[test]
 fn context_menus_on_photos_and_folders() {
     let fixture = Fixture::new("context-menu");
     let mut harness = harness(&fixture.dir);
