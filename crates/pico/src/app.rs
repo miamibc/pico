@@ -1735,6 +1735,10 @@ impl PicoApp {
         self.view = View::Photo;
     }
 
+    pub fn showing_original(&self) -> (bool, bool) {
+        self.viewer.showing_original()
+    }
+
     pub fn zoom_state(&self) -> (Option<f32>, egui::Vec2, bool) {
         self.viewer.zoom_state()
     }

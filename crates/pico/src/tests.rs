@@ -315,6 +315,41 @@ fn info_line(harness: &Harness<'_, PicoApp>, name: &str) -> String {
 }
 
 #[test]
+fn hold_original_to_compare() {
+    let fixture = Fixture::new("original");
+    let ini = fixture.ini() + "[c.png]\r\nfilters=bw=1;\r\n";
+    std::fs::write(fixture.dir.join(".picasa.ini"), ini).unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+
+    harness.state_mut().open_file_named("a.png");
+    wait_until(&mut harness, "the photo to load", |app| app.viewer_loaded());
+    assert!(harness.get_by_label("Original").accesskit_node().is_disabled(), "nothing to compare without edits");
+
+    harness.state_mut().open_file_named("c.png");
+    wait_until(&mut harness, "the edited photo and its original", |app| {
+        app.viewer_loaded() && app.showing_original().0
+    });
+    let button = harness.get_by_label("Original").rect().center();
+    harness.drag_at(button);
+    harness.step();
+    harness.step();
+    assert_eq!(harness.state().showing_original(), (true, true), "held down");
+    screenshot(&mut harness, "original");
+    harness.drop_at(button);
+    harness.step();
+    harness.step();
+    assert_eq!(harness.state().showing_original(), (true, false), "let go");
+
+    harness.key_down(Key::Backslash);
+    harness.step();
+    assert!(harness.state().showing_original().1, "the backslash key works too");
+    harness.key_up(Key::Backslash);
+    harness.step();
+    assert!(!harness.state().showing_original().1);
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);

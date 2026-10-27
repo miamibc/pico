@@ -83,6 +83,11 @@ pub struct Viewer {
     /// working copy.
     detail: Option<(RenderKey, egui::TextureHandle)>,
     detail_job: Option<(RenderKey, Receiver<egui::ColorImage>)>,
+    /// The photo without its edits (rotation kept), for before/after.
+    original: Option<(RenderKey, egui::TextureHandle)>,
+    original_job: Option<(RenderKey, Receiver<egui::ColorImage>)>,
+    /// Whether "Original" is held down this frame.
+    show_original: bool,
     /// Pixel size from the file header, for the info line.
     header_size: Option<(PathBuf, Option<Size>)>,
 }
@@ -102,6 +107,8 @@ impl Viewer {
             self.wheel = 0.0;
             self.detail = None;
             self.detail_job = None;
+            self.original = None;
+            self.original_job = None;
             let size =
                 (file.kind == MediaKind::Photo).then(|| pico_core::image::image_dimensions(&file.path).ok()).flatten();
             self.header_size = Some((file.path.clone(), size));
@@ -139,6 +146,7 @@ impl Viewer {
 
         let meta = self.effective_meta(file);
         self.update_rendering(ui.ctx(), file, &meta);
+        self.update_original(ui.ctx(), file);
         let picture_action = egui::CentralPanel::no_frame().show(ui, |ui| self.picture(ui, &meta)).inner;
         self.update_detail(ui.ctx(), file, &meta);
         if action.is_none() && picture_action.is_some() {
@@ -229,8 +237,17 @@ impl Viewer {
                 action = Some(ViewerAction::Rotate(1));
             }
             if file.kind != MediaKind::Video && self.tool.is_none() && self.texture.is_some() {
+                let edited = !file.meta.filters.0.is_empty();
+                let button = ui
+                    .add_enabled(edited, egui::Button::new("Original"))
+                    .on_hover_text("Hold to see the photo without its edits (or hold \\)")
+                    .on_disabled_hover_text("No edits to compare with");
+                let key_held = !ui.ctx().egui_wants_keyboard_input() && ui.input(|i| i.key_down(egui::Key::Backslash));
+                self.show_original = edited && (button.is_pointer_button_down_on() || key_held);
                 ui.separator();
                 self.zoom_controls(ui);
+            } else {
+                self.show_original = false;
             }
             ui.separator();
             let edit = ui.add(
@@ -554,7 +571,29 @@ impl Viewer {
             // The full-resolution picture, once ready, replaces the magnified working copy.
             let detail = self.detail.as_ref().filter(|(detail_key, _)| detail_key == &key && self.zoom.is_some());
             let shown_texture = detail.map_or(texture.id(), |(_, t)| t.id());
-            ui.painter().with_clip_rect(area).image(shown_texture, rect, grid::full_uv(), egui::Color32::WHITE);
+            match self.original.as_ref().filter(|(original_key, _)| self.show_original && original_key.0 == key.0) {
+                // Before/after: the unedited photo, at the same zoom, around
+                // the same centre; a crop makes it bigger than the edited one.
+                Some((_, original)) => {
+                    let size = original.size_vec2();
+                    let fit = (area.width() / size.x).min(area.height() / size.y).min(1.0);
+                    let scale = if self.zoom.is_some() { scale } else { fit };
+                    let rect = egui::Rect::from_center_size(rect.center(), size * scale);
+                    ui.painter().with_clip_rect(area).image(original.id(), rect, grid::full_uv(), egui::Color32::WHITE);
+                    let at = area.left_top() + egui::vec2(12.0, 10.0);
+                    let font = egui::FontId::proportional(16.0);
+                    let galley = ui.painter().layout_no_wrap("Original".to_owned(), font, egui::Color32::WHITE);
+                    ui.painter().rect_filled(
+                        egui::Rect::from_min_size(at, galley.size()).expand(6.0),
+                        4.0,
+                        egui::Color32::from_black_alpha(160),
+                    );
+                    ui.painter().galley(at, galley, egui::Color32::WHITE);
+                }
+                None => {
+                    ui.painter().with_clip_rect(area).image(shown_texture, rect, grid::full_uv(), egui::Color32::WHITE);
+                }
+            }
             let response =
                 ui.interact(rect.intersect(area), ui.scope_id().with("photo"), egui::Sense::click_and_drag());
             response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, "Photo"));
@@ -603,6 +642,39 @@ impl Viewer {
             return Some(ViewerAction::Close);
         }
         action
+    }
+
+    /// Renders the photo without its edits in the background, once per photo
+    /// that has edits, so "Original" shows it without a wait.
+    fn update_original(&mut self, ctx: &egui::Context, file: &MediaFile) {
+        if let Some((key, rx)) = &self.original_job
+            && let Ok(image) = rx.try_recv()
+        {
+            let texture = ctx.load_texture("viewer original", image, egui::TextureOptions::LINEAR);
+            self.original = Some((key.clone(), texture));
+            self.original_job = None;
+        }
+        let Some((path, base, scale)) = &self.base else { return };
+        if path != &file.path
+            || file.meta.filters.0.is_empty()
+            || self.original.is_some()
+            || self.original_job.is_some()
+        {
+            return;
+        }
+        let mut meta = file.meta.clone();
+        meta.filters = FilterStack::default();
+        let key: RenderKey = (file.path.clone(), format!("{}|{}", meta.rotate, meta.filters));
+        let (tx, rx) = channel();
+        let (base, scale) = (Arc::clone(base), *scale);
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let rgba = render::apply_edits_scaled((*base).clone(), &meta, scale).to_rgba8();
+            let size = [rgba.width() as usize, rgba.height() as usize];
+            let _ = tx.send(egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()));
+            ctx.request_repaint();
+        });
+        self.original_job = Some((key, rx));
     }
 
     /// Renders the photo at full resolution in the background when the zoom
@@ -734,6 +806,12 @@ impl Viewer {
     #[cfg(test)]
     pub fn player_state(&self) -> (bool, std::time::Duration, bool) {
         self.player.state()
+    }
+
+    /// Whether the unedited photo is ready and being shown.
+    #[cfg(test)]
+    pub fn showing_original(&self) -> (bool, bool) {
+        (self.original.is_some(), self.show_original)
     }
 
     /// Zoom in percent (`None` while fitting) and whether the
