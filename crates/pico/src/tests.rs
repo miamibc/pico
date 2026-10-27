@@ -1659,6 +1659,16 @@ fn create_movie_from_selection() {
     harness.step();
     harness.get_by_label("Make the Movie").click();
     harness.step();
+    harness.step(); // a new window is sized, unseen, in its first frame
+    harness.step();
+    if harness.state().making_movie() {
+        assert!(
+            harness.query_by_label_contains("Preparing photo").is_some()
+                || harness.query_by_label("Encoding the movie…").is_some(),
+            "a progress window while the movie is made"
+        );
+        screenshot(&mut harness, "progress");
+    }
     let target = out.clone();
     wait_until(&mut harness, "the movie", move |app| !app.making_movie() && target.is_file());
     let info = pico_core::video::probe(&out).unwrap();

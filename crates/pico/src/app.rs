@@ -135,6 +135,8 @@ pub struct PicoApp {
     thumb_size: f32,
     export: Option<ExportDialog>,
     export_job: Option<Receiver<ExportProgress>>,
+    /// Pictures exported so far, and in all, for the progress window.
+    export_count: (usize, usize),
     rename: Option<(FileRef, String)>,
     new_album: Option<String>,
     /// Duplicate files, group after group, once a search finished.
@@ -143,6 +145,8 @@ pub struct PicoApp {
     folder_manager: Option<FolderManager>,
     movie: Option<MovieDialog>,
     movie_job: Option<Receiver<MovieProgress>>,
+    /// Photos prepared so far, and in all; ffmpeg runs once all are.
+    movie_frames: (usize, usize),
     /// A running system folder dialog and what its answer is for.
     folder_picker: Option<(FolderPurpose, Receiver<Option<PathBuf>>)>,
     picked_export_dir: Option<PathBuf>,
@@ -213,6 +217,7 @@ impl PicoApp {
             thumb_size: 160.0,
             export: None,
             export_job: None,
+            export_count: (0, 0),
             rename: None,
             new_album: None,
             duplicates: Vec::new(),
@@ -220,6 +225,7 @@ impl PicoApp {
             folder_manager: None,
             movie: None,
             movie_job: None,
+            movie_frames: (0, 0),
             folder_picker: None,
             picked_export_dir: None,
             show_options: false,
@@ -903,6 +909,7 @@ impl PicoApp {
 
     fn start_movie(&mut self, ctx: &egui::Context, dialog: &MovieDialog) {
         let files: Vec<MediaFile> = self.targets().into_iter().filter_map(|at| self.file(at).cloned()).collect();
+        let files_count = files.len();
         let (width, height) = if dialog.full_hd { (1920, 1080) } else { (1280, 720) };
         let audio = Some(PathBuf::from(dialog.audio.trim())).filter(|p| !p.as_os_str().is_empty());
         let options = MovieOptions { width, height, seconds: dialog.seconds, fade: dialog.fade, audio };
@@ -919,6 +926,7 @@ impl PicoApp {
             ctx.request_repaint();
         });
         self.movie_job = Some(rx);
+        self.movie_frames = (0, files_count);
         self.status = "Making a movie… popcorn recommended.".into();
     }
 
@@ -927,7 +935,10 @@ impl PicoApp {
         let mut finished = None;
         while let Ok(progress) = rx.try_recv() {
             match progress {
-                MovieProgress::Frames(done, total) => self.status = format!("Preparing photo {done} of {total}…"),
+                MovieProgress::Frames(done, total) => {
+                    self.movie_frames = (done, total);
+                    self.status = format!("Preparing photo {done} of {total}…");
+                }
                 MovieProgress::Finished(result) => finished = Some(result),
             }
         }
@@ -1320,6 +1331,7 @@ impl PicoApp {
             }
         });
         self.export_job = Some(rx);
+        self.export_count = (0, self.targets().len());
     }
 
     fn poll_export(&mut self) {
@@ -1328,6 +1340,7 @@ impl PicoApp {
             match progress {
                 ExportProgress::Failed(message) => self.status = message,
                 ExportProgress::Done { done, total, failed, dir } => {
+                    self.export_count = (done, total);
                     self.status = if done < total {
                         format!("Exporting {done} of {total}…")
                     } else if failed == 0 {
@@ -2263,6 +2276,23 @@ impl PicoApp {
     }
 
     fn dialogs(&mut self, ctx: &egui::Context) {
+        if self.export_job.is_some() {
+            let (done, total) = self.export_count;
+            let fraction = (total > 0).then(|| done as f32 / total as f32);
+            progress_window(ctx, "Exporting", &format!("Exporting {done} of {total}…"), fraction);
+        }
+        if self.movie_job.is_some() {
+            let (done, total) = self.movie_frames;
+            if done < total {
+                let text = format!("Preparing photo {} of {total}…", done + 1);
+                progress_window(ctx, "Making the Movie", &text, Some(done as f32 / total as f32));
+            } else {
+                progress_window(ctx, "Making the Movie", "Encoding the movie…", None);
+            }
+        }
+        if self.duplicate_job.is_some() {
+            progress_window(ctx, "Finding Duplicates", "Comparing files…", None);
+        }
         if let Some(mut dialog) = self.export.take() {
             let mut open = true;
             let mut go = false;
@@ -2544,6 +2574,20 @@ pub fn dialog_window<'a>(ctx: &egui::Context, title: &'a str) -> egui::Window<'a
         .collapsible(false)
         .pivot(egui::Align2::CENTER_CENTER)
         .default_pos(ctx.content_rect().center())
+}
+
+/// A small window for a long operation: what is going on and how far along
+/// it is; `None` when that is not known.
+pub fn progress_window(ctx: &egui::Context, title: &str, text: &str, fraction: Option<f32>) {
+    dialog_window(ctx, title).resizable(false).show_dialog(ctx, |ui| {
+        ui.set_width(320.0);
+        ui.label(text);
+        let bar = match fraction {
+            Some(f) => egui::ProgressBar::new(f).show_percentage(),
+            None => egui::ProgressBar::new(0.0).animate(true),
+        };
+        ui.add(bar);
+    });
 }
 
 /// Shows a dialog with a title bar like the menu bar: the title in body text

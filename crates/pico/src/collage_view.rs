@@ -182,10 +182,7 @@ impl CollageView {
             self.save(ui.ctx(), true);
         }
         if self.saving.is_some() {
-            ui.horizontal(|ui| {
-                ui.spinner();
-                ui.label("Gluing pictures…");
-            });
+            crate::app::progress_window(ui.ctx(), "Saving the Collage", "Gluing pictures…", None);
         }
         if ui.button("Close").on_hover_text("Esc").clicked() {
             action = Some(CollageAction::Close);
