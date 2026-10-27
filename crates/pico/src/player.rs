@@ -39,6 +39,11 @@ pub struct Player {
 }
 
 impl Player {
+    /// Size and length of the open video, once ffprobe has told.
+    pub fn info(&self) -> Option<VideoInfo> {
+        self.info.as_ref().and_then(|info| info.as_ref().ok()).copied()
+    }
+
     pub fn show(&mut self, ui: &mut egui::Ui, file: &MediaFile) -> Option<PlayerAction> {
         if self.path.as_deref() != Some(file.path.as_path()) {
             *self = Player { muted: self.muted, ..Player::default() };

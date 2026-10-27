@@ -154,11 +154,13 @@ impl Slideshow {
         }
         let (tx, rx) = channel();
         let (path, kind, meta, ctx2) = (file.path.clone(), file.kind, file.meta.clone(), ctx.clone());
+        // Some GPUs take no textures over 2048 pixels.
+        let slide_side = SLIDE_SIDE.min(ctx.input(|i| i.max_texture_side) as u32);
         std::thread::spawn(move || {
             let image = render::decode(&path, kind, &meta).ok().map(|img| {
                 let side = img.width().max(img.height());
-                let (img, scale) = if side > SLIDE_SIDE {
-                    (img.resize(SLIDE_SIDE, SLIDE_SIDE, FilterType::Triangle), SLIDE_SIDE as f32 / side as f32)
+                let (img, scale) = if side > slide_side {
+                    (img.resize(slide_side, slide_side, FilterType::Triangle), slide_side as f32 / side as f32)
                 } else {
                     (img, 1.0)
                 };

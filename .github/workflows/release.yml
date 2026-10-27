@@ -1,10 +1,14 @@
 # Builds Pico and publishes the archives as a GitHub release. Run by hand
 # (Actions > release > Run workflow) to get the archives as artifacts only.
 #
-# For now only Linux x86_64 is built, on every push to main, into a rolling
-# release tagged `latest`. The other systems and the `v*` tag releases are
-# commented out to save Actions minutes; uncomment them (and the `needs` of
-# the release job) to build everything.
+# For now only Linux x86_64 and Windows x86_64 are built, once per push to
+# main. The archives go to a rolling pre-release tagged `latest`. When the
+# version in Cargo.toml has no release yet, the same archives also become
+# release `v<version>`, with the notes from docs/releases/v<version>.md
+# (English, then Russian); the tag is created on the pushed commit. So a new
+# version is: bump it, add its notes, merge. The other systems are commented
+# out to save Actions minutes; uncomment them (and the `needs` of the release
+# job) to build everything.
 #
 # Intel and AMD processors share the x86 builds: x86_64 for 64-bit, x86
 # (i686) for 32-bit. Linux builds are cross-compiled with cargo-zigbuild
@@ -15,7 +19,6 @@ name: release
 on:
   push:
     branches: [main]
-    # tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -63,39 +66,47 @@ jobs:
           name: pico-${{ matrix.name }}
           path: pico-${{ matrix.name }}.tar.gz
 
-  # windows:
-    # strategy:
-      # fail-fast: false
-      # matrix:
-        # include:
-          # - target: x86_64-pc-windows-msvc
-            # name: windows-x86_64
-          # - target: i686-pc-windows-msvc
+  # Windows builds are cross-compiled on Linux too, with cargo-zigbuild and
+  # the MinGW (gnu) target, as `make windows` does: Linux runners are faster
+  # and cheaper than Windows ones. The .exe needs only Windows 10/11 DLLs.
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-gnu
+            name: windows-x86_64
+          # - target: i686-pc-windows-gnu
             # name: windows-x86
-          # - target: aarch64-pc-windows-msvc
+          # - target: aarch64-pc-windows-gnullvm
             # name: windows-arm64
-    # runs-on: windows-latest
-    # steps:
-      # - uses: actions/checkout@v4
-      # - uses: dtolnay/rust-toolchain@stable
-        # with:
-          # targets: ${{ matrix.target }}
-      # - uses: Swatinem/rust-cache@v2
-        # with:
-          # key: ${{ matrix.target }}
-      # - name: Build
-        # run: cargo build --release --locked -p pico --target ${{ matrix.target }}
-      # - name: Package
-        # shell: pwsh
-        # run: |
-          # $dir = "pico-${{ matrix.name }}"
-          # New-Item -ItemType Directory $dir | Out-Null
-          # Copy-Item target/${{ matrix.target }}/release/pico.exe, README.md $dir
-          # Compress-Archive -Path $dir -DestinationPath "$dir.zip"
-      # - uses: actions/upload-artifact@v4
-        # with:
-          # name: pico-${{ matrix.name }}
-          # path: pico-${{ matrix.name }}.zip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild
+      - name: Build
+        run: cargo zigbuild --release --locked -p pico --target ${{ matrix.target }}
+      - name: Package
+        run: |
+          dir=pico-${{ matrix.name }}
+          mkdir "$dir"
+          cp target/${{ matrix.target }}/release/pico.exe README.md "$dir"/
+          zip -r "$dir.zip" "$dir"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pico-${{ matrix.name }}
+          path: pico-${{ matrix.name }}.zip
 
   # # One universal app for Apple Silicon and Intel Macs. It is not signed, so
   # # the first start needs right-click > Open (see README).
@@ -131,9 +142,12 @@ jobs:
 
   release:
     if: github.event_name == 'push'
-    needs: [linux] # [linux, windows, macos]
+    needs: [linux, windows] # [linux, windows, macos]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: docs/releases
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -141,15 +155,20 @@ jobs:
       - name: Checksums
         working-directory: dist
         run: sha256sum * > SHA256SUMS.txt
-      # A push to main replaces the `latest` release; a `v*` tag gets its own.
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
-            gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Pico $GITHUB_REF_NAME" --generate-notes
+          repo=$GITHUB_REPOSITORY
+          version=v$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          if gh release view "$version" --repo "$repo" > /dev/null 2>&1; then
+            echo "$version is already released; updating latest only."
           else
-            gh release delete latest --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
-            gh release create latest dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --title "Pico (latest main)" --notes "Built from $GITHUB_SHA." --latest
+            notes=docs/releases/$version.md
+            if [ -f "$notes" ]; then notes=(--notes-file "$notes"); else notes=(--generate-notes); fi
+            gh release create "$version" dist/* --repo "$repo" --target "$GITHUB_SHA" \
+              --title "Pico $version" "${notes[@]}" --latest
           fi
+          gh release delete latest --repo "$repo" --cleanup-tag --yes || true
+          gh release create latest dist/* --repo "$repo" --target "$GITHUB_SHA" \
+            --title "Pico (latest main)" --notes "Built from $GITHUB_SHA." --prerelease --latest=false

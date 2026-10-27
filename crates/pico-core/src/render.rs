@@ -32,6 +32,19 @@ pub fn decode(path: &Path, kind: MediaKind, meta: &PhotoMeta) -> io::Result<Dyna
     }
 }
 
+/// Pixel counts per level (0–255) for red, green and blue.
+pub type Histogram = [[u32; 256]; 3];
+
+pub fn histogram(img: &image::RgbaImage) -> Box<Histogram> {
+    let mut counts = Box::new([[0u32; 256]; 3]);
+    for pixel in img.pixels() {
+        for (channel, &value) in pixel.0[..3].iter().enumerate() {
+            counts[channel][value as usize] += 1;
+        }
+    }
+    counts
+}
+
 /// Applies the edit stack in order, then the quarter-turn rotation, which
 /// Picasa keeps outside the stack. Filters Pico cannot render are skipped.
 pub fn apply_edits(img: DynamicImage, meta: &PhotoMeta) -> DynamicImage {
@@ -67,5 +80,20 @@ mod tests {
         let meta = PhotoMeta { rotate: 1, ..Default::default() };
         let out = apply_edits(DynamicImage::new_rgb8(200, 100), &meta);
         assert_eq!((out.width(), out.height()), (100, 200));
+    }
+}
+
+#[cfg(test)]
+mod histogram_tests {
+    use super::*;
+
+    #[test]
+    fn counts_each_channel() {
+        let mut img = image::RgbaImage::from_pixel(4, 1, image::Rgba([255, 0, 128, 255]));
+        img.put_pixel(0, 0, image::Rgba([0, 0, 0, 255]));
+        let h = histogram(&img);
+        assert_eq!((h[0][255], h[0][0]), (3, 1));
+        assert_eq!(h[1][0], 4);
+        assert_eq!((h[2][128], h[2][0]), (3, 1));
     }
 }
