@@ -432,14 +432,23 @@ mod duplicate_tests {
     }
 }
 
-/// A place for the Places view: photos taken within the same ~10 km cell.
+/// A place for the Places view: photos taken in the same named place (see
+/// [`crate::geo`]), or else within the same ~10 km cell.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Place {
-    /// Cell key, e.g. "59.4,24.7"; stable for the same location.
+    /// The place name, e.g. "Tallinn, Estonia", or a cell key such as
+    /// "59.4,24.7"; stable for the same location.
     pub key: String,
-    /// Average position of the photos in the cell.
+    /// Average position of the photos in the place.
     pub center: (f64, f64),
     pub members: Vec<(usize, usize)>,
+}
+
+impl Place {
+    /// The name, or the center's coordinates when the place has none.
+    pub fn label(&self) -> String {
+        if is_cell_key(&self.key) { place_coordinates(self.center) } else { self.key.clone() }
+    }
 }
 
 /// A photo reference with its position.
@@ -447,15 +456,15 @@ type Located = ((usize, usize), (f64, f64));
 
 /// Groups photos with GPS into places, largest first.
 pub fn places(folders: &[Folder]) -> Vec<Place> {
-    let mut by_cell: std::collections::BTreeMap<String, Vec<Located>> = Default::default();
+    let mut by_key: std::collections::BTreeMap<String, Vec<Located>> = Default::default();
     for (fi, folder) in folders.iter().enumerate() {
         for (i, file) in folder.files.iter().enumerate() {
             if let Some((lat, lon)) = file.gps {
-                by_cell.entry(place_key(lat, lon)).or_default().push(((fi, i), (lat, lon)));
+                by_key.entry(place_key(lat, lon)).or_default().push(((fi, i), (lat, lon)));
             }
         }
     }
-    let mut places: Vec<Place> = by_cell
+    let mut places: Vec<Place> = by_key
         .into_iter()
         .map(|(key, items)| {
             let n = items.len() as f64;
@@ -468,13 +477,23 @@ pub fn places(folders: &[Folder]) -> Vec<Place> {
     places
 }
 
-/// One decimal degree is about 11 km of latitude.
+/// The place name for a position, else its cell: one decimal degree is
+/// about 11 km of latitude.
 pub fn place_key(lat: f64, lon: f64) -> String {
+    crate::geo::place_name(lat, lon).unwrap_or_else(|| place_cell(lat, lon))
+}
+
+fn place_cell(lat: f64, lon: f64) -> String {
     format!("{:.1},{:.1}", (lat * 10.0).round() / 10.0, (lon * 10.0).round() / 10.0)
 }
 
-/// "59.4° N, 24.7° E" for a place's center.
-pub fn place_label(center: (f64, f64)) -> String {
+/// Names have letters; cell keys are only digits, signs and points.
+fn is_cell_key(key: &str) -> bool {
+    key.chars().all(|c| c.is_ascii_digit() || matches!(c, '-' | '.' | ','))
+}
+
+/// "59.4° N, 24.7° E" for a position.
+pub fn place_coordinates(center: (f64, f64)) -> String {
     let (lat, lon) = center;
     format!(
         "{:.1}° {}, {:.1}° {}",
@@ -534,9 +553,11 @@ mod place_tests {
         assert_eq!(date_label("2021:03:14 09:05:59"), "14 March 2021, 09:05");
         assert_eq!(date_label("2021:12:01 00:00:00"), "1 December 2021", "no time when the camera gave none");
         assert_eq!(date_label("garbage"), "garbage");
-        assert_eq!(place_key(59.393503, 24.666169), "59.4,24.7");
-        assert_eq!(place_key(59.43, 24.74), "59.4,24.7", "same ~10 km cell");
-        assert_eq!(place_label((-33.86, 151.21)), "33.9° S, 151.2° E");
+        assert_eq!(place_key(59.393503, 24.666169), "Tallinn, Estonia");
+        assert_eq!(place_cell(59.393503, 24.666169), "59.4,24.7");
+        assert_eq!(place_cell(59.43, 24.74), "59.4,24.7", "same ~10 km cell");
+        assert!(is_cell_key("-33.9,151.2") && !is_cell_key("Tallinn, Estonia"));
+        assert_eq!(place_coordinates((-33.86, 151.21)), "33.9° S, 151.2° E");
         assert_eq!(month_label("2018:05"), "May 2018");
     }
 
@@ -553,7 +574,7 @@ mod place_tests {
         let folders = scan(&dir);
         let found = places(&folders);
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].key, "59.4,24.8");
+        assert_eq!(found[0].key, "Tallinn, Estonia");
         assert_eq!(found[0].members.len(), 1);
         assert!(months(&folders).iter().any(|(key, n)| key == "2009:07" && *n == 1));
         std::fs::remove_dir_all(&dir).unwrap();

@@ -1650,8 +1650,9 @@ impl PicoApp {
             egui::CollapsingHeader::new("Places").id_salt("places").show(ui, |ui| {
                 for place in &places {
                     let open = self.source == Some(Source::Place(place.key.clone()));
-                    let label = format!("{}  ({})", library::place_label(place.center), place.members.len());
-                    if ui.selectable_label(open, label).clicked() {
+                    let label = format!("{}  ({})", place.label(), place.members.len());
+                    let response = ui.selectable_label(open, label);
+                    if response.on_hover_text(library::place_coordinates(place.center)).clicked() {
                         picked_source = Some(Source::Place(place.key.clone()));
                     }
                 }
@@ -1987,8 +1988,9 @@ impl PicoApp {
                 }
                 Some(Source::Place(key)) => {
                     let place = library::places(&self.folders).into_iter().find(|p| &p.key == key);
-                    ui.heading(place.map_or_else(|| key.clone(), |p| library::place_label(p.center)));
-                    ui.label(egui::RichText::new("Place").weak());
+                    ui.heading(place.as_ref().map_or_else(|| key.clone(), library::Place::label));
+                    let at = place.map(|p| format!(" · {}", library::place_coordinates(p.center)));
+                    ui.label(egui::RichText::new(format!("Place{}", at.unwrap_or_default())).weak());
                 }
                 Some(Source::Duplicates) => {
                     ui.heading("Duplicate Files");
@@ -2498,6 +2500,7 @@ impl PicoApp {
                 ui.heading(format!("Pico {}", env!("CARGO_PKG_VERSION")));
                 ui.label("A small photo organizer that remembers how Picasa did things.");
                 ui.label("No cloud. No uploads. Your photos stay exactly where you left them.");
+                ui.label(egui::RichText::new(pico_core::geo::CREDITS).weak());
             });
         }
     }

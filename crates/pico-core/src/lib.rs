@@ -12,6 +12,7 @@ pub mod export;
 pub mod fileops;
 pub mod filters;
 pub mod folders;
+pub mod geo;
 pub mod ini;
 pub mod library;
 pub mod media;

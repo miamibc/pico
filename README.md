@@ -66,7 +66,8 @@ Windows и macOS (Intel и Apple Silicon) и выкладывает програ
 
 - Слева — раздел **★ Starred Photos** (все отмеченные звёздочкой фото),
   **Albums** (альбомы Picasa), **Timeline** (по годам и месяцам съёмки),
-  **Places** (фото с GPS, сгруппированные по местности) и **Folders**.
+  **Places** (фото с GPS, сгруппированные по месту: ближайший город, иначе
+  страна, море или океан, континент; без сети) и **Folders**.
   Папки, указанные при запуске или добавленные через
   **File → Add Folder to Pico…** (он же **Tools → Folder Manager…**),
   запоминаются. В Folder Manager слева дерево диска, справа для выбранной
@@ -273,3 +274,7 @@ XDG: GNOME, KDE и другие) и меняется сразу, без пере
 - `research/` — материалы реверс-инжиниринга (не в git).
 
 Эффекты Creative Kit следуют рецептам Picnik (Google, Apache License 2.0).
+Названия мест — из [GeoNames](https://www.geonames.org/) (`cities1000`,
+CC BY 4.0) и [Natural Earth](https://www.naturalearthdata.com/) (страны, моря,
+континенты; общественное достояние). Они упакованы в
+`crates/pico-core/data/places.bin` скриптом `crates/pico-core/data/make_places.py`.
