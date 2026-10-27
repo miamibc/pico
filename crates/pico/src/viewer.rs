@@ -34,6 +34,10 @@ const WHEEL_STEP: f32 = 40.0;
 pub enum ViewerAction {
     Previous,
     Next,
+    First,
+    Last,
+    /// Switch full-screen viewing (F11) on or off.
+    FullScreen(bool),
     Close,
     ToggleStar,
     Rotate(i8),
@@ -96,6 +100,8 @@ pub struct Viewer {
     original_job: Option<(RenderKey, Receiver<egui::ColorImage>)>,
     /// Whether "Original" is held down this frame.
     show_original: bool,
+    /// Full-screen viewing: just the photo, no panels.
+    full_screen: bool,
     /// Edits taken off by Undo, newest last, for Redo. Any other edit
     /// clears them, as in every editor.
     redo: Vec<Filter>,
@@ -135,12 +141,14 @@ impl Viewer {
         }
         let mut action = None;
 
-        egui::Panel::bottom("viewer_tools").show(ui, |ui| {
-            if let Some(a) = self.toolbar(ui, file, position) {
-                action = Some(a);
-            }
-        });
-        egui::Panel::top("viewer_info").show(ui, |ui| self.info_line(ui, file));
+        if !self.full_screen {
+            egui::Panel::bottom("viewer_tools").show(ui, |ui| {
+                if let Some(a) = self.toolbar(ui, file, position) {
+                    action = Some(a);
+                }
+            });
+            egui::Panel::top("viewer_info").show(ui, |ui| self.info_line(ui, file));
+        }
         if file.kind == MediaKind::Video {
             // Videos get the player instead of the photo editor.
             let player_action = self.player.show(ui, file);
@@ -152,7 +160,7 @@ impl Viewer {
                 }))
                 .or_else(|| self.navigation_keys(ui, file));
         }
-        if self.show_edit_panel || self.tool.is_some() {
+        if !self.full_screen && (self.show_edit_panel || self.tool.is_some()) {
             egui::Panel::left("edit_panel").resizable(false).default_size(240.0).show(ui, |ui| {
                 egui::ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| {
                     if let Some(a) = self.edit_panel(ui, file) {
@@ -223,8 +231,14 @@ impl Viewer {
             }
         }
         ui.input(|i| {
-            if i.key_pressed(egui::Key::Escape) {
+            if i.key_pressed(egui::Key::F11) || (self.full_screen && i.key_pressed(egui::Key::Escape)) {
+                Some(ViewerAction::FullScreen(!self.full_screen))
+            } else if i.key_pressed(egui::Key::Escape) {
                 Some(ViewerAction::Close)
+            } else if i.key_pressed(egui::Key::Home) {
+                Some(ViewerAction::First)
+            } else if i.key_pressed(egui::Key::End) {
+                Some(ViewerAction::Last)
             } else if i.key_pressed(egui::Key::ArrowLeft) {
                 Some(ViewerAction::Previous)
             } else if i.key_pressed(egui::Key::ArrowRight) {
@@ -251,12 +265,15 @@ impl Viewer {
             if ui.button("▶ Slideshow").on_hover_text("Ctrl+4").clicked() {
                 action = Some(ViewerAction::Slideshow);
             }
+            if ui.button("⛶").on_hover_text("Full screen (F11; Esc to leave)").clicked() {
+                action = Some(ViewerAction::FullScreen(true));
+            }
             ui.separator();
-            if ui.button("◀").on_hover_text("Previous (Left arrow)").clicked() {
+            if ui.button("◀").on_hover_text("Previous (Left arrow; Home for the first)").clicked() {
                 action = Some(ViewerAction::Previous);
             }
             ui.label(format!("{} / {}", position.0 + 1, position.1));
-            if ui.button("▶").on_hover_text("Next (Right arrow)").clicked() {
+            if ui.button("▶").on_hover_text("Next (Right arrow; End for the last)").clicked() {
                 action = Some(ViewerAction::Next);
             }
             ui.separator();
@@ -917,6 +934,14 @@ impl Viewer {
             && self.detail.is_some()
             && self.detail.as_ref().map(|(k, _)| k) == self.texture.as_ref().map(|(k, _)| k);
         (self.zoom.map(|z| (z * 100.0).round()), self.pan, detail)
+    }
+
+    pub fn is_full_screen(&self) -> bool {
+        self.full_screen
+    }
+
+    pub fn set_full_screen(&mut self, on: bool) {
+        self.full_screen = on;
     }
 
     #[cfg(test)]

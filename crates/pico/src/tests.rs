@@ -408,6 +408,50 @@ fn undo_and_redo_edits() {
 }
 
 #[test]
+fn home_end_and_full_screen_in_viewer() {
+    let fixture = Fixture::new("full-screen");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().open_file_named("b.png");
+    wait_until(&mut harness, "the photo to load", |app| app.viewer_loaded());
+
+    harness.key_press(Key::End);
+    harness.step();
+    assert_eq!(harness.state().selected_file(), Some(2));
+    harness.key_press(Key::Home);
+    harness.step();
+    assert_eq!(harness.state().selected_file(), Some(0));
+
+    // F11: only the photo; Esc leaves full screen but keeps the photo open.
+    harness.key_press(Key::F11);
+    harness.step();
+    harness.step();
+    assert!(harness.state().is_full_screen());
+    assert!(harness.query_by_label("File").is_none(), "no menu bar");
+    assert!(harness.query_by_label("⬅ Back to Library").is_none(), "no toolbar");
+    wait_until(&mut harness, "the first photo", |app| app.viewer_loaded());
+    harness.get_by_label("Photo");
+    screenshot(&mut harness, "full-screen");
+    harness.key_press(Key::ArrowRight);
+    harness.step();
+    assert_eq!(harness.state().selected_file(), Some(1), "arrows still work");
+    harness.key_press(Key::Escape);
+    harness.step();
+    harness.step();
+    assert!(!harness.state().is_full_screen());
+    assert!(harness.state().is_viewing());
+    harness.get_by_label("File");
+
+    harness.get_by_label("⛶").click();
+    harness.step();
+    harness.step();
+    assert!(harness.state().is_full_screen());
+    harness.key_press(Key::F11);
+    harness.step();
+    assert!(!harness.state().is_full_screen(), "F11 toggles");
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);

@@ -600,6 +600,15 @@ impl PicoApp {
         self.status = format!("Added {} to \"{name}\"", plural(targets.len(), "photo"));
     }
 
+    /// Full-screen photo viewing: the window fills the screen and only the
+    /// photo is drawn.
+    fn set_full_screen(&mut self, ctx: &egui::Context, on: bool) {
+        if self.viewer.is_full_screen() != on {
+            self.viewer.set_full_screen(on);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(on));
+        }
+    }
+
     fn start_slideshow(&mut self, ctx: &egui::Context) {
         let listing = self.listing();
         if listing.is_empty() {
@@ -1350,17 +1359,15 @@ impl PicoApp {
 
     fn photo(&mut self, ui: &mut egui::Ui) {
         let listing = self.listing();
-        let Some(at) = self.current else {
+        let Some(file) = self.current.and_then(|at| self.folders.get(at.0)?.files.get(at.1)) else {
+            // The photo went away (trashed, renamed, rescanned).
+            self.set_full_screen(ui.ctx(), false);
             self.view = View::Library;
             return;
         };
-        // Field access rather than `self.file()` keeps `self.viewer` borrowable.
-        let Some(file) = self.folders.get(at.0).and_then(|f| f.files.get(at.1)) else {
-            self.view = View::Library;
-            return;
-        };
+        let at = self.current.unwrap_or_default();
         let position = listing.iter().position(|&r| r == at).unwrap_or(0);
-        if self.show_filmstrip {
+        if self.show_filmstrip && !self.viewer.is_full_screen() {
             let items: Vec<(FileRef, &MediaFile)> = listing
                 .iter()
                 .filter_map(|&r| Some((r, self.folders.get(r.0).and_then(|f| f.files.get(r.1))?)))
@@ -1374,9 +1381,15 @@ impl PicoApp {
             }
         }
         match self.viewer.show(ui, file, (position, listing.len().max(1))) {
-            Some(ViewerAction::Close) => self.view = View::Library,
+            Some(ViewerAction::Close) => {
+                self.set_full_screen(ui.ctx(), false);
+                self.view = View::Library;
+            }
             Some(ViewerAction::Previous) => self.step(-1),
             Some(ViewerAction::Next) => self.step(1),
+            Some(ViewerAction::First) => self.step(-(listing.len() as isize)),
+            Some(ViewerAction::Last) => self.step(listing.len() as isize),
+            Some(ViewerAction::FullScreen(on)) => self.set_full_screen(ui.ctx(), on),
             Some(ViewerAction::ToggleStar) => self.edit_files(&[at], |meta| meta.star = !meta.star),
             Some(ViewerAction::Rotate(turns)) => {
                 self.edit_files(&[at], |meta| meta.rotate = (meta.rotate as i8 + turns).rem_euclid(4) as u8)
@@ -1739,6 +1752,10 @@ impl PicoApp {
         self.viewer.showing_original()
     }
 
+    pub fn is_full_screen(&self) -> bool {
+        self.viewer.is_full_screen()
+    }
+
     pub fn zoom_state(&self) -> (Option<f32>, egui::Vec2, bool) {
         self.viewer.zoom_state()
     }
@@ -1910,6 +1927,10 @@ impl eframe::App for PicoApp {
         if self.view == View::Collage {
             egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
             self.collage(ui);
+            return;
+        }
+        if self.view == View::Photo && self.viewer.is_full_screen() {
+            self.photo(ui);
             return;
         }
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));
