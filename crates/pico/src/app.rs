@@ -1,7 +1,9 @@
 use crate::collage_view::{CollageAction, CollageView};
 use crate::filmstrip;
 use crate::folder_manager::{FolderManager, FolderManagerAction};
-use crate::grid::{self, CaptionMode, FileRef, GridAction, GridView, MAX_THUMB, MIN_THUMB, PhotoDrag};
+use crate::grid::{
+    self, CaptionMode, FileRef, GridAction, GridSection, GridView, MAX_THUMB, MIN_THUMB, PhotoDrag, SectionHeader,
+};
 use crate::info::{InfoPanel, TagAction};
 use crate::slideshow::{Slideshow, SlideshowAction};
 use crate::thumbs::ThumbCache;
@@ -72,6 +74,14 @@ pub struct PicoApp {
     /// Photos held in the Photo Tray across folders (Ctrl+H), by path so they
     /// survive rescans.
     tray: Vec<PathBuf>,
+    /// A folder clicked in the list, for the ribbon to scroll to.
+    ribbon_jump: Option<usize>,
+    /// The ribbon's scroll offset last frame, to notice scrolling by hand.
+    ribbon_offset: f32,
+    /// Frames left in which offset changes come from the grid's own scrolling.
+    ribbon_settle: u8,
+    /// The photo last scrolled into view.
+    revealed: Option<FileRef>,
     /// The selection before a selection rectangle started.
     band_base: Option<BTreeSet<FileRef>>,
     search: String,
@@ -130,6 +140,10 @@ impl PicoApp {
             selection: BTreeSet::new(),
             tray: Vec::new(),
             band_base: None,
+            ribbon_jump: None,
+            ribbon_offset: 0.0,
+            ribbon_settle: 0,
+            revealed: None,
             search: String::new(),
             focus_search: false,
             starred_only: false,
@@ -370,34 +384,39 @@ impl PicoApp {
     /// while searching or showing starred photos), minus hidden photos and,
     /// optionally, unstarred ones.
     fn listing(&self) -> Vec<FileRef> {
+        self.listing_of(self.source.as_ref())
+    }
+
+    /// What `source` lists, with the search, filters and sort order applied.
+    fn listing_of(&self, source: Option<&Source>) -> Vec<FileRef> {
         let query = self.search.trim().to_lowercase();
-        let album = match &self.source {
+        let album = match source {
             Some(Source::Album(token)) if query.is_empty() => Some(token.as_str()),
             _ => None,
         };
-        if self.source == Some(Source::Duplicates) && query.is_empty() {
+        if source == Some(&Source::Duplicates) && query.is_empty() {
             return self.duplicates.iter().copied().filter(|&at| self.file(at).is_some()).collect();
         }
-        if self.source == Some(Source::Tray) && query.is_empty() {
+        if source == Some(&Source::Tray) && query.is_empty() {
             return self.tray_refs();
         }
-        let month = match &self.source {
+        let month = match source {
             Some(Source::Month(key)) if query.is_empty() => Some(key.as_str()),
             _ => None,
         };
-        let place = match &self.source {
+        let place = match source {
             Some(Source::Place(key)) if query.is_empty() => Some(key.as_str()),
             _ => None,
         };
         let by_date = month.is_some() || place.is_some();
         let all_folders = !query.is_empty()
-            || matches!(self.source, Some(Source::Starred | Source::Album(_) | Source::Month(_) | Source::Place(_)));
-        let folders: Vec<usize> = match self.source {
+            || matches!(source, Some(Source::Starred | Source::Album(_) | Source::Month(_) | Source::Place(_)));
+        let folders: Vec<usize> = match source {
             _ if all_folders => (0..self.folders.len()).collect(),
-            Some(Source::Folder(i)) if i < self.folders.len() => vec![i],
+            Some(&Source::Folder(i)) if i < self.folders.len() => vec![i],
             _ => Vec::new(),
         };
-        let starred = self.starred_only || self.source == Some(Source::Starred);
+        let starred = self.starred_only || source == Some(&Source::Starred);
         let query = query.as_str();
         let mut listing: Vec<FileRef> = folders
             .into_iter()
@@ -1450,6 +1469,7 @@ impl PicoApp {
             }
             if let Some(index) = picked {
                 self.select_source(Source::Folder(index));
+                self.ribbon_jump = Some(index);
             }
             for (index, response) in menus {
                 response.context_menu(|ui| self.folder_context_menu(ui, index));
@@ -1479,8 +1499,17 @@ impl PicoApp {
                 return;
             }
             self.grid_header(ui);
-            let listing = self.listing();
-            if listing.is_empty() {
+            // A folder shows in the ribbon of all folders, as in Picasa.
+            let ribbon = matches!(self.source, Some(Source::Folder(_))) && self.search.trim().is_empty();
+            let parts: Vec<(Option<usize>, Vec<FileRef>)> = if ribbon {
+                (0..self.folders.len())
+                    .map(|fi| (Some(fi), self.listing_of(Some(&Source::Folder(fi)))))
+                    .filter(|(_, refs)| !refs.is_empty())
+                    .collect()
+            } else {
+                vec![(None, self.listing())]
+            };
+            if parts.iter().all(|(_, refs)| refs.is_empty()) {
                 ui.centered_and_justified(|ui| {
                     ui.label(if self.search.trim().is_empty() {
                         "Nothing to show here."
@@ -1495,16 +1524,53 @@ impl PicoApp {
             if zoom != 1.0 && ui.rect_contains_pointer(ui.max_rect()) {
                 self.thumb_size = (self.thumb_size * zoom).clamp(MIN_THUMB, MAX_THUMB);
             }
-            let items: Vec<(FileRef, &MediaFile)> =
-                listing.iter().filter_map(|&at| Some((at, self.folders.get(at.0)?.files.get(at.1)?))).collect();
+            let sections: Vec<GridSection> = parts
+                .iter()
+                .map(|(folder, refs)| {
+                    let items: Vec<(FileRef, &MediaFile)> =
+                        refs.iter().filter_map(|&at| Some((at, self.folders.get(at.0)?.files.get(at.1)?))).collect();
+                    let header = folder.and_then(|fi| self.folders.get(fi)).map(|f| folder_header(f, &items));
+                    GridSection { header, items }
+                })
+                .collect();
+            let jump = self.ribbon_jump.take().and_then(|fi| parts.iter().position(|(f, _)| *f == Some(fi)));
+            let reveal = (self.current != self.revealed).then_some(self.current).flatten();
+            self.revealed = self.current;
             let view = GridView {
-                items: &items,
+                sections: &sections,
                 thumb_size: self.thumb_size,
                 selection: &self.selection,
                 current: self.current,
                 captions: self.captions,
+                scroll_to_section: jump,
+                reveal,
             };
-            let (action, cells) = grid::show(ui, view, &mut self.thumbs);
+            let output = grid::show(ui, view, &mut self.thumbs);
+            // Scrolling by hand moves the folder highlight along. A scroll the
+            // grid made itself shows in the offset a frame later; skip those.
+            let scrolled = (output.offset - self.ribbon_offset).abs() > 0.5;
+            self.ribbon_offset = output.offset;
+            if output.programmatic {
+                self.ribbon_settle = 2;
+            }
+            let settling = self.ribbon_settle > 0;
+            self.ribbon_settle = self.ribbon_settle.saturating_sub(1);
+            if ribbon
+                && scrolled
+                && !settling
+                && let Some(Some(fi)) = output.top_section.and_then(|s| parts.get(s)).map(|p| p.0)
+            {
+                self.source = Some(Source::Folder(fi));
+            }
+            let (action, cells) = (output.action, output.cells);
+            // Working on a photo in another folder makes that folder current,
+            // so the viewer and arrow keys stay in it.
+            if ribbon
+                && let Some(GridAction::Click { at, .. } | GridAction::Open(at)) = &action
+                && self.source != Some(Source::Folder(at.0))
+            {
+                self.source = Some(Source::Folder(at.0));
+            }
             for (at, response) in cells {
                 if response.secondary_clicked() && !self.selection.contains(&at) {
                     // Right-clicking outside the selection works on that photo.
@@ -2153,6 +2219,14 @@ impl PicoApp {
         self.thumb_size
     }
 
+    /// The folder highlighted in the list, by name.
+    pub fn current_folder_name(&self) -> Option<String> {
+        match self.source {
+            Some(Source::Folder(i)) => self.folders.get(i).map(|f| f.name.clone()),
+            _ => None,
+        }
+    }
+
     pub fn confirming_move(&self) -> bool {
         self.confirm_move.is_some()
     }
@@ -2179,6 +2253,7 @@ impl PicoApp {
 
     pub fn select_folder(&mut self, index: usize) {
         self.select_source(Source::Folder(index));
+        self.ribbon_jump = Some(index);
         self.view = View::Library;
     }
 
@@ -2308,6 +2383,28 @@ fn dir_size(dir: &std::path::Path) -> u64 {
             _ => e.metadata().map_or(0, |m| m.len()),
         })
         .sum()
+}
+
+/// The ribbon header of a folder: name, count, the months its photos span,
+/// and the Picasa description.
+fn folder_header(folder: &Folder, items: &[(FileRef, &MediaFile)]) -> SectionHeader {
+    let months: BTreeSet<String> = items.iter().map(|(_, f)| f.sort_date()[..7].to_owned()).collect();
+    let span = match (months.first(), months.last()) {
+        (Some(first), Some(last)) if first != last => {
+            format!("{} to {}", library::month_label(first), library::month_label(last))
+        }
+        (Some(only), _) => library::month_label(only),
+        _ => String::new(),
+    };
+    let count = plural(
+        items.len(),
+        if items.iter().all(|(_, f)| f.kind == pico_core::media::MediaKind::Video) { "video" } else { "photo" },
+    );
+    SectionHeader {
+        title: folder.name.clone(),
+        detail: if span.is_empty() { count } else { format!("{count}  ·  {span}") },
+        note: folder.ini.get("Picasa", "description").filter(|d| !d.is_empty()).map(str::to_owned),
+    }
 }
 
 /// Highlights `response` while photos are dragged over it, and returns them

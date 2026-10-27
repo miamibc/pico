@@ -510,6 +510,7 @@ fn photo_tray_holds_photos_across_folders() {
     harness.step();
     harness.get_by_label("d.png").click();
     harness.step();
+    harness.step(); // the tray, drawn before the grid, sees the selection next frame
     harness.get_by_label("Hold").click();
     harness.step();
     assert_eq!(harness.state().tray_len(), 2, "held photos stay when the folder changes");
@@ -658,6 +659,52 @@ impl egui::DroppedFile for TestDrop {
     fn bytes(&self) -> Result<Vec<u8>, String> {
         std::fs::read(&self.0).map_err(|e| e.to_string())
     }
+}
+
+#[test]
+fn ribbon_of_folders_follows_the_list_and_the_scroll() {
+    let fixture = Fixture::new("ribbon");
+    for n in 1..=5 {
+        let dir = fixture.dir.join(format!("trip {n}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        for k in 0..4 {
+            RgbImage::from_pixel(60, 40, Rgb([40 * n, 30 * k, 90])).save(dir.join(format!("t{n}-{k}.png"))).unwrap();
+        }
+    }
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 6);
+    harness.get_by_label("Holiday  (3)").click();
+    harness.step();
+    // Every folder is in the grid, each under its header.
+    harness.get_by_label("Holiday, 3 photos  ·  October 2026");
+    harness.get_by_label("t1-0.png");
+
+    harness.get_by_label("trip 2  (4)").click();
+    harness.step();
+    harness.step();
+    let header = harness.get_by(|n| n.label().is_some_and(|l| l.starts_with("trip 2, "))).rect();
+    let first = harness.get_by_label("t2-0.png").rect();
+    assert!(first.top() > header.top() && first.top() < header.top() + 80.0, "{header:?} {first:?}");
+    assert!(header.top() < 120.0, "scrolled to the top: {header:?}");
+    assert_eq!(harness.state().current_folder_name().as_deref(), Some("trip 2"));
+    screenshot(&mut harness, "ribbon");
+
+    // Scrolling up by hand moves the highlight to the folder at the top.
+    harness.hover_at(first.center());
+    for _ in 0..3 {
+        harness.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, 400.0),
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Unknown,
+            modifiers: Modifiers::NONE,
+        });
+        for _ in 0..6 {
+            harness.step();
+        }
+    }
+    let name = harness.state().current_folder_name();
+    assert!(name.as_deref() != Some("trip 2"), "{name:?}");
 }
 
 #[test]
