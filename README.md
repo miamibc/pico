@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo/pico.svg" width="128" alt="Pico logo"></p>
+
 # Pico
 
 Небольшой локальный органайзер фотографий в духе Picasa 3. Написан на Rust
@@ -278,3 +280,6 @@ XDG: GNOME, KDE и другие) и меняется сразу, без пере
 CC BY 4.0) и [Natural Earth](https://www.naturalearthdata.com/) (страны, моря,
 континенты; общественное достояние). Они упакованы в
 `crates/pico-core/data/places.bin` скриптом `crates/pico-core/data/make_places.py`.
+Все сторонние пакеты и тексты их лицензий видны в **Help → About**; список
+лежит в `crates/pico/assets/licenses.txt` и обновляется командой
+`make licenses` после смены зависимостей.

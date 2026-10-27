@@ -910,6 +910,26 @@ fn keyboard_shortcuts_window() {
 }
 
 #[test]
+fn about_window_shows_the_logo() {
+    let fixture = Fixture::new("about");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("Help").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("About Pico").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label(pico_core::geo::CREDITS);
+    harness.get_by_label("Open-source licenses").click();
+    for _ in 0..4 {
+        harness.step();
+    }
+    harness.get_by_label("Pico is built on free software and open data. Thank you to their authors.");
+    screenshot(&mut harness, "about");
+}
+
+#[test]
 fn light_theme_in_options() {
     let fixture = Fixture::new("theme");
     let mut harness = harness(&fixture.dir);

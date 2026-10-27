@@ -3,7 +3,7 @@
 
 PICTURES ?= $(HOME)/Pictures
 
-.PHONY: all build release windows run test lint fmt check testdata tour install clean
+.PHONY: all build release windows run test lint fmt check testdata tour logo licenses install clean
 
 all: release
 
@@ -49,6 +49,17 @@ testdata:
 # Screenshots of every test-library folder in target/ui-shots/.
 tour: testdata
 	cargo test -p pico testdata_tour -- --ignored
+
+# Draws the logos for the window and Help → About (needs Inkscape and the
+# Kamerik 105 font the title is set in).
+logo:
+	inkscape docs/logo/pico.svg -w 256 -h 256 -o crates/pico/assets/pico-256.png
+	inkscape docs/logo/pico-logo-with-title.svg -w 800 -o crates/pico/assets/pico-logo-with-title.png
+
+# Lists the crates Pico ships and their license texts for Help → About; run
+# after changing dependencies.
+licenses:
+	python3 -I crates/pico/assets/make_licenses.py
 
 # Installs the binary into ~/.cargo/bin.
 install:

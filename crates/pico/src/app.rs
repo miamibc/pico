@@ -151,6 +151,8 @@ pub struct PicoApp {
     /// Photos dropped on a folder, waiting for "Move" (folder index).
     confirm_move: Option<(Vec<FileRef>, usize)>,
     show_about: bool,
+    /// The logo with the name; loaded the first time About opens.
+    logo: Option<egui::TextureHandle>,
     show_shortcuts: bool,
     status: String,
     /// Light, dark, or as the system says.
@@ -224,6 +226,7 @@ impl PicoApp {
             confirm_trash: None,
             confirm_move: None,
             show_about: false,
+            logo: None,
             show_shortcuts: false,
             status: String::new(),
             persist_settings,
@@ -2496,12 +2499,38 @@ impl PicoApp {
         }
 
         if self.show_about {
-            egui::Window::new("About Pico").open(&mut self.show_about).collapsible(false).show(ctx, |ui| {
-                ui.heading(format!("Pico {}", env!("CARGO_PKG_VERSION")));
-                ui.label("A small photo organizer that remembers how Picasa did things.");
-                ui.label("No cloud. No uploads. Your photos stay exactly where you left them.");
-                ui.label(egui::RichText::new(pico_core::geo::CREDITS).weak());
-            });
+            let logo = self.logo.get_or_insert_with(|| crate::logo::with_title(ctx));
+            let logo_size = logo.size_vec2();
+            let logo = logo.id();
+            // The logo band reaches past the window's margin to its edges.
+            let margin = ctx.global_style().spacing.window_margin;
+            egui::Window::new("About Pico").open(&mut self.show_about).collapsible(false).resizable(false).show(
+                ctx,
+                |ui| {
+                    let width = 560.0;
+                    ui.set_width(width);
+                    // Off-white, a touch darker than paper, in light and dark themes alike.
+                    let band = egui::Frame::new()
+                        .fill(egui::Color32::from_gray(236))
+                        .inner_margin(egui::Margin::symmetric(12 + margin.left, 12))
+                        .outer_margin(egui::Margin { left: -margin.left, right: -margin.right, top: 0, bottom: 0 });
+                    band.show(ui, |ui| {
+                        let inner = width - 24.0;
+                        ui.image((logo, egui::vec2(inner, inner * logo_size.y / logo_size.x)));
+                    });
+                    egui::Frame::new().inner_margin(egui::Margin::symmetric(6, 10)).show(ui, |ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.strong(format!("Version {}", env!("CARGO_PKG_VERSION")));
+                            ui.label("A small photo organizer that remembers how Picasa did things.");
+                            ui.label("No cloud. No uploads. Your photos stay exactly where you left them.");
+                            ui.label(egui::RichText::new(pico_core::geo::CREDITS).weak());
+                        });
+                    });
+                    egui::CollapsingHeader::new("Open-source licenses").id_salt("licenses").show(ui, |ui| {
+                        crate::logo::licenses(ui);
+                    });
+                },
+            );
         }
     }
 }
