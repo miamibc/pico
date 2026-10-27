@@ -246,6 +246,7 @@ impl PicoApp {
             app.system_theme = crate::system_theme::watch(ctx);
         }
         app.apply_theme(ctx);
+        roomier(ctx);
         app.rescan(ctx);
         app
     }
@@ -2267,7 +2268,7 @@ impl PicoApp {
             let mut go = false;
             let mut browse = false;
             let count = self.targets().len();
-            egui::Window::new("Export to Folder").open(&mut open).collapsible(false).show(ctx, |ui| {
+            dialog_window(ctx, "Export to Folder").open(&mut open).show_dialog(ctx, |ui| {
                 ui.label("Folder:");
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut dialog.dir).desired_width(300.0));
@@ -2300,7 +2301,7 @@ impl PicoApp {
         if let Some((at, mut name)) = self.rename.take() {
             let mut open = true;
             let mut submit = false;
-            egui::Window::new("Rename").open(&mut open).collapsible(false).show(ctx, |ui| {
+            dialog_window(ctx, "Rename").open(&mut open).show_dialog(ctx, |ui| {
                 let edit = ui.text_edit_singleline(&mut name);
                 edit.request_focus();
                 submit = ui.input(|i| i.key_pressed(egui::Key::Enter)) || ui.button("Rename").clicked();
@@ -2319,7 +2320,7 @@ impl PicoApp {
         if let Some(mut name) = self.new_album.take() {
             let mut open = true;
             let mut create = false;
-            egui::Window::new("New Album").open(&mut open).collapsible(false).show(ctx, |ui| {
+            dialog_window(ctx, "New Album").open(&mut open).show_dialog(ctx, |ui| {
                 let field = ui.add(egui::TextEdit::singleline(&mut name).hint_text("Album name"));
                 field.request_focus();
                 create = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter))
@@ -2337,7 +2338,7 @@ impl PicoApp {
             let mut open = true;
             let mut confirmed = false;
             let mut keep = false;
-            egui::Window::new("Move to Trash").open(&mut open).collapsible(false).show(ctx, |ui| {
+            dialog_window(ctx, "Move to Trash").open(&mut open).show_dialog(ctx, |ui| {
                 ui.label(format!("Move {} to the trash?", plural(files.len(), "file")));
                 ui.horizontal(|ui| {
                     confirmed = ui.button("Move to Trash").clicked();
@@ -2356,7 +2357,7 @@ impl PicoApp {
             let mut confirmed = false;
             let mut keep = false;
             let name = self.folders.get(dest).map(|f| f.name.clone()).unwrap_or_default();
-            egui::Window::new("Move Photos").open(&mut open).collapsible(false).show(ctx, |ui| {
+            dialog_window(ctx, "Move Photos").open(&mut open).show_dialog(ctx, |ui| {
                 ui.label(format!("Move {} to \"{name}\"?", plural(files.len(), "file")));
                 ui.label(egui::RichText::new("Captions, stars and edits go along.").weak());
                 ui.horizontal(|ui| {
@@ -2379,7 +2380,7 @@ impl PicoApp {
                 .iter()
                 .filter(|&&at| self.file(at).is_some_and(|f| f.kind != pico_core::media::MediaKind::Video))
                 .count();
-            egui::Window::new("Create Movie").open(&mut open).collapsible(false).show(ctx, |ui| {
+            dialog_window(ctx, "Create Movie").open(&mut open).show_dialog(ctx, |ui| {
                 ui.label(format!("{} in the order shown.", plural(count, "photo")));
                 ui.horizontal(|ui| {
                     ui.radio_value(&mut dialog.full_hd, false, "1280 × 720");
@@ -2436,7 +2437,7 @@ impl PicoApp {
 
         if self.show_options {
             let mut open = true;
-            egui::Window::new("Options").open(&mut open).collapsible(false).show(ctx, |ui| {
+            dialog_window(ctx, "Options").open(&mut open).show_dialog(ctx, |ui| {
                 ui.heading("Look");
                 ui.horizontal(|ui| {
                     let before = self.theme;
@@ -2479,7 +2480,7 @@ impl PicoApp {
         }
         if self.show_shortcuts {
             let mut open = true;
-            egui::Window::new("Keyboard Shortcuts").open(&mut open).collapsible(false).show(ctx, |ui| {
+            dialog_window(ctx, "Keyboard Shortcuts").open(&mut open).show_dialog(ctx, |ui| {
                 egui::ScrollArea::vertical().max_height(480.0).show(ui, |ui| {
                     ui.set_min_width(460.0);
                     for (group, keys) in SHORTCUTS {
@@ -2504,35 +2505,90 @@ impl PicoApp {
             let logo = logo.id();
             // The logo band reaches past the window's margin to its edges.
             let margin = ctx.global_style().spacing.window_margin;
-            egui::Window::new("About Pico").open(&mut self.show_about).collapsible(false).resizable(false).show(
-                ctx,
-                |ui| {
-                    let width = 560.0;
-                    ui.set_width(width);
-                    // Off-white, a touch darker than paper, in light and dark themes alike.
-                    let band = egui::Frame::new()
-                        .fill(egui::Color32::from_gray(236))
-                        .inner_margin(egui::Margin::symmetric(12 + margin.left, 12))
-                        .outer_margin(egui::Margin { left: -margin.left, right: -margin.right, top: 0, bottom: 0 });
-                    band.show(ui, |ui| {
-                        let inner = width - 24.0;
-                        ui.image((logo, egui::vec2(inner, inner * logo_size.y / logo_size.x)));
+            dialog_window(ctx, "About Pico").open(&mut self.show_about).resizable(false).show_dialog(ctx, |ui| {
+                let width = 560.0;
+                ui.set_width(width);
+                // Off-white, a touch darker than paper, in light and dark themes alike.
+                let band = egui::Frame::new()
+                    .fill(egui::Color32::from_gray(236))
+                    .inner_margin(egui::Margin::symmetric(12 + margin.left, 12))
+                    .outer_margin(egui::Margin {
+                        left: -margin.left,
+                        right: -margin.right,
+                        top: -margin.top,
+                        bottom: 0,
                     });
-                    egui::Frame::new().inner_margin(egui::Margin::symmetric(6, 10)).show(ui, |ui| {
-                        ui.vertical_centered(|ui| {
-                            ui.strong(format!("Version {}", env!("CARGO_PKG_VERSION")));
-                            ui.label("A small photo organizer that remembers how Picasa did things.");
-                            ui.label("No cloud. No uploads. Your photos stay exactly where you left them.");
-                            ui.label(egui::RichText::new(pico_core::geo::CREDITS).weak());
-                        });
+                band.show(ui, |ui| {
+                    let inner = width - 24.0;
+                    ui.image((logo, egui::vec2(inner, inner * logo_size.y / logo_size.x)));
+                });
+                egui::Frame::new().inner_margin(egui::Margin::symmetric(6, 10)).show(ui, |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.strong(format!("Version {}", env!("CARGO_PKG_VERSION")));
+                        ui.label("A small photo organizer that remembers how Picasa did things.");
+                        ui.label("No cloud. No uploads. Your photos stay exactly where you left them.");
+                        ui.label(egui::RichText::new(pico_core::geo::CREDITS).weak());
                     });
-                    egui::CollapsingHeader::new("Open-source licenses").id_salt("licenses").show(ui, |ui| {
-                        crate::logo::licenses(ui);
-                    });
-                },
-            );
+                });
+                egui::CollapsingHeader::new("Open-source licenses").id_salt("licenses").show(ui, |ui| {
+                    crate::logo::licenses(ui);
+                });
+            });
         }
     }
+}
+
+/// A dialog window, first shown in the middle of the app window so it does
+/// not cover the menus.
+pub fn dialog_window<'a>(ctx: &egui::Context, title: &'a str) -> egui::Window<'a> {
+    egui::Window::new(title)
+        .collapsible(false)
+        .pivot(egui::Align2::CENTER_CENTER)
+        .default_pos(ctx.content_rect().center())
+}
+
+/// Shows a dialog with a title bar like the menu bar: the title in body text
+/// and the bar as tall as the menu bar. egui sizes title bars by the heading
+/// style, so headings are body-sized while the frame is laid out, and the
+/// contents get the usual style back.
+pub trait ShowDialog {
+    fn show_dialog<R>(
+        self,
+        ctx: &egui::Context,
+        add_contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> Option<egui::InnerResponse<Option<R>>>;
+}
+
+impl ShowDialog for egui::Window<'_> {
+    fn show_dialog<R>(
+        self,
+        ctx: &egui::Context,
+        add_contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> Option<egui::InnerResponse<Option<R>>> {
+        let usual = ctx.global_style();
+        let heading = |style: &egui::Style| style.text_styles[&egui::TextStyle::Heading].clone();
+        let (usual_heading, body) = (heading(&usual), usual.text_styles[&egui::TextStyle::Body].clone());
+        ctx.all_styles_mut(|style| {
+            style.text_styles.insert(egui::TextStyle::Heading, body.clone());
+        });
+        let response = self.show(ctx, |ui| {
+            ui.set_style(usual.clone());
+            add_contents(ui)
+        });
+        ctx.all_styles_mut(|style| {
+            style.text_styles.insert(egui::TextStyle::Heading, usual_heading.clone());
+        });
+        response
+    }
+}
+
+/// egui's buttons are tight for a desktop app; give their labels more room.
+/// Window title bars, on the other hand, are thinner than egui's.
+fn roomier(ctx: &egui::Context) {
+    ctx.all_styles_mut(|style| {
+        style.spacing.button_padding = egui::vec2(12.0, 5.0);
+        style.spacing.window_margin = egui::Margin::symmetric(6, 4);
+    });
 }
 
 struct Keys {

@@ -1,6 +1,7 @@
 //! Folder Manager: a tree of the disk where each folder is put into the
 //! library or left out of it. Changes apply only on OK.
 
+use crate::app::ShowDialog;
 use eframe::egui::{self, Color32, RichText};
 use egui::collapsing_header::CollapsingState;
 use pico_core::config;
@@ -63,7 +64,7 @@ impl FolderManager {
     pub fn show(&mut self, ctx: &egui::Context) -> Option<FolderManagerAction> {
         let mut action = None;
         let mut open = true;
-        egui::Window::new("Folder Manager").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+        crate::app::dialog_window(ctx, "Folder Manager").open(&mut open).resizable(false).show_dialog(ctx, |ui| {
             ui.label("Pick folders on the left and tell Pico whether to look inside them.");
             ui.separator();
             let size = egui::vec2(720.0, 340.0);
