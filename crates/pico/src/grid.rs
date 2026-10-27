@@ -209,10 +209,15 @@ pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> G
                 let name = file.name();
                 let selected = view.selection.contains(&at);
                 response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, &name));
-                let response = response.on_hover_text(match &file.meta.caption {
-                    Some(caption) => format!("{}\n{caption}", file.name()),
-                    None => file.name(),
-                });
+                let mut tip = file.name();
+                if let Some(caption) = &file.meta.caption {
+                    tip = format!("{tip}\n{caption}");
+                }
+                let marks: Vec<&str> = badges(file).iter().map(|(_, meaning)| *meaning).collect();
+                if !marks.is_empty() {
+                    tip = format!("{tip}\n{}", marks.join(", "));
+                }
+                let response = response.on_hover_text(tip);
                 if response.double_clicked() {
                     action = Some(GridAction::Open(at));
                 } else if response.clicked() {
@@ -325,6 +330,18 @@ fn paint_header(ui: &egui::Ui, header: &SectionHeader, rect: egui::Rect) {
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Heading, true, &label));
 }
 
+/// Small marks in a thumbnail's top-right corner, with what they mean.
+fn badges(file: &MediaFile) -> Vec<(&'static str, &'static str)> {
+    let mut badges = Vec::new();
+    if !file.meta.filters.0.is_empty() {
+        badges.push(("✏", "Edited"));
+    }
+    if file.gps.is_some() {
+        badges.push(("📍", "Has a location"));
+    }
+    badges
+}
+
 fn paint_cell(
     ui: &egui::Ui,
     view: &GridView<'_>,
@@ -343,11 +360,14 @@ fn paint_cell(
     if view.current == Some(at) {
         painter.rect_stroke(rect.shrink(1.0), 4.0, ui.visuals().selection.stroke, egui::StrokeKind::Inside);
     }
+    // Where the picture itself is, inside the cell.
+    let mut picture = inner;
     match thumbs.get(&file.path, file.kind, &file.meta) {
         Thumb::Ready(texture) => {
             let size = texture.size_vec2();
             let scale = (view.thumb_size / size.x.max(size.y)).min(1.0);
             let image_rect = egui::Rect::from_center_size(inner.center(), size * scale);
+            picture = image_rect;
             // Hidden photos are shown faded when hidden photos are listed.
             let tint = if file.meta.hidden { egui::Color32::from_white_alpha(110) } else { egui::Color32::WHITE };
             painter.image(texture.id(), image_rect, full_uv(), tint);
@@ -368,6 +388,12 @@ fn paint_cell(
     }
     if file.meta.star {
         paint_star(&painter, inner.left_bottom() + egui::vec2(4.0, -4.0), 16.0);
+    }
+    let mut corner = picture.right_top() + egui::vec2(-12.0, 12.0);
+    for (icon, _) in badges(file) {
+        painter.circle_filled(corner, 10.0, egui::Color32::from_black_alpha(150));
+        painter.text(corner, egui::Align2::CENTER_CENTER, icon, egui::FontId::proportional(12.0), egui::Color32::WHITE);
+        corner.x -= 22.0;
     }
     if file.kind == MediaKind::Video {
         painter.text(

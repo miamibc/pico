@@ -771,6 +771,31 @@ fn only_videos_filter() {
 }
 
 #[test]
+fn edited_photos_are_marked() {
+    let fixture = Fixture::new("badges");
+    let ini = fixture.ini() + "[c.png]\r\nfilters=bw=1;\r\n";
+    std::fs::write(fixture.dir.join(".picasa.ini"), ini).unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    wait_until(&mut harness, "the thumbnails", |app| app.thumbnails_pending() == 0);
+    let tooltip = |harness: &mut Harness<'_, PicoApp>, name: &str| {
+        harness.hover_at(harness.get_by_label(name).rect().center());
+        // Tooltips wait for the pointer to rest.
+        for _ in 0..4 {
+            harness.step();
+        }
+        harness
+            .query_all(egui_kittest::kittest::by().role(egui::accesskit::Role::Label))
+            .filter_map(|n| n.accesskit_node().value())
+            .find(|v| v.starts_with(name))
+            .unwrap_or_default()
+    };
+    assert_eq!(tooltip(&mut harness, "c.png"), "c.png\nEdited");
+    screenshot(&mut harness, "badges");
+    assert_eq!(tooltip(&mut harness, "a.png"), "a.png");
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);
