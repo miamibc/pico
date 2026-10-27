@@ -151,6 +151,7 @@ pub struct PicoApp {
     /// Photos dropped on a folder, waiting for "Move" (folder index).
     confirm_move: Option<(Vec<FileRef>, usize)>,
     show_about: bool,
+    show_shortcuts: bool,
     status: String,
     /// Width of the folder panel, remembered between runs.
     sidebar_width: f32,
@@ -218,6 +219,7 @@ impl PicoApp {
             confirm_trash: None,
             confirm_move: None,
             show_about: false,
+            show_shortcuts: false,
             status: String::new(),
             persist_settings,
             sidebar_width: 260.0,
@@ -1195,6 +1197,9 @@ impl PicoApp {
                 }
             });
             ui.menu_button("Help", |ui| {
+                if ui.button("Keyboard Shortcuts").on_hover_text("F1").clicked() {
+                    self.show_shortcuts = true;
+                }
                 if ui.button("About Pico").clicked() {
                     self.show_about = true;
                 }
@@ -2406,6 +2411,30 @@ impl PicoApp {
             self.show_options = open;
         }
 
+        if ctx.input(|i| i.key_pressed(egui::Key::F1)) {
+            self.show_shortcuts = !self.show_shortcuts;
+        }
+        if self.show_shortcuts {
+            let mut open = true;
+            egui::Window::new("Keyboard Shortcuts").open(&mut open).collapsible(false).show(ctx, |ui| {
+                egui::ScrollArea::vertical().max_height(480.0).show(ui, |ui| {
+                    ui.set_min_width(460.0);
+                    for (group, keys) in SHORTCUTS {
+                        ui.heading(*group);
+                        egui::Grid::new(*group).num_columns(2).striped(true).show(ui, |ui| {
+                            for (key, what) in *keys {
+                                ui.strong(*key);
+                                ui.label(*what);
+                                ui.end_row();
+                            }
+                        });
+                        ui.add_space(8.0);
+                    }
+                });
+            });
+            self.show_shortcuts = open && !ctx.input(|i| i.key_pressed(egui::Key::Escape));
+        }
+
         if self.show_about {
             egui::Window::new("About Pico").open(&mut self.show_about).collapsible(false).show(ctx, |ui| {
                 ui.heading(format!("Pico {}", env!("CARGO_PKG_VERSION")));
@@ -2798,6 +2827,52 @@ fn drop_target(ui: &egui::Ui, response: &egui::Response) -> Option<std::sync::Ar
     }
     response.dnd_release_payload::<PhotoDrag>()
 }
+
+/// The Help > Keyboard Shortcuts list, by where the keys work.
+const SHORTCUTS: &[(&str, &[(&str, &str)])] = &[
+    (
+        "Library",
+        &[
+            ("Arrows", "Move between photos"),
+            ("Home / End", "First / last photo"),
+            ("Page Up / Page Down", "A screenful up / down"),
+            ("Enter, Ctrl+3", "Open the photo"),
+            ("Ctrl+A / Ctrl+I / Ctrl+D", "Select all / invert / clear"),
+            ("Ctrl+H", "Hold in the Photo Tray"),
+            ("S", "Star or unstar"),
+            ("Ctrl+N", "New album from the selection"),
+            ("F2", "Rename"),
+            ("Delete", "Move to the trash"),
+            ("Ctrl+Enter", "Locate on disk"),
+            ("Ctrl+Shift+O", "Open in another program"),
+            ("Ctrl+Shift+S", "Export to a folder"),
+            ("Ctrl+1 / Ctrl+2, Ctrl+wheel", "Thumbnail size"),
+            ("Ctrl+F", "Search"),
+        ],
+    ),
+    (
+        "Photo",
+        &[
+            ("Left / Right, wheel", "Previous / next photo"),
+            ("Home / End", "First / last photo"),
+            ("Ctrl+wheel, pinch", "Zoom"),
+            ("Double-click, Esc", "Back to the library"),
+            ("F11", "Full screen"),
+            ("Ctrl+Z / Ctrl+Y", "Undo / redo an edit"),
+            ("\\ (hold)", "Show the original"),
+        ],
+    ),
+    (
+        "Everywhere",
+        &[
+            ("Ctrl+R / Ctrl+Shift+R", "Rotate clockwise / counterclockwise"),
+            ("Ctrl+Shift+E / Ctrl+Shift+B", "I'm Feeling Lucky / black and white"),
+            ("Alt+Enter / Ctrl+K", "Properties and tags / add a tag"),
+            ("Ctrl+4", "Slideshow (arrows, Space, -/+ and Esc in it)"),
+            ("F1", "This list"),
+        ],
+    ),
+];
 
 fn plural(count: usize, noun: &str) -> String {
     if count == 1 { format!("1 {noun}") } else { format!("{count} {noun}s") }

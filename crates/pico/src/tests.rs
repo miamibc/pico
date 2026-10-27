@@ -887,6 +887,28 @@ fn settings_come_back_next_time() {
 }
 
 #[test]
+fn keyboard_shortcuts_window() {
+    let fixture = Fixture::new("shortcuts");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("Help").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Keyboard Shortcuts").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Hold in the Photo Tray");
+    screenshot(&mut harness, "shortcuts");
+    harness.key_press(Key::Escape);
+    harness.step();
+    assert!(harness.query_by_label("Hold in the Photo Tray").is_none());
+    harness.key_press(Key::F1);
+    harness.step();
+    harness.step();
+    harness.get_by_label("Undo / redo an edit");
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);
