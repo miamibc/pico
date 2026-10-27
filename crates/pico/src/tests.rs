@@ -50,7 +50,7 @@ impl Drop for Fixture {
 
 fn harness(dir: &Path) -> Harness<'static, PicoApp> {
     let dir = dir.to_path_buf();
-    Harness::builder().with_size([1000.0, 700.0]).build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![dir], false))
+    Harness::builder().with_size([1000.0, 800.0]).build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![dir], false))
 }
 
 /// Steps the UI until background work (scanning, decoding) satisfies `done`.
@@ -123,7 +123,7 @@ fn double_click_opens_and_closes_the_photo() {
     // clicks are too slow to count as a double click.
     let dir = fixture.dir.clone();
     let mut harness = Harness::builder()
-        .with_size([1000.0, 700.0])
+        .with_size([1000.0, 800.0])
         .with_step_dt(0.05)
         .build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![dir], false));
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
@@ -877,7 +877,7 @@ fn settings_come_back_next_time() {
 
     // A new window with those settings opens where the last one was.
     let dir = fixture.dir.clone();
-    let mut harness = Harness::builder().with_size([1000.0, 700.0]).build_eframe(move |cc| {
+    let mut harness = Harness::builder().with_size([1000.0, 800.0]).build_eframe(move |cc| {
         let mut app = PicoApp::new(&cc.egui_ctx, vec![dir], false);
         app.apply_settings_for_test(&settings);
         app
@@ -1201,7 +1201,9 @@ fn effect_tool_places_center_on_rotated_photo() {
     harness.step();
     assert!(harness.state().tool_state().starts_with("effect radblur"), "{}", harness.state().tool_state());
     // Click near the top-right corner of the clockwise-rotated photo: that is
-    // near the top-left corner of the photo itself.
+    // near the top-left corner of the photo itself. The tool panel may widen
+    // in its first frame, so let the layout settle first.
+    harness.step();
     let photo = harness.get_by_label("Photo").rect();
     harness.get_by_label("Photo").hover();
     harness.step();

@@ -223,6 +223,7 @@ impl CollageView {
             }
         });
         egui::ScrollArea::horizontal().show(ui, |ui| {
+            crate::app::list_rows(ui);
             ui.horizontal(|ui| {
                 for (p, &i) in self.order.iter().enumerate() {
                     let name = self.files[i].name();

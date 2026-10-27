@@ -73,6 +73,7 @@ impl FolderManager {
                 ui.vertical(|ui| {
                     ui.set_width(400.0);
                     egui::ScrollArea::both().id_salt("folder tree").auto_shrink(false).show(ui, |ui| {
+                        crate::app::list_rows(ui);
                         // The same folder can sit under several roots;
                         // open the tree to it under the first only.
                         let target = self.reveal.take();

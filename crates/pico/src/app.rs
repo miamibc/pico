@@ -1849,10 +1849,11 @@ impl PicoApp {
 
     fn library(&mut self, ui: &mut egui::Ui) {
         self.hovered = None;
-        let sidebar = egui::Panel::left("folders")
-            .resizable(true)
-            .default_size(self.sidebar_width)
-            .show(ui, |ui| self.folder_list(ui));
+        let sidebar = egui::Panel::left("folders").resizable(true).default_size(self.sidebar_width).show(ui, |ui| {
+            // A list, not buttons: rows as compact as egui makes them.
+            ui.spacing_mut().button_padding = egui::Style::default().spacing.button_padding;
+            self.folder_list(ui)
+        });
         self.sidebar_width = sidebar.response.rect.width().round();
         let tray = egui::Panel::bottom("tray").show(ui, |ui| self.tray_panel(ui)).response;
         if let Some(drag) = drop_target(ui, &tray) {
@@ -2576,6 +2577,12 @@ pub fn dialog_window<'a>(ctx: &egui::Context, title: &'a str) -> egui::Window<'a
         .default_pos(ctx.content_rect().center())
 }
 
+/// Lists are not buttons: their rows stay as compact as egui makes them, while
+/// buttons get the roomier padding of [`roomier`].
+pub fn list_rows(ui: &mut egui::Ui) {
+    ui.spacing_mut().button_padding = egui::Style::default().spacing.button_padding;
+}
+
 /// A small window for a long operation: what is going on and how far along
 /// it is; `None` when that is not known.
 pub fn progress_window(ctx: &egui::Context, title: &str, text: &str, fraction: Option<f32>) {
@@ -2629,7 +2636,7 @@ impl ShowDialog for egui::Window<'_> {
 /// Window title bars, on the other hand, are thinner than egui's.
 fn roomier(ctx: &egui::Context) {
     ctx.all_styles_mut(|style| {
-        style.spacing.button_padding = egui::vec2(12.0, 5.0);
+        style.spacing.button_padding = egui::vec2(16.0, 7.0);
         style.spacing.window_margin = egui::Margin::symmetric(6, 4);
     });
 }
