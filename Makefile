@@ -61,9 +61,13 @@ logo:
 licenses:
 	python3 -I crates/pico/assets/make_licenses.py
 
-# Installs the binary into ~/.cargo/bin.
+# Installs the binary into ~/.cargo/bin; on Linux also the menu entry and
+# icon into ~/.local/share (GNOME on Wayland takes the icon only from there).
 install:
 	cargo install --path crates/pico
+	install -Dm644 docs/logo/pico.svg $(HOME)/.local/share/icons/hicolor/scalable/apps/pico.svg
+	install -Dm644 crates/pico/assets/pico-256.png $(HOME)/.local/share/icons/hicolor/256x256/apps/pico.png
+	sed 's|^Exec=pico|Exec=$(HOME)/.cargo/bin/pico|' packaging/linux/pico.desktop > $(HOME)/.local/share/applications/pico.desktop
 
 clean:
 	cargo clean
