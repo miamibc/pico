@@ -1892,6 +1892,9 @@ impl PicoApp {
                 export: cmd && shift && i.key_pressed(egui::Key::S),
                 new_album: cmd && i.key_pressed(egui::Key::N),
                 hold: cmd && i.key_pressed(egui::Key::H),
+                page: i.key_pressed(egui::Key::PageDown) as isize - i.key_pressed(egui::Key::PageUp) as isize,
+                edge: i.key_pressed(egui::Key::End) as isize - i.key_pressed(egui::Key::Home) as isize,
+                open: cmd && i.key_pressed(egui::Key::Num3),
             }
         });
         if keys.hold {
@@ -1917,8 +1920,18 @@ impl PicoApp {
             self.open_export();
         }
         let columns = grid::columns_for(ui.available_width().max(self.thumb_size), self.thumb_size) as isize;
-        self.step(keys.vertical * columns + keys.horizontal);
-        if keys.enter && self.current.is_some() {
+        // A page is about the rows that fit on screen.
+        let rows = (ui.ctx().content_rect().height() * 0.6 / (self.thumb_size + 16.0)).floor().max(1.0) as isize;
+        self.step(keys.vertical * columns + keys.horizontal + keys.page * rows * columns);
+        if keys.edge != 0 {
+            let listing = self.listing();
+            let end = if keys.edge > 0 { listing.last() } else { listing.first() };
+            if let Some(&at) = end {
+                self.current = Some(at);
+                self.selection = BTreeSet::from([at]);
+            }
+        }
+        if (keys.enter || keys.open) && self.current.is_some() {
             self.view = View::Photo;
         }
         if let Some(turns) = keys.rotate {
@@ -2298,6 +2311,12 @@ struct Keys {
     export: bool,
     new_album: bool,
     hold: bool,
+    /// Page Down minus Page Up.
+    page: isize,
+    /// End minus Home.
+    edge: isize,
+    /// Ctrl+3: open the photo, Picasa's Edit View.
+    open: bool,
 }
 
 struct MovieDialog {

@@ -820,6 +820,38 @@ fn status_bar_tells_about_the_photo_and_the_selection() {
 }
 
 #[test]
+fn home_end_pages_and_ctrl_3_in_the_grid() {
+    let fixture = Fixture::new("grid-keys");
+    for k in 0..30 {
+        RgbImage::from_pixel(40, 30, Rgb([k * 8, 50, 50])).save(fixture.dir.join(format!("z{k:02}.png"))).unwrap();
+    }
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().select_folder(0);
+    harness.step();
+    let name = |harness: &Harness<'_, PicoApp>| {
+        let at = harness.state().selected_file().unwrap();
+        harness.state().listing_names()[at].clone()
+    };
+    harness.key_press(Key::End);
+    harness.step();
+    assert_eq!(name(&harness), "z29.png");
+    harness.key_press(Key::Home);
+    harness.step();
+    assert_eq!(name(&harness), "a.png");
+    harness.key_press(Key::PageDown);
+    harness.step();
+    let paged = harness.state().selected_file().unwrap();
+    assert!(paged >= 5, "a page is more than a row: {paged}");
+    harness.key_press(Key::PageUp);
+    harness.step();
+    assert_eq!(name(&harness), "a.png");
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Num3);
+    harness.step();
+    assert!(harness.state().is_viewing(), "Ctrl+3 opens the photo");
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);
