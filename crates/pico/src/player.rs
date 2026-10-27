@@ -1,7 +1,7 @@
-//! Video playback in the photo view: frames from ffmpeg, sound from ffplay.
+//! Video playback: frames from ffmpeg, sound from ffplay. `Playback` plays a
+//! video for the photo view and the slideshow; `Player` adds the controls.
 
 use eframe::egui;
-use pico_core::filters::{Filter, FilterStack};
 use pico_core::library::MediaFile;
 use pico_core::video::{self, Frame, FrameStream, SoundPlayer, VideoInfo};
 use std::path::{Path, PathBuf};
@@ -12,16 +12,18 @@ const MAX_FRAME_WIDTH: u32 = 1280;
 const SEEK_STEP: Duration = Duration::from_secs(5);
 
 pub enum PlayerAction {
-    SetFilters(FilterStack),
     /// A frame was saved as a new photo next to the video.
     SavedFrame(PathBuf),
     Error(String),
+    /// Double-click: back to the library, as for photos.
+    Close,
 }
 
-#[derive(Default)]
-pub struct Player {
-    path: Option<PathBuf>,
-    info: Option<Result<VideoInfo, String>>,
+/// One open video: what is on screen and, while playing, the decoder and
+/// the sound.
+pub struct Playback {
+    path: PathBuf,
+    info: Result<VideoInfo, String>,
     size: (u32, u32),
     playing: bool,
     /// Where playback is (or is paused).
@@ -35,166 +37,81 @@ pub struct Player {
     shown: Option<Duration>,
     texture: Option<egui::TextureHandle>,
     sound: Option<SoundPlayer>,
+    /// egui time the sound was asked to start; pictures wait for it a while.
+    sound_from: f64,
     muted: bool,
 }
 
-impl Player {
-    /// Size and length of the open video, once ffprobe has told.
-    pub fn info(&self) -> Option<VideoInfo> {
-        self.info.as_ref().and_then(|info| info.as_ref().ok()).copied()
-    }
-
-    pub fn show(&mut self, ui: &mut egui::Ui, file: &MediaFile) -> Option<PlayerAction> {
-        if self.path.as_deref() != Some(file.path.as_path()) {
-            *self = Player { muted: self.muted, ..Player::default() };
-            self.open(&file.path);
-            self.position = trim_start(&file.meta.filters);
-        }
-        let info = match &self.info {
-            Some(Ok(info)) => *info,
-            Some(Err(e)) => {
-                ui.centered_and_justified(|ui| ui.label(format!("This video is shy: {e}")));
-                return None;
-            }
-            None => return None,
-        };
-        let start = trim_start(&file.meta.filters);
-        let end = trim_end(&file.meta.filters).unwrap_or(info.duration).min(info.duration);
-        let now = ui.input(|i| i.time);
-        let mut action = None;
-
-        egui::Panel::bottom("player_controls").show(ui, |ui| {
-            action = self.controls(ui, file, info, start, end, now);
-        });
-
-        // Keys as in Picasa: "/" plays and pauses, "," and "." skip.
-        if !ui.ctx().egui_wants_keyboard_input() {
-            let (toggle, back, forward) = ui.input(|i| {
-                (
-                    i.key_pressed(egui::Key::Slash) || i.key_pressed(egui::Key::Space),
-                    i.key_pressed(egui::Key::Comma),
-                    i.key_pressed(egui::Key::Period),
-                )
-            });
-            if toggle {
-                self.toggle(&file.path, now, start, end);
-            }
-            if back {
-                self.seek(&file.path, self.position.saturating_sub(SEEK_STEP).max(start), now);
-            }
-            if forward {
-                self.seek(&file.path, (self.position + SEEK_STEP).min(end), now);
-            }
-        }
-
-        self.advance(ui.ctx(), &file.path, info, now, end);
-        egui::CentralPanel::no_frame().show(ui, |ui| {
-            let area = ui.max_rect();
-            ui.painter().rect_filled(area, 0.0, egui::Color32::BLACK);
-            if let Some(texture) = &self.texture {
-                let size = texture.size_vec2();
-                let scale = (area.width() / size.x).min(area.height() / size.y);
-                let rect = egui::Rect::from_center_size(area.center(), size * scale);
-                ui.painter().image(texture.id(), rect, crate::grid::full_uv(), egui::Color32::WHITE);
-                let response = ui.interact(rect, ui.scope_id().with("video"), egui::Sense::click());
-                response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Video, true, "Video"));
-                if response.clicked() {
-                    self.toggle(&file.path, now, start, end);
-                }
-            } else {
-                ui.centered_and_justified(|ui| ui.spinner());
-            }
-        });
-        action
-    }
-
-    fn open(&mut self, path: &Path) {
-        self.path = Some(path.to_path_buf());
+impl Playback {
+    /// Opens `path` paused at the start; ffprobe tells its size and length.
+    pub fn open(path: &Path, muted: bool) -> Playback {
         let info = video::probe(path).map_err(|e| e.to_string());
-        if let Ok(info) = &info {
-            let width = info.width.clamp(2, MAX_FRAME_WIDTH) & !1;
-            let height = ((info.height as f32 * width as f32 / info.width as f32).round() as u32).max(2) & !1;
-            self.size = (width, height);
+        let size = match &info {
+            Ok(info) => {
+                let width = info.width.clamp(2, MAX_FRAME_WIDTH) & !1;
+                let height = ((info.height as f32 * width as f32 / info.width as f32).round() as u32).max(2) & !1;
+                (width, height)
+            }
+            Err(_) => (0, 0),
+        };
+        Playback {
+            path: path.to_path_buf(),
+            info,
+            size,
+            playing: false,
+            position: Duration::ZERO,
+            anchor: None,
+            stream: None,
+            pending: None,
+            shown: None,
+            texture: None,
+            sound: None,
+            sound_from: 0.0,
+            muted,
         }
-        self.info = Some(info);
     }
 
-    fn controls(
-        &mut self,
-        ui: &mut egui::Ui,
-        file: &MediaFile,
-        info: VideoInfo,
-        start: Duration,
-        end: Duration,
-        now: f64,
-    ) -> Option<PlayerAction> {
-        let mut action = None;
-        ui.horizontal(|ui| {
-            let label = if self.playing { "⏸ Pause" } else { "▶ Play" };
-            if ui.button(label).on_hover_text("/ or Space").clicked() {
-                self.toggle(&file.path, now, start, end);
-            }
-            let mut seconds = self.position.as_secs_f32();
-            let total = info.duration.as_secs_f32().max(0.01);
-            let slider = ui.add(egui::Slider::new(&mut seconds, 0.0..=total).show_value(false).text(format!(
-                "{} / {}",
-                clock(self.position),
-                clock(info.duration)
-            )));
-            if slider.changed() {
-                self.seek(&file.path, Duration::from_secs_f32(seconds), now);
-            }
-            if video::ffplay().is_some() && ui.toggle_value(&mut self.muted, "Mute").changed() {
-                self.restart_sound(&file.path);
-            }
-        });
-        ui.horizontal(|ui| {
-            ui.label("Trim:");
-            if ui.button("Set Start").on_hover_text("Playback starts here").clicked() {
-                action =
-                    Some(PlayerAction::SetFilters(with_trim(&file.meta.filters, "moviestart", Some(self.position))));
-            }
-            if ui.button("Set End").on_hover_text("Playback stops here").clicked() {
-                action = Some(PlayerAction::SetFilters(with_trim(&file.meta.filters, "movieend", Some(self.position))));
-            }
-            let trimmed = start > Duration::ZERO || trim_end(&file.meta.filters).is_some();
-            if ui.add_enabled(trimmed, egui::Button::new("Clear Trim")).clicked() {
-                let stack = with_trim(&with_trim(&file.meta.filters, "moviestart", None), "movieend", None);
-                action = Some(PlayerAction::SetFilters(stack));
-            }
-            if trimmed {
-                ui.label(egui::RichText::new(format!("plays {} to {}", clock(start), clock(end))).weak());
-            }
-            ui.separator();
-            if ui.button("Save Frame as Photo").clicked() {
-                action = Some(match save_frame(&file.path, self.position) {
-                    Ok(path) => PlayerAction::SavedFrame(path),
-                    Err(e) => PlayerAction::Error(format!("Could not save the frame: {e}")),
-                });
-            }
-        });
-        action
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 
-    fn toggle(&mut self, path: &Path, now: f64, start: Duration, end: Duration) {
+    pub fn info(&self) -> Result<VideoInfo, &str> {
+        self.info.as_ref().copied().map_err(String::as_str)
+    }
+
+    pub fn texture(&self) -> Option<&egui::TextureHandle> {
+        self.texture.as_ref()
+    }
+
+    pub fn is_playing(&self) -> bool {
+        self.playing
+    }
+
+    /// Played to the end and stopped there.
+    pub fn finished(&self) -> bool {
+        !self.playing && self.info().is_ok_and(|info| self.position >= info.duration)
+    }
+
+    pub fn toggle(&mut self, now: f64) {
         if self.playing {
             self.pause();
         } else {
-            if self.position >= end {
-                self.position = start;
-            }
-            self.play(path, now);
+            self.play(now);
         }
     }
 
-    fn play(&mut self, path: &Path, now: f64) {
+    /// Plays from where it is, or from the start once at the end.
+    pub fn play(&mut self, now: f64) {
+        if self.finished() {
+            self.position = Duration::ZERO;
+        }
         self.playing = true;
         self.anchor = Some((now, self.position));
-        self.start_stream(path);
-        self.restart_sound(path);
+        self.start_stream();
+        self.restart_sound(now);
     }
 
-    fn pause(&mut self) {
+    pub fn pause(&mut self) {
         self.playing = false;
         self.anchor = None;
         self.stream = None;
@@ -202,37 +119,42 @@ impl Player {
         self.sound = None;
     }
 
-    fn seek(&mut self, path: &Path, to: Duration, now: f64) {
+    pub fn seek(&mut self, to: Duration, now: f64) {
         self.position = to;
         if self.playing {
-            self.play(path, now);
+            self.play(now);
         } else {
             self.shown = None; // fetch the frame at the new position
         }
     }
 
-    fn start_stream(&mut self, path: &Path) {
-        let fps = match &self.info {
-            Some(Ok(info)) => info.fps,
-            _ => return,
-        };
-        self.pending = None;
-        self.stream = FrameStream::start(path, self.position, self.size.0, self.size.1, fps).ok();
+    pub fn set_muted(&mut self, muted: bool, now: f64) {
+        self.muted = muted;
+        self.restart_sound(now);
     }
 
-    fn restart_sound(&mut self, path: &Path) {
+    fn start_stream(&mut self) {
+        let Ok(info) = &self.info else { return };
+        self.pending = None;
+        self.stream = FrameStream::start(&self.path, self.position, self.size.0, self.size.1, info.fps).ok();
+    }
+
+    fn restart_sound(&mut self, now: f64) {
         self.sound = None;
         if self.playing && !self.muted {
-            self.sound = SoundPlayer::start(path, self.position);
+            self.sound = SoundPlayer::start(&self.path, self.position);
+            self.sound_from = now;
+            self.anchor = Some((now, self.position));
         }
     }
 
     /// Shows the frame due now, and fetches a single frame while paused.
-    fn advance(&mut self, ctx: &egui::Context, path: &Path, info: VideoInfo, now: f64, end: Duration) {
+    pub fn advance(&mut self, ctx: &egui::Context, now: f64) {
+        let Ok(info) = self.info else { return };
         if !self.playing {
             if self.shown != Some(self.position) {
                 if self.stream.is_none() {
-                    self.start_stream(path);
+                    self.start_stream();
                 }
                 if let Some(frame) = self.stream.as_ref().and_then(|s| s.frames.try_recv().ok()) {
                     self.upload(ctx, frame);
@@ -244,19 +166,25 @@ impl Player {
             }
             return;
         }
-        let Some((t0, p0)) = self.anchor else { return };
+        let Some((mut t0, p0)) = self.anchor else { return };
+        // ffplay takes a moment to start the sound; the pictures wait for it,
+        // or they would run ahead of it for good.
+        if self.sound.as_ref().is_some_and(|s| !s.started()) && now - self.sound_from < 2.0 {
+            t0 = now;
+            self.anchor = Some((t0, p0));
+        }
         let target = p0 + Duration::from_secs_f64((now - t0).max(0.0));
-        let mut due = self.pending.take().filter(|f| f.at <= target);
-        if due.is_none()
-            && let Some(stream) = &self.stream
-        {
-            while let Ok(frame) = stream.frames.try_recv() {
-                if frame.at <= target {
-                    due = Some(frame); // keep only the newest due frame
-                } else {
+        // The newest frame that is due; a frame not due yet waits for its turn.
+        let mut due = None;
+        loop {
+            let next = self.pending.take().or_else(|| self.stream.as_ref()?.frames.try_recv().ok());
+            match next {
+                Some(frame) if frame.at <= target => due = Some(frame),
+                Some(frame) => {
                     self.pending = Some(frame);
                     break;
                 }
+                None => break,
             }
         }
         if let Some(frame) = due {
@@ -264,8 +192,8 @@ impl Player {
             self.shown = Some(frame.at);
             self.upload(ctx, frame);
         }
-        if target >= end || (self.stream.is_some() && target > info.duration) {
-            self.position = end.min(info.duration);
+        if target >= info.duration {
+            self.position = info.duration;
             self.pause();
             return;
         }
@@ -279,38 +207,151 @@ impl Player {
             None => self.texture = Some(ctx.load_texture("video", image, egui::TextureOptions::LINEAR)),
         }
     }
+}
+
+/// The photo view's video player: the picture and a row of controls.
+#[derive(Default)]
+pub struct Player {
+    playback: Option<Playback>,
+    /// Where the picture is shown, as of the last frame.
+    area: Option<egui::Rect>,
+    muted: bool,
+    /// A click on the picture, which pauses or plays unless it turns out to
+    /// be the first half of a double-click.
+    click_at: Option<f64>,
+}
+
+impl Player {
+    /// Size and length of the open video, once ffprobe has told.
+    pub fn info(&self) -> Option<VideoInfo> {
+        self.playback.as_ref().and_then(|p| p.info().ok())
+    }
+
+    pub fn area(&self) -> Option<egui::Rect> {
+        self.area
+    }
+
+    /// Stops playback and closes the video, sound included.
+    pub fn stop(&mut self) {
+        self.playback = None;
+        self.area = None;
+        self.click_at = None;
+    }
+
+    pub fn show(&mut self, ui: &mut egui::Ui, file: &MediaFile) -> Option<PlayerAction> {
+        if self.playback.as_ref().is_none_or(|p| p.path() != file.path) {
+            self.stop();
+            self.playback = Some(Playback::open(&file.path, self.muted));
+        }
+        let playback = self.playback.as_mut()?;
+        let info = match playback.info() {
+            Ok(info) => info,
+            Err(e) => {
+                ui.centered_and_justified(|ui| ui.label(format!("This video is shy: {e}")));
+                return None;
+            }
+        };
+        let now = ui.input(|i| i.time);
+        let mut action = None;
+
+        egui::Panel::bottom("player_controls").show(ui, |ui| {
+            ui.horizontal(|ui| {
+                let label = if playback.is_playing() { "⏸ Pause" } else { "▶ Play" };
+                if ui.button(label).on_hover_text("/ or Space").clicked() {
+                    playback.toggle(now);
+                }
+                // The position bar takes all the room between Play and Mute.
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if video::ffplay().is_some() && ui.toggle_value(&mut self.muted, "Mute").changed() {
+                        playback.set_muted(self.muted, now);
+                    }
+                    ui.label(format!("{} / {}", clock(playback.position), clock(info.duration)));
+                    ui.spacing_mut().slider_width = ui.available_width();
+                    let mut seconds = playback.position.as_secs_f32();
+                    let total = info.duration.as_secs_f32().max(0.01);
+                    let slider = ui.add(egui::Slider::new(&mut seconds, 0.0..=total).show_value(false));
+                    if slider.changed() {
+                        playback.seek(Duration::from_secs_f32(seconds), now);
+                    }
+                });
+            });
+        });
+
+        // Keys as in Picasa: "/" plays and pauses, "," and "." skip.
+        if !ui.ctx().egui_wants_keyboard_input() {
+            let (toggle, back, forward) = ui.input(|i| {
+                (
+                    i.key_pressed(egui::Key::Slash) || i.key_pressed(egui::Key::Space),
+                    i.key_pressed(egui::Key::Comma),
+                    i.key_pressed(egui::Key::Period),
+                )
+            });
+            if toggle {
+                playback.toggle(now);
+            }
+            if back {
+                playback.seek(playback.position.saturating_sub(SEEK_STEP), now);
+            }
+            if forward {
+                playback.seek((playback.position + SEEK_STEP).min(info.duration), now);
+            }
+        }
+        if let Some(at) = self.click_at {
+            let wait = ui.ctx().options(|o| o.input_options.max_double_click_delay);
+            if now - at > wait {
+                self.click_at = None;
+                playback.toggle(now);
+            } else {
+                ui.ctx().request_repaint_after(Duration::from_secs_f64(wait));
+            }
+        }
+
+        playback.advance(ui.ctx(), now);
+        egui::CentralPanel::no_frame().show(ui, |ui| {
+            let area = ui.max_rect();
+            self.area = Some(area);
+            ui.painter().rect_filled(area, 0.0, egui::Color32::BLACK);
+            if let Some(texture) = playback.texture() {
+                let size = texture.size_vec2();
+                let scale = (area.width() / size.x).min(area.height() / size.y);
+                let rect = egui::Rect::from_center_size(area.center(), size * scale);
+                ui.painter().image(texture.id(), rect, crate::grid::full_uv(), egui::Color32::WHITE);
+                let response = ui.interact(rect, ui.scope_id().with("video"), egui::Sense::click());
+                response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Video, true, "Video"));
+                if response.double_clicked() {
+                    self.click_at = None;
+                    action = Some(PlayerAction::Close);
+                } else if response.clicked() {
+                    self.click_at = Some(now);
+                }
+            } else {
+                ui.centered_and_justified(|ui| ui.spinner());
+            }
+        });
+        action
+    }
+
+    /// Saves the frame on screen as `<video name>.<milliseconds>.jpg` next to
+    /// the video, the way Picasa named its snapshots.
+    pub fn save_frame(&self) -> Option<PlayerAction> {
+        let playback = self.playback.as_ref()?;
+        let (path, at) = (playback.path(), playback.position);
+        let saved = video::extract_frame(path, at, None).and_then(|frame| {
+            let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let target = path.with_file_name(format!("{stem}.{}.jpg", at.as_millis()));
+            pico_core::image::DynamicImage::ImageRgba8(frame).to_rgb8().save(&target).map_err(std::io::Error::other)?;
+            Ok(target)
+        });
+        Some(match saved {
+            Ok(path) => PlayerAction::SavedFrame(path),
+            Err(e) => PlayerAction::Error(format!("Could not save the frame: {e}")),
+        })
+    }
 
     #[cfg(test)]
     pub fn state(&self) -> (bool, Duration, bool) {
-        (self.playing, self.position, self.texture.is_some())
+        self.playback.as_ref().map_or((false, Duration::ZERO, false), |p| (p.playing, p.position, p.texture.is_some()))
     }
-}
-
-fn trim_start(filters: &FilterStack) -> Duration {
-    filters.0.iter().rev().find(|f| f.id == "moviestart").and_then(Filter::time).unwrap_or_default()
-}
-
-fn trim_end(filters: &FilterStack) -> Option<Duration> {
-    filters.0.iter().rev().find(|f| f.id == "movieend").and_then(Filter::time)
-}
-
-/// The stack with the trim point `id` replaced (or removed with `None`).
-fn with_trim(filters: &FilterStack, id: &str, at: Option<Duration>) -> FilterStack {
-    let mut stack = FilterStack(filters.0.iter().filter(|f| f.id != id).cloned().collect());
-    if let Some(at) = at {
-        stack.0.push(Filter::trim(id, at));
-    }
-    stack
-}
-
-/// Saves the frame at `at` as `<video name>.<milliseconds>.jpg` next to the
-/// video, the way Picasa named its snapshots.
-fn save_frame(path: &Path, at: Duration) -> std::io::Result<PathBuf> {
-    let frame = video::extract_frame(path, at, None)?;
-    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-    let target = path.with_file_name(format!("{stem}.{}.jpg", at.as_millis()));
-    pico_core::image::DynamicImage::ImageRgba8(frame).to_rgb8().save(&target).map_err(std::io::Error::other)?;
-    Ok(target)
 }
 
 fn clock(d: Duration) -> String {

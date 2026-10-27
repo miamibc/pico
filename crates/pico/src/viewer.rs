@@ -157,6 +157,11 @@ impl Viewer {
         action
     }
 
+    /// Stops a playing video, when the viewer is left.
+    pub fn stop_video(&mut self) {
+        self.player.stop();
+    }
+
     #[cfg(test)]
     pub fn star_flying(&self) -> bool {
         self.star_flight.is_some()
@@ -210,17 +215,15 @@ impl Viewer {
             egui::Panel::top("viewer_info").show(ui, |ui| self.info_line(ui, file));
         }
         if file.kind == MediaKind::Video {
-            self.photo_area = Some(ui.available_rect_before_wrap());
             // Videos get the player instead of the photo editor.
             let player_action = self.player.show(ui, file);
-            return action
-                .or(player_action.map(|a| match a {
-                    PlayerAction::SetFilters(stack) => ViewerAction::SetFilters(stack),
-                    PlayerAction::SavedFrame(path) => ViewerAction::FileAdded(path),
-                    PlayerAction::Error(message) => ViewerAction::Status(message),
-                }))
-                .or_else(|| self.navigation_keys(ui, file));
+            self.photo_area = self.player.area();
+            if let Some(area) = self.photo_area {
+                self.paint_star_badge(ui, area, file.meta.star);
+            }
+            return action.or(player_action.map(from_player)).or_else(|| self.navigation_keys(ui, file));
         }
+        self.player.stop();
         if !self.full_screen && (self.show_edit_panel || self.tool.is_some()) {
             egui::Panel::left("edit_panel").resizable(false).default_size(240.0).show(ui, |ui| {
                 egui::ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| {
@@ -366,6 +369,14 @@ impl Viewer {
                 self.zoom_controls(ui);
             } else {
                 self.show_original = false;
+            }
+            if file.kind == MediaKind::Video
+                && ui
+                    .button("Save Frame as Photo")
+                    .on_hover_text("Save the frame on screen next to the video")
+                    .clicked()
+            {
+                action = self.player.save_frame().map(from_player);
             }
             ui.separator();
             let edit = ui.add(
@@ -838,15 +849,20 @@ impl Viewer {
         } else {
             ui.centered_and_justified(|ui| ui.spinner());
         }
-        // While the star flies, the badge waits for it to land.
-        let now = ui.input(|i| i.time);
-        if meta.star && self.star_flight.as_ref().is_none_or(|flight| flight.landed(now)) {
-            grid::paint_star(ui.painter(), area.left_bottom() + egui::vec2(12.0, -12.0), 28.0);
-        }
+        self.paint_star_badge(ui, area, meta.star);
         if self.tool.is_none() && (double_clicked || background.double_clicked()) {
             return Some(ViewerAction::Close);
         }
         action
+    }
+
+    /// The star in the corner of a starred photo or video. While the star
+    /// flies, the badge waits for it to land.
+    fn paint_star_badge(&self, ui: &egui::Ui, area: egui::Rect, starred: bool) {
+        let now = ui.input(|i| i.time);
+        if starred && self.star_flight.as_ref().is_none_or(|flight| flight.landed(now)) {
+            grid::paint_star(&ui.painter().with_clip_rect(area), area.left_bottom() + egui::vec2(12.0, -12.0), 28.0);
+        }
     }
 
     /// Renders the photo without its edits in the background, once per photo
@@ -1042,6 +1058,14 @@ impl Viewer {
     #[cfg(test)]
     pub fn open_edit_panel(&mut self) {
         self.show_edit_panel = true;
+    }
+}
+
+fn from_player(action: PlayerAction) -> ViewerAction {
+    match action {
+        PlayerAction::SavedFrame(path) => ViewerAction::FileAdded(path),
+        PlayerAction::Error(message) => ViewerAction::Status(message),
+        PlayerAction::Close => ViewerAction::Close,
     }
 }
 

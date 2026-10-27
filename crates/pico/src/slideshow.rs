@@ -1,8 +1,10 @@
 //! Full-screen slideshow of the current folder.
 
+use crate::player::Playback;
 use eframe::egui;
 use pico_core::image::imageops::FilterType;
 use pico_core::library::MediaFile;
+use pico_core::media::MediaKind;
 use pico_core::render;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -25,6 +27,9 @@ pub struct Slideshow {
     shown_at: Option<f64>,
     previous: Option<egui::TextureHandle>,
     slides: HashMap<PathBuf, Slide>,
+    /// The current slide when it is a video: it plays, and the show moves on
+    /// when it ends.
+    video: Option<Playback>,
 }
 
 enum Slide {
@@ -35,7 +40,15 @@ enum Slide {
 
 impl Slideshow {
     pub fn new(index: usize) -> Self {
-        Self { index, playing: true, seconds: DEFAULT_SECONDS, shown_at: None, previous: None, slides: HashMap::new() }
+        Self {
+            index,
+            playing: true,
+            seconds: DEFAULT_SECONDS,
+            shown_at: None,
+            previous: None,
+            slides: HashMap::new(),
+            video: None,
+        }
     }
 
     /// Draws the slideshow and handles its keys. `files` are the folder's files;
@@ -53,7 +66,15 @@ impl Slideshow {
         }
         self.poll(&ctx);
         self.forget_far_slides(files);
-        let current = match self.slides.get(&files[self.index].path) {
+        let file = &files[self.index];
+        if file.kind != MediaKind::Video {
+            self.video = None;
+        } else if self.video.as_ref().is_none_or(|v| v.path() != file.path) {
+            self.video = Some(Playback::open(&file.path, false));
+        }
+        // A video that ffprobe cannot read shows its still like a photo.
+        let video = self.video.as_mut().filter(|v| v.info().is_ok());
+        let mut current = match self.slides.get(&file.path) {
             Some(Slide::Ready(texture)) => Some(texture.clone()),
             _ => None,
         };
@@ -80,6 +101,20 @@ impl Slideshow {
             self.playing = !self.playing;
             self.shown_at = Some(now);
         }
+        let mut video_ended = false;
+        if let Some(video) = video {
+            if self.playing && !video.is_playing() && !video.finished() {
+                video.play(now);
+            } else if !self.playing && video.is_playing() {
+                video.pause();
+            }
+            video.advance(&ctx, now);
+            if let Some(texture) = video.texture() {
+                current = Some(texture.clone());
+            }
+            video_ended = video.finished();
+        }
+        let is_video = self.video.as_ref().is_some_and(|v| v.info().is_ok());
         if faster {
             self.seconds = (self.seconds - 1.0).max(1.0);
         }
@@ -87,7 +122,8 @@ impl Slideshow {
             self.seconds = (self.seconds + 1.0).min(60.0);
         }
         let elapsed = self.shown_at.map_or(0.0, |t| now - t);
-        if right || (self.playing && ready && elapsed >= self.seconds) {
+        let done = if is_video { video_ended } else { ready && elapsed >= self.seconds };
+        if right || (self.playing && done) {
             self.step(files.len(), 1, current.clone());
         } else if left {
             self.step(files.len(), -1, current.clone());
@@ -140,6 +176,11 @@ impl Slideshow {
             ctx.request_repaint_after(std::time::Duration::from_secs_f64(until_next.clamp(0.0, 1.0 / 30.0)));
         }
         action
+    }
+
+    #[cfg(test)]
+    pub fn video_playing(&self) -> bool {
+        self.video.as_ref().is_some_and(Playback::is_playing)
     }
 
     fn step(&mut self, len: usize, delta: isize, current: Option<egui::TextureHandle>) {

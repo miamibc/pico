@@ -2840,6 +2840,10 @@ impl PicoApp {
         self.slideshow.as_ref().filter(|_| matches!(self.view, View::Slideshow(_))).map(|s| s.index)
     }
 
+    pub fn slideshow_video_playing(&self) -> bool {
+        self.slideshow.as_ref().is_some_and(|s| s.video_playing())
+    }
+
     pub fn set_slide_seconds(&mut self, seconds: f64) {
         if let Some(show) = &mut self.slideshow {
             show.seconds = seconds;
@@ -3177,6 +3181,9 @@ impl eframe::App for PicoApp {
         self.take_dropped_files(ctx);
         self.poll_system_theme(ctx);
         self.save_settings_when_settled(ctx);
+        if self.view != View::Photo {
+            self.viewer.stop_video();
+        }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {

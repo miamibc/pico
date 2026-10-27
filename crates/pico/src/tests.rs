@@ -1392,7 +1392,7 @@ fn slideshow_advances_pauses_and_returns() {
 }
 
 #[test]
-fn video_plays_trims_and_saves_a_frame() {
+fn video_plays_saves_a_frame_and_plays_in_slideshows() {
     let Some(ffmpeg) = pico_core::video::ffmpeg() else { return };
     let fixture = Fixture::new("video");
     let made = std::process::Command::new(ffmpeg)
@@ -1431,20 +1431,90 @@ fn video_plays_trims_and_saves_a_frame() {
     let paused_at = harness.state().player_state().1;
     assert!(!harness.state().player_state().0);
 
-    harness.get_by_label("Set Start").click();
-    harness.step();
-    let ini = fixture.ini();
-    let hex = ini.split("filters=moviestart=").nth(1).and_then(|r| r.split(';').next()).expect("trim saved");
-    let ticks = u64::from_str_radix(hex, 16).unwrap();
-    assert_eq!(Duration::from_nanos(ticks * 100), paused_at, "{ini}");
-
-    // The trim adds controls to the bar; let it lay out before clicking.
-    harness.step();
     harness.get_by_label("Save Frame as Photo").click();
     harness.step();
     let saved = format!("clip.{}.jpg", paused_at.as_millis());
     assert!(fixture.dir.join(&saved).is_file(), "{saved} written");
     assert!(harness.state().file_names().contains(&saved), "{:?}", harness.state().file_names());
+
+    // A starred video gets the badge in its corner, above the controls.
+    harness.key_press(Key::S);
+    for _ in 0..12 {
+        harness.step();
+    }
+    screenshot(&mut harness, "video-starred");
+
+    // In a slideshow the video plays, and the show moves on when it ends.
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Num4);
+    harness.step();
+    let at = harness.state().slideshow_index().expect("slideshow");
+    wait_until(&mut harness, "the video to play", |app| app.slideshow_video_playing());
+    wait_until(&mut harness, "the next slide", |app| app.slideshow_index() != Some(at));
+}
+
+#[test]
+fn video_shows_every_frame_while_playing() {
+    let Some(ffmpeg) = pico_core::video::ffmpeg() else { return };
+    let fixture = Fixture::new("video-frames");
+    let made = std::process::Command::new(ffmpeg)
+        .args(["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=160x120:rate=10:duration=4"])
+        .args(["-pix_fmt", "yuv420p"])
+        .arg(fixture.dir.join("clip.mp4"))
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let dir = fixture.dir.clone();
+    // Two frames of the UI per video frame, as the player asks for.
+    let mut harness = Harness::builder()
+        .with_size([900.0, 650.0])
+        .with_step_dt(0.05)
+        .build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![dir], false));
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("clip.mp4").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    wait_until(&mut harness, "the first frame", |app| app.player_state().2);
+
+    harness.key_press(Key::Slash);
+    let mut shown = std::collections::BTreeSet::new();
+    for _ in 0..50 {
+        harness.step();
+        // Real time for ffmpeg to keep up.
+        std::thread::sleep(Duration::from_millis(30));
+        shown.insert(harness.state().player_state().1);
+    }
+    assert!(shown.len() >= 15, "only {} of about 25 frames were shown: {shown:?}", shown.len());
+
+    // Leaving for the library or another file stops it.
+    assert!(harness.state().player_state().0);
+    harness.key_press(Key::Escape);
+    harness.step();
+    assert!(!harness.state().is_viewing());
+    assert!(!harness.state().player_state().0, "stopped in the library");
+    harness.key_press(Key::Enter);
+    wait_until(&mut harness, "the first frame", |app| app.player_state().2);
+    harness.key_press(Key::Slash);
+    harness.step();
+    assert!(harness.state().player_state().0);
+    harness.key_press(Key::ArrowLeft);
+    harness.step();
+    assert!(!harness.state().player_state().0, "stopped on the photo before");
+
+    // A click on the picture plays once it is clearly not a double-click;
+    // a double-click goes back to the library, as for photos.
+    harness.key_press(Key::ArrowRight);
+    wait_until(&mut harness, "the first frame", |app| app.player_state().2);
+    harness.get_by_label("Video").click();
+    harness.step();
+    assert!(!harness.state().player_state().0, "waits for a second click");
+    for _ in 0..8 {
+        harness.step();
+    }
+    assert!(harness.state().player_state().0, "a single click plays");
+    double_click(&mut harness, "Video");
+    harness.step();
+    assert!(!harness.state().is_viewing());
+    assert!(!harness.state().player_state().0);
 }
 
 #[test]

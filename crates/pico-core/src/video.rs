@@ -170,27 +170,71 @@ impl Drop for FrameStream {
 }
 
 /// Plays a video's sound without a window, from `start`, until dropped.
-pub struct SoundPlayer(std::process::Child);
+pub struct SoundPlayer {
+    child: std::process::Child,
+    started: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
 
 impl SoundPlayer {
     pub fn start(path: &Path, start: Duration) -> Option<Self> {
-        let child = Command::new(ffplay()?)
-            .args(["-nodisp", "-autoexit", "-loglevel", "quiet", "-ss"])
-            .arg(format!("{:.3}", start.as_secs_f64()))
+        let at = format!("{:.3}", start.as_secs_f64());
+        // ffplay seeks to the video's key frame before `start`, which can be
+        // seconds early; the trim drops the sound before `start`.
+        let mut child = Command::new(ffplay()?)
+            .args(["-nodisp", "-autoexit", "-vn", "-stats", "-loglevel", "quiet", "-ss", &at])
+            .arg("-af")
+            .arg(format!("atrim=start={at}"))
             .arg(path)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
             .ok()?;
-        Some(Self(child))
+        let started = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let mut stats = child.stderr.take().expect("piped stderr");
+        let flag = started.clone();
+        std::thread::spawn(move || {
+            use std::io::Read;
+            use std::sync::atomic::Ordering;
+            // Status lines start with the playback clock, "nan" until the
+            // sound is out. Read to the end so ffplay never blocks on them.
+            let mut line = Vec::new();
+            let mut buf = [0u8; 512];
+            while let Ok(n) = stats.read(&mut buf)
+                && n > 0
+            {
+                for &byte in &buf[..n] {
+                    if byte == b'\r' || byte == b'\n' {
+                        if clock_started(&String::from_utf8_lossy(&line)) {
+                            flag.store(true, Ordering::Relaxed);
+                        }
+                        line.clear();
+                    } else {
+                        line.push(byte);
+                    }
+                }
+            }
+            // No sound to wait for (a silent video), or ffplay gave up.
+            flag.store(true, Ordering::Relaxed);
+        });
+        Some(Self { child, started })
     }
+
+    /// Whether the sound is playing (or never will), so pictures can start.
+    pub fn started(&self) -> bool {
+        self.started.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+/// Whether an ffplay status line carries a running clock.
+fn clock_started(line: &str) -> bool {
+    line.split_whitespace().next().and_then(|t| t.parse::<f64>().ok()).is_some_and(f64::is_finite)
 }
 
 impl Drop for SoundPlayer {
     fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 
@@ -205,6 +249,14 @@ mod tests {
         assert_eq!((info.width, info.height), (1080, 1920), "portrait phone video is turned upright");
         assert!((info.fps - 29.97).abs() < 0.01);
         assert_eq!(info.duration, Duration::from_millis(12_500));
+    }
+
+    #[test]
+    fn reads_the_sound_clock_from_ffplay() {
+        assert!(!clock_started("    nan M-A:    nan fd=   0 aq=    7KB vq=    0KB sq=    0B"));
+        assert!(clock_started("  -0.02 M-A: -0.000 fd=   0 aq=    9KB vq=    0KB sq=    0B"));
+        assert!(clock_started("   1.25 M-A:  0.000 fd=   0"));
+        assert!(!clock_started(""));
     }
 
     #[test]
