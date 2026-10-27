@@ -1,7 +1,7 @@
 use crate::collage_view::{CollageAction, CollageView};
 use crate::filmstrip;
 use crate::folder_manager::{FolderManager, FolderManagerAction};
-use crate::grid::{self, CaptionMode, FileRef, GridAction, GridView, MAX_THUMB, MIN_THUMB};
+use crate::grid::{self, CaptionMode, FileRef, GridAction, GridView, MAX_THUMB, MIN_THUMB, PhotoDrag};
 use crate::info::{InfoPanel, TagAction};
 use crate::slideshow::{Slideshow, SlideshowAction};
 use crate::thumbs::ThumbCache;
@@ -109,6 +109,8 @@ pub struct PicoApp {
     picked_export_dir: Option<PathBuf>,
     show_options: bool,
     confirm_trash: Option<Vec<FileRef>>,
+    /// Photos dropped on a folder, waiting for "Move" (folder index).
+    confirm_move: Option<(Vec<FileRef>, usize)>,
     show_about: bool,
     status: String,
     /// Whether the folder lists are written to the user's config.
@@ -159,6 +161,7 @@ impl PicoApp {
             picked_export_dir: None,
             show_options: false,
             confirm_trash: None,
+            confirm_move: None,
             show_about: false,
             status: String::new(),
             persist_settings,
@@ -731,6 +734,89 @@ impl PicoApp {
         self.status = format!("Added {} to \"{name}\"", plural(targets.len(), "photo"));
     }
 
+    /// Folders (or files, by their folder) dropped from the file manager join
+    /// the library.
+    fn take_dropped_files(&mut self, ctx: &egui::Context) {
+        let dropped: Vec<PathBuf> = ctx.input(|i| {
+            i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| p.is_absolute()).collect()
+        });
+        if dropped.is_empty() {
+            return;
+        }
+        let mut rules = self.rules.clone();
+        let mut added = 0;
+        for path in dropped {
+            let dir = if path.is_dir() { Some(path) } else { path.parent().map(PathBuf::from) };
+            if let Some(dir) = dir.filter(|d| !rules.state(d).in_library()) {
+                rules.set_in_library(&dir, true);
+                added += 1;
+            }
+        }
+        if added > 0 {
+            self.set_rules(ctx, rules);
+        }
+        self.status = match added {
+            0 => "Those are already in Pico.".to_owned(),
+            n => format!("Added {} to Pico", plural(n, "folder")),
+        };
+    }
+
+    /// While dragging: a note at the pointer, and a hint when files from the
+    /// file manager hover over the window.
+    fn drag_feedback(&self, ctx: &egui::Context) {
+        let pointer = ctx.pointer_latest_pos();
+        if let (Some(drag), Some(pos)) = (egui::DragAndDrop::payload::<PhotoDrag>(ctx), pointer) {
+            egui::Area::new(egui::Id::unique("photo drag"))
+                .order(egui::Order::Tooltip)
+                .fixed_pos(pos + egui::vec2(16.0, 16.0))
+                .interactable(false)
+                .show(ctx, |ui| {
+                    egui::Frame::popup(ui.style()).show(ui, |ui| {
+                        ui.label(format!("{}: drop on a folder, an album or the tray", plural(drag.0.len(), "photo")));
+                    });
+                });
+        }
+        if ctx.input(|i| !i.raw.hovered_files.is_empty()) {
+            let screen = ctx.content_rect();
+            let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::unique("file drop")));
+            painter.rect_filled(screen, 0.0, egui::Color32::from_black_alpha(160));
+            painter.text(
+                screen.center(),
+                egui::Align2::CENTER_CENTER,
+                "Drop folders here to add them to Pico",
+                egui::FontId::proportional(24.0),
+                egui::Color32::WHITE,
+            );
+        }
+    }
+
+    /// Moves files into folder `dest` on disk, metadata included, then rescans.
+    fn move_files(&mut self, ctx: &egui::Context, files: &[FileRef], dest: usize) {
+        let mut files: Vec<FileRef> = files.iter().copied().filter(|at| at.0 != dest).collect();
+        // From the back, so the indices of the files still to move hold.
+        files.sort_unstable_by(|a, b| b.cmp(a));
+        let (mut moved, mut failed) = (0, Vec::new());
+        for (fi, i) in files {
+            let (src, target) = if fi < dest {
+                let (left, right) = self.folders.split_at_mut(dest);
+                (&mut left[fi], &mut right[0])
+            } else {
+                let (left, right) = self.folders.split_at_mut(fi);
+                (&mut right[0], &mut left[dest])
+            };
+            match fileops::move_to_folder(src, i, target) {
+                Ok(()) => moved += 1,
+                Err(e) => failed.push(e.to_string()),
+            }
+        }
+        let name = self.folders.get(dest).map(|f| f.name.clone()).unwrap_or_default();
+        self.rescan(ctx);
+        self.status = match failed.first() {
+            None => format!("Moved {} to \"{name}\"", plural(moved, "file")),
+            Some(first) => format!("Moved {}, {} stayed: {first}", plural(moved, "file"), failed.len()),
+        };
+    }
+
     /// Full-screen photo viewing: the window fills the screen and only the
     /// photo is drawn.
     fn set_full_screen(&mut self, ctx: &egui::Context, on: bool) {
@@ -1287,8 +1373,13 @@ impl PicoApp {
             ui.label(egui::RichText::new("Albums").strong());
             for album in &albums {
                 let open = self.source == Some(Source::Album(album.token.clone()));
-                if ui.selectable_label(open, format!("{}  ({})", album.name, album.members.len())).clicked() {
+                let response = ui.selectable_label(open, format!("{}  ({})", album.name, album.members.len()));
+                if response.clicked() {
                     picked_album = Some(album.token.clone());
+                }
+                if let Some(drag) = drop_target(ui, &response) {
+                    self.selection = drag.0.iter().copied().collect();
+                    self.add_to_album(&album.token, &album.name);
                 }
             }
         }
@@ -1340,6 +1431,7 @@ impl PicoApp {
         egui::ScrollArea::vertical().show(ui, |ui| {
             let mut picked = None;
             let mut menus = Vec::new();
+            let mut moves = None;
             for (index, folder) in self.folders.iter().enumerate() {
                 let label = format!("{}  ({})", folder.name, folder.files.len());
                 let response = ui
@@ -1347,6 +1439,12 @@ impl PicoApp {
                     .on_hover_text(folder.path.display().to_string());
                 if response.clicked() {
                     picked = Some(index);
+                }
+                if let Some(drag) = drop_target(ui, &response) {
+                    let elsewhere: Vec<FileRef> = drag.0.iter().copied().filter(|at| at.0 != index).collect();
+                    if !elsewhere.is_empty() {
+                        moves = Some((elsewhere, index));
+                    }
                 }
                 menus.push((index, response));
             }
@@ -1356,12 +1454,19 @@ impl PicoApp {
             for (index, response) in menus {
                 response.context_menu(|ui| self.folder_context_menu(ui, index));
             }
+            if moves.is_some() {
+                self.confirm_move = moves;
+            }
         });
     }
 
     fn library(&mut self, ui: &mut egui::Ui) {
         egui::Panel::left("folders").resizable(true).default_size(260.0).show(ui, |ui| self.folder_list(ui));
-        egui::Panel::bottom("tray").show(ui, |ui| self.tray_panel(ui));
+        let tray = egui::Panel::bottom("tray").show(ui, |ui| self.tray_panel(ui)).response;
+        if let Some(drag) = drop_target(ui, &tray) {
+            self.selection = drag.0.iter().copied().collect();
+            self.hold();
+        }
         egui::CentralPanel::default_margins().show(ui, |ui| {
             if self.folders.is_empty() {
                 ui.centered_and_justified(|ui| {
@@ -1771,6 +1876,26 @@ impl PicoApp {
             }
         }
 
+        if let Some((files, dest)) = self.confirm_move.take() {
+            let mut open = true;
+            let mut confirmed = false;
+            let mut keep = false;
+            let name = self.folders.get(dest).map(|f| f.name.clone()).unwrap_or_default();
+            egui::Window::new("Move Photos").open(&mut open).collapsible(false).show(ctx, |ui| {
+                ui.label(format!("Move {} to \"{name}\"?", plural(files.len(), "file")));
+                ui.label(egui::RichText::new("Captions, stars and edits go along.").weak());
+                ui.horizontal(|ui| {
+                    confirmed = ui.button("Move").clicked();
+                    keep = ui.button("Cancel").clicked();
+                });
+            });
+            if confirmed {
+                self.move_files(ctx, &files, dest);
+            } else if open && !keep && !ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.confirm_move = Some((files, dest));
+            }
+        }
+
         if let Some(mut dialog) = self.movie.take() {
             let mut open = true;
             let mut create = false;
@@ -2028,6 +2153,10 @@ impl PicoApp {
         self.thumb_size
     }
 
+    pub fn confirming_move(&self) -> bool {
+        self.confirm_move.is_some()
+    }
+
     pub fn tray_len(&self) -> usize {
         self.tray.len()
     }
@@ -2181,6 +2310,16 @@ fn dir_size(dir: &std::path::Path) -> u64 {
         .sum()
 }
 
+/// Highlights `response` while photos are dragged over it, and returns them
+/// when they are dropped on it.
+fn drop_target(ui: &egui::Ui, response: &egui::Response) -> Option<std::sync::Arc<PhotoDrag>> {
+    if response.dnd_hover_payload::<PhotoDrag>().is_some() {
+        let stroke = egui::Stroke::new(2.0, ui.visuals().selection.stroke.color);
+        ui.painter().rect_stroke(response.rect, 4.0, stroke, egui::StrokeKind::Inside);
+    }
+    response.dnd_release_payload::<PhotoDrag>()
+}
+
 fn plural(count: usize, noun: &str) -> String {
     if count == 1 { format!("1 {noun}") } else { format!("{count} {noun}s") }
 }
@@ -2193,6 +2332,7 @@ impl eframe::App for PicoApp {
         self.poll_folder_picker(ctx);
         self.poll_movie();
         self.thumbs.poll(ctx);
+        self.take_dropped_files(ctx);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -2233,5 +2373,6 @@ impl eframe::App for PicoApp {
             View::Slideshow(_) | View::Collage => {}
         }
         self.dialogs(&ui.ctx().clone());
+        self.drag_feedback(ui.ctx());
     }
 }

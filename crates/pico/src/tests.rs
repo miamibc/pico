@@ -598,6 +598,69 @@ fn drag_a_rectangle_to_select() {
 }
 
 #[test]
+fn drag_photos_to_folders_and_the_tray_and_drop_folders_in() {
+    let fixture = Fixture::new("drag-drop");
+    std::fs::create_dir_all(fixture.dir.join("more")).unwrap();
+    RgbImage::from_pixel(60, 40, Rgb([200, 200, 0])).save(fixture.dir.join("more/d.png")).unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 2);
+    harness.get_by_label("Holiday  (3)").click();
+    harness.step();
+
+    let drag = |harness: &mut Harness<'_, PicoApp>, from: &str, to: egui::Pos2| {
+        let start = harness.get_by_label(from).rect().center();
+        harness.drag_at(start);
+        harness.step();
+        harness.hover_at(start + egui::vec2(15.0, 15.0));
+        harness.step();
+        harness.hover_at(to);
+        harness.step();
+        screenshot(harness, "drag");
+        harness.drop_at(to);
+        harness.step();
+        harness.step();
+    };
+    let folder = harness.get_by_label("more  (1)").rect().center();
+    drag(&mut harness, "b.png", folder);
+    assert!(harness.state().confirming_move());
+    harness.get_by_label("Move").click();
+    harness.step();
+    wait_until(&mut harness, "the rescan", |app| !app.confirming_move() && app.folder_count() == 2);
+    assert!(fixture.dir.join("more/b.png").is_file() && !fixture.dir.join("b.png").exists());
+    let moved_ini = std::fs::read_to_string(fixture.dir.join("more/.picasa.ini")).unwrap();
+    assert!(moved_ini.contains("[b.png]\r\nbackuphash=4242"), "the metadata went along: {moved_ini}");
+
+    harness.get_by_label("Holiday  (2)").click();
+    harness.step();
+    let tray = harness.get_by_label("Photo Tray").rect().center();
+    drag(&mut harness, "c.png", tray);
+    assert_eq!(harness.state().tray_len(), 1);
+
+    // A folder dropped from the file manager joins the library.
+    let outside = fixture.dir.with_file_name(format!("pico-ui-drop-outside-{}", std::process::id()));
+    std::fs::create_dir_all(&outside).unwrap();
+    RgbImage::from_pixel(30, 30, Rgb([9, 9, 9])).save(outside.join("e.png")).unwrap();
+    harness.input_mut().dropped_files.push(std::sync::Arc::new(TestDrop(outside.clone())));
+    harness.step();
+    assert_eq!(harness.state().watched_count(), 2);
+    wait_until(&mut harness, "the rescan", |app| app.folder_count() == 3);
+    std::fs::remove_dir_all(&outside).unwrap();
+}
+
+#[derive(Debug)]
+struct TestDrop(PathBuf);
+
+impl egui::DroppedFile for TestDrop {
+    fn path(&self) -> &Path {
+        &self.0
+    }
+
+    fn bytes(&self) -> Result<Vec<u8>, String> {
+        std::fs::read(&self.0).map_err(|e| e.to_string())
+    }
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);

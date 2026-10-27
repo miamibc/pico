@@ -1,5 +1,6 @@
-//! File operations that keep `.picasa.ini` in step: rename, move to trash,
-//! and handing files to the desktop (open in another program, show in folder).
+//! File operations that keep `.picasa.ini` in step: rename, move to another
+//! folder, move to trash, and handing files to the desktop (open in another
+//! program, show in folder).
 
 use crate::export::ORIGINALS_DIR;
 use crate::library::Folder;
@@ -32,6 +33,55 @@ pub fn rename(folder: &mut Folder, index: usize, new_name: &str) -> io::Result<(
     }
     folder.files[index].path = target;
     folder.ini.save(&folder.ini_path)
+}
+
+/// Moves a file into another folder with its INI section, its saved original
+/// and the declarations of the albums it is in. Never overwrites: a file of
+/// the same name in `dest` is an error. Works across disks by copying.
+pub fn move_to_folder(src: &mut Folder, index: usize, dest: &mut Folder) -> io::Result<()> {
+    let name = src.files[index].name();
+    let target = dest.path.join(&name);
+    if src.path == dest.path {
+        return Ok(());
+    }
+    if target.exists() {
+        return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("{name} is already there")));
+    }
+    move_path(&src.files[index].path, &target)?;
+    let original = src.path.join(ORIGINALS_DIR).join(&name);
+    if original.is_file() {
+        let originals = dest.path.join(ORIGINALS_DIR);
+        std::fs::create_dir_all(&originals)?;
+        let _ = move_path(&original, &originals.join(&name));
+    }
+    if let Some(position) = src.ini.sections.iter().position(|s| s.name == name) {
+        let section = src.ini.sections.remove(position);
+        for token in &src.files[index].meta.albums {
+            let album = format!("{}{token}", crate::library::ALBUM_PREFIX);
+            if dest.ini.section(&album).is_none()
+                && let Some(declaration) = src.ini.section(&album).cloned()
+            {
+                dest.ini.sections.push(declaration);
+            }
+        }
+        dest.ini.sections.retain(|s| s.name != name);
+        dest.ini.sections.push(section);
+        dest.ini.save(&dest.ini_path)?;
+        src.ini.save(&src.ini_path)?;
+    }
+    let mut file = src.files.remove(index);
+    file.path = target;
+    dest.files.push(file);
+    Ok(())
+}
+
+/// `rename`, or copy and delete when the target is on another disk.
+fn move_path(from: &Path, to: &Path) -> io::Result<()> {
+    if std::fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    std::fs::copy(from, to)?;
+    std::fs::remove_file(from)
 }
 
 /// Moves a file to the trash and drops its INI section. Returns where it went.
@@ -236,6 +286,42 @@ mod tests {
         assert!(dir.join("sunset.png").is_file() && !dir.join("a.png").exists());
         assert!(dir.join(ORIGINALS_DIR).join("sunset.png").is_file());
         assert!(std::fs::read_to_string(dir.join(".picasa.ini")).unwrap().contains("[sunset.png]\r\nstar=yes"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn move_carries_metadata_backup_and_albums() {
+        let dir = temp_dir("move");
+        let (from, to) = (dir.join("from"), dir.join("to"));
+        for d in [&from, &to] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        image::RgbImage::new(4, 4).save(from.join("a.png")).unwrap();
+        image::RgbImage::new(4, 4).save(from.join("b.png")).unwrap();
+        image::RgbImage::new(4, 4).save(to.join("b.png")).unwrap();
+        std::fs::create_dir_all(from.join(ORIGINALS_DIR)).unwrap();
+        std::fs::write(from.join(ORIGINALS_DIR).join("a.png"), b"original").unwrap();
+        std::fs::write(
+            from.join(".picasa.ini"),
+            "[.album:t1]\r\nname=Trip\r\ntoken=t1\r\n[a.png]\r\nstar=yes\r\nalbums=t1\r\n[b.png]\r\nstar=yes\r\n",
+        )
+        .unwrap();
+        let mut folders = library::scan(&dir);
+        let (src, dest) = folders.split_at_mut(1);
+        let (src, dest) = (&mut src[0], &mut dest[0]);
+        assert_eq!((src.path.clone(), dest.path.clone()), (from.clone(), to.clone()));
+        assert!(move_to_folder(src, 1, dest).is_err(), "b.png is already there");
+        move_to_folder(src, 0, dest).unwrap();
+        assert!(to.join("a.png").is_file() && !from.join("a.png").exists());
+        assert!(to.join(ORIGINALS_DIR).join("a.png").is_file());
+        let to_ini = std::fs::read_to_string(to.join(".picasa.ini")).unwrap();
+        assert!(
+            to_ini.contains("[.album:t1]\r\nname=Trip") && to_ini.contains("[a.png]\r\nstar=yes\r\nalbums=t1"),
+            "{to_ini}"
+        );
+        let from_ini = std::fs::read_to_string(from.join(".picasa.ini")).unwrap();
+        assert!(!from_ini.contains("[a.png]") && from_ini.contains("[b.png]"), "{from_ini}");
+        assert_eq!(dest.files.iter().map(|f| f.name()).collect::<Vec<_>>(), ["b.png", "a.png"]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

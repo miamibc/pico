@@ -55,6 +55,10 @@ pub enum GridAction {
     },
 }
 
+/// Photos being dragged out of the grid, to a folder, an album or the tray.
+#[derive(Clone)]
+pub struct PhotoDrag(pub Vec<FileRef>);
+
 pub struct GridView<'a> {
     pub items: &'a [(FileRef, &'a MediaFile)],
     pub thumb_size: f32,
@@ -98,7 +102,7 @@ pub fn show(
             ui.horizontal(|ui| {
                 for &(at, file) in view.items.iter().skip(row * columns).take(columns) {
                     let (rect, response) =
-                        ui.allocate_exact_size(egui::vec2(cell, cell + text_height), egui::Sense::click());
+                        ui.allocate_exact_size(egui::vec2(cell, cell + text_height), egui::Sense::click_and_drag());
                     let image_area = egui::Rect::from_min_size(rect.min, egui::vec2(cell, cell));
                     let inner = image_area.shrink(4.0);
                     let painter = ui.painter_at(rect);
@@ -170,6 +174,15 @@ pub fn show(
                     } else if response.clicked() {
                         let modifiers = ui.input(|i| i.modifiers);
                         action = Some(GridAction::Click { at, toggle: modifiers.command, range: modifiers.shift });
+                    }
+                    if response.drag_started() {
+                        // A selected photo drags the whole selection along.
+                        let photos = if view.selection.contains(&at) {
+                            view.selection.iter().copied().collect()
+                        } else {
+                            vec![at]
+                        };
+                        response.dnd_set_drag_payload(PhotoDrag(photos));
                     }
                     cells.push((at, response));
                 }

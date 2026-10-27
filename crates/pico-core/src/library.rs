@@ -269,7 +269,7 @@ pub struct Album {
     pub members: Vec<(usize, usize)>,
 }
 
-const ALBUM_PREFIX: &str = ".album:";
+pub(crate) const ALBUM_PREFIX: &str = ".album:";
 
 /// Collects albums from every folder's INI. An album is declared by a
 /// `[.album:<token>]` section in each folder holding its photos; photos list
