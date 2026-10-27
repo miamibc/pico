@@ -56,12 +56,19 @@ pub fn columns_for(width: f32, thumb_size: f32) -> usize {
     ((width / (thumb_size + 8.0)).floor() as usize).max(1)
 }
 
-pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> Option<GridAction> {
+/// Draws the grid. Besides the action, returns the visible cells' responses,
+/// so the caller can attach context menus to them.
+pub fn show(
+    ui: &mut egui::Ui,
+    view: GridView<'_>,
+    thumbs: &mut ThumbCache,
+) -> (Option<GridAction>, Vec<(FileRef, egui::Response)>) {
     let cell = view.thumb_size + 8.0;
     let text_height = if view.captions == CaptionMode::None { 0.0 } else { 18.0 };
     let columns = columns_for(ui.available_width(), view.thumb_size);
     let rows = view.items.len().div_ceil(columns);
     let mut action = None;
+    let mut cells = Vec::new();
 
     egui::ScrollArea::vertical().auto_shrink(false).show_rows(ui, cell + text_height, rows, |ui, row_range| {
         for row in row_range {
@@ -141,11 +148,12 @@ pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> O
                         let modifiers = ui.input(|i| i.modifiers);
                         action = Some(GridAction::Click { at, toggle: modifiers.command, range: modifiers.shift });
                     }
+                    cells.push((at, response));
                 }
             });
         }
     });
-    action
+    (action, cells)
 }
 
 pub fn full_uv() -> egui::Rect {

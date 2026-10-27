@@ -452,6 +452,46 @@ fn home_end_and_full_screen_in_viewer() {
 }
 
 #[test]
+fn context_menus_on_photos_and_folders() {
+    let fixture = Fixture::new("context-menu");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+
+    // Right-click on an unselected photo works on that photo alone.
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.get_by_label("b.png").click_secondary();
+    harness.step();
+    harness.step();
+    harness.get_by_label("View and Edit");
+    harness.get_by_label("Star").click();
+    harness.step();
+    assert!(fixture.ini().contains("[b.png]\r\nbackuphash=4242\r\nstar=yes\r\n"), "{}", fixture.ini());
+    assert!(!fixture.ini().contains("[a.png]"), "{}", fixture.ini());
+
+    // On a selection of two it works on both, without single-photo commands.
+    harness.get_by_label("a.png").click_modifiers(Modifiers::COMMAND);
+    harness.step();
+    harness.get_by_label("b.png").click_secondary();
+    harness.step();
+    harness.step();
+    assert!(harness.query_by_label("View and Edit").is_none());
+    screenshot(&mut harness, "context-menu");
+    harness.get_by_label("Star").click();
+    harness.step();
+    assert!(fixture.ini().contains("[a.png]\r\nstar=yes\r\n"), "{}", fixture.ini());
+
+    harness.get_by_label("Holiday  (3)").click_secondary();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Remove from Pico").click();
+    harness.step();
+    assert_eq!(harness.state().watched_count(), 0);
+    wait_until(&mut harness, "the rescan", |app| app.folder_count() == 0);
+    assert!(fixture.dir.join("a.png").is_file());
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);

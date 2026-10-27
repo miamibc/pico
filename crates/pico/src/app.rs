@@ -994,6 +994,94 @@ impl PicoApp {
         }
     }
 
+    /// Right-click on a thumbnail; works on the selection, which holds `at`.
+    fn photo_context_menu(&mut self, ui: &mut egui::Ui, at: FileRef) {
+        let many = self.selection.len() > 1;
+        if !many && ui.button("View and Edit").clicked() {
+            self.current = Some(at);
+            self.view = View::Photo;
+        }
+        let star = !self.targets().iter().all(|&at| self.file(at).is_some_and(|f| f.meta.star));
+        if ui.button(if star { "Star" } else { "Unstar" }).on_hover_text("S").clicked() {
+            self.edit_targets(|meta| meta.star = star);
+        }
+        if ui.button("Rotate Clockwise").on_hover_text("Ctrl+R").clicked() {
+            self.rotate_targets(1);
+        }
+        if ui.button("Rotate Counterclockwise").on_hover_text("Ctrl+Shift+R").clicked() {
+            self.rotate_targets(-1);
+        }
+        self.album_menu(ui);
+        let hide = !self.targets().iter().all(|&at| self.file(at).is_some_and(|f| f.meta.hidden));
+        if ui.button(if hide { "Hide" } else { "Unhide" }).clicked() {
+            self.edit_targets(|meta| meta.hidden = hide);
+        }
+        ui.separator();
+        if ui.button("Export to Folder…").on_hover_text("Ctrl+Shift+S").clicked() {
+            self.open_export();
+        }
+        if !many {
+            if ui.button("Locate on Disk").on_hover_text("Ctrl+Enter").clicked() {
+                self.locate_on_disk();
+            }
+            if ui.button("Open in Editor").on_hover_text("Ctrl+Shift+O").clicked() {
+                self.open_in_editor();
+            }
+            if ui.button("Rename…").on_hover_text("F2").clicked() {
+                self.start_rename();
+            }
+            if ui.button("Copy Full Path").clicked()
+                && let Some(file) = self.file(at)
+            {
+                ui.ctx().copy_text(file.path.display().to_string());
+            }
+        }
+        if ui.button("Move to Trash…").on_hover_text("Delete").clicked() {
+            self.confirm_trash = Some(self.targets());
+        }
+    }
+
+    /// Right-click on a folder in the list.
+    fn folder_context_menu(&mut self, ui: &mut egui::Ui, index: usize) {
+        let Some(path) = self.folders.get(index).map(|f| f.path.clone()) else { return };
+        if ui.button("View Slideshow").clicked() {
+            self.select_source(Source::Folder(index));
+            self.start_slideshow(ui.ctx());
+        }
+        if ui.button("Locate on Disk").clicked()
+            && let Err(e) = fileops::open_external(&path)
+        {
+            self.status = format!("Could not open the file manager: {e}");
+        }
+        if ui.button("Copy Full Path").clicked() {
+            ui.ctx().copy_text(path.display().to_string());
+        }
+        ui.separator();
+        if ui.button("Rescan Folders").clicked() {
+            self.rescan(ui.ctx());
+        }
+        if ui.button("Remove from Pico").on_hover_text("Leave this folder out; no files are touched").clicked() {
+            let mut rules = self.rules.clone();
+            rules.set_in_library(&path, false);
+            let name = Folder::file_name(&path);
+            self.set_rules(ui.ctx(), rules);
+            self.status = format!("Left out {name}. Tools > Folder Manager brings it back.");
+        }
+    }
+
+    fn album_menu(&mut self, ui: &mut egui::Ui) {
+        ui.menu_button("Add to Album", |ui| {
+            for album in library::albums(&self.folders) {
+                if ui.button(&album.name).clicked() {
+                    self.add_to_album(&album.token, &album.name);
+                }
+            }
+            if ui.button("New Album…").on_hover_text("Ctrl+N").clicked() {
+                self.new_album = Some(String::new());
+            }
+        });
+    }
+
     fn picture_menu(&mut self, ui: &mut egui::Ui) {
         if ui.button("Star / Unstar").on_hover_text("S").clicked() {
             let star = !self.targets().iter().all(|&at| self.file(at).is_some_and(|f| f.meta.star));
@@ -1020,16 +1108,7 @@ impl PicoApp {
             }
         }
         ui.separator();
-        ui.menu_button("Add to Album", |ui| {
-            for album in library::albums(&self.folders) {
-                if ui.button(&album.name).clicked() {
-                    self.add_to_album(&album.token, &album.name);
-                }
-            }
-            if ui.button("New Album…").on_hover_text("Ctrl+N").clicked() {
-                self.new_album = Some(String::new());
-            }
-        });
+        self.album_menu(ui);
         if let Some(Source::Album(token)) = self.source.clone()
             && ui.button("Remove from Album").clicked()
         {
@@ -1115,6 +1194,7 @@ impl PicoApp {
         ui.label(egui::RichText::new("Folders").strong());
         egui::ScrollArea::vertical().show(ui, |ui| {
             let mut picked = None;
+            let mut menus = Vec::new();
             for (index, folder) in self.folders.iter().enumerate() {
                 let label = format!("{}  ({})", folder.name, folder.files.len());
                 let response = ui
@@ -1123,9 +1203,13 @@ impl PicoApp {
                 if response.clicked() {
                     picked = Some(index);
                 }
+                menus.push((index, response));
             }
             if let Some(index) = picked {
                 self.select_source(Source::Folder(index));
+            }
+            for (index, response) in menus {
+                response.context_menu(|ui| self.folder_context_menu(ui, index));
             }
         });
     }
@@ -1164,7 +1248,17 @@ impl PicoApp {
                 current: self.current,
                 captions: self.captions,
             };
-            let action = grid::show(ui, view, &mut self.thumbs);
+            let (action, cells) = grid::show(ui, view, &mut self.thumbs);
+            for (at, response) in cells {
+                if response.secondary_clicked() && !self.selection.contains(&at) {
+                    // Right-clicking outside the selection works on that photo.
+                    self.selection = BTreeSet::from([at]);
+                }
+                if response.secondary_clicked() {
+                    self.current = Some(at);
+                }
+                response.context_menu(|ui| self.photo_context_menu(ui, at));
+            }
             match action {
                 Some(GridAction::Click { at, toggle, range }) => self.click(at, toggle, range),
                 Some(GridAction::Open(at)) => {
