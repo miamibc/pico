@@ -492,6 +492,49 @@ fn context_menus_on_photos_and_folders() {
 }
 
 #[test]
+fn photo_tray_holds_photos_across_folders() {
+    let fixture = Fixture::new("tray");
+    std::fs::create_dir_all(fixture.dir.join("more")).unwrap();
+    RgbImage::from_pixel(60, 40, Rgb([200, 200, 0])).save(fixture.dir.join("more/d.png")).unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 2);
+    harness.get_by_label("Holiday  (3)").click();
+    harness.step();
+
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::H);
+    harness.step();
+    assert_eq!(harness.state().tray_len(), 1);
+    harness.get_by_label("more  (1)").click();
+    harness.step();
+    harness.get_by_label("d.png").click();
+    harness.step();
+    harness.get_by_label("Hold").click();
+    harness.step();
+    assert_eq!(harness.state().tray_len(), 2, "held photos stay when the folder changes");
+    harness.step();
+
+    harness.get_by_label("Photo Tray  (2)").click();
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["a.png", "d.png"]);
+    wait_until(&mut harness, "the thumbnails", |app| app.thumbnails_pending() == 0);
+    screenshot(&mut harness, "tray");
+
+    harness.get_by_label("Export…").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Export 2 pictures");
+    harness.key_press(Key::Escape);
+    harness.step();
+
+    harness.get_by_label("Clear").click();
+    harness.step();
+    assert_eq!(harness.state().tray_len(), 0);
+    assert!(fixture.dir.join("more/d.png").is_file());
+}
+
+#[test]
 fn arrows_move_through_photos_in_viewer() {
     let fixture = Fixture::new("arrows");
     let mut harness = harness(&fixture.dir);

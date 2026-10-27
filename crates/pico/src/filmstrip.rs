@@ -11,16 +11,19 @@ use pico_core::media::MediaKind;
 pub const CELL: f32 = 64.0;
 
 /// Draws the strip and returns the photo clicked, if any. The current photo
-/// is scrolled to the middle whenever it changes.
+/// is scrolled to the middle whenever it changes. `label` names each
+/// thumbnail for screen readers, from the file name.
 pub fn show(
     ui: &mut egui::Ui,
     items: &[(FileRef, &MediaFile)],
-    current: FileRef,
+    current: Option<FileRef>,
     thumbs: &mut ThumbCache,
+    label: impl Fn(&str) -> String,
 ) -> Option<FileRef> {
     let centered_on = ui.scope_id().with("filmstrip centered on");
     let mut area = egui::ScrollArea::horizontal().id_salt("filmstrip").auto_shrink([false, true]);
-    if ui.data(|d| d.get_temp::<FileRef>(centered_on)) != Some(current)
+    if let Some(current) = current
+        && ui.data(|d| d.get_temp::<FileRef>(centered_on)) != Some(current)
         && let Some(index) = items.iter().position(|(at, _)| *at == current)
     {
         let offset = (index as f32 + 0.5) * CELL - ui.available_width() / 2.0;
@@ -42,7 +45,7 @@ pub fn show(
             let response = ui.interact(rect, ui.scope_id().with(("filmstrip", at)), egui::Sense::click());
             let painter = ui.painter_at(rect);
             let inner = rect.shrink(4.0);
-            if at == current {
+            if Some(at) == current {
                 painter.rect_filled(rect, 4.0, ui.visuals().selection.bg_fill);
             } else if response.hovered() {
                 painter.rect_filled(rect, 4.0, ui.visuals().widgets.hovered.weak_bg_fill);
@@ -71,8 +74,9 @@ pub fn show(
                 );
             }
             let name = file.name();
-            response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, at == current, &name));
-            if response.on_hover_text(&name).clicked() && at != current {
+            let label = label(&name);
+            response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, Some(at) == current, &label));
+            if response.on_hover_text(&name).clicked() && Some(at) != current {
                 clicked = Some(at);
             }
         }

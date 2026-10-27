@@ -56,6 +56,8 @@ enum Source {
     Month(String),
     /// Places: photos taken in one ~10 km cell, by place key.
     Place(String),
+    /// The photos held in the Photo Tray.
+    Tray,
 }
 
 pub struct PicoApp {
@@ -67,6 +69,9 @@ pub struct PicoApp {
     current: Option<FileRef>,
     /// Photos picked for batch commands (Ctrl/Shift-click, Ctrl+A).
     selection: BTreeSet<FileRef>,
+    /// Photos held in the Photo Tray across folders (Ctrl+H), by path so they
+    /// survive rescans.
+    tray: Vec<PathBuf>,
     search: String,
     focus_search: bool,
     starred_only: bool,
@@ -119,6 +124,7 @@ impl PicoApp {
             source: None,
             current: None,
             selection: BTreeSet::new(),
+            tray: Vec::new(),
             search: String::new(),
             focus_search: false,
             starred_only: false,
@@ -203,6 +209,7 @@ impl PicoApp {
             Some(i) => Some(Source::Folder(i)),
             None if matches!(self.source, Some(Source::Starred | Source::Album(_))) => self.source.take(),
             None if self.source == Some(Source::Duplicates) => Some(Source::Starred),
+            None if self.source == Some(Source::Tray) => Some(Source::Tray),
             None => (!self.folders.is_empty()).then_some(Source::Folder(0)),
         };
         self.current = None;
@@ -231,6 +238,119 @@ impl PicoApp {
         self.rescan(ctx);
     }
 
+    /// Where the tray's photos are now; files that went away are skipped.
+    fn tray_refs(&self) -> Vec<FileRef> {
+        self.tray
+            .iter()
+            .filter_map(|path| {
+                let fi = self.folders.iter().position(|f| Some(f.path.as_path()) == path.parent())?;
+                let i = self.folders[fi].files.iter().position(|m| &m.path == path)?;
+                Some((fi, i))
+            })
+            .collect()
+    }
+
+    /// Holds the selection in the tray (Ctrl+H).
+    fn hold(&mut self) {
+        for at in self.targets() {
+            if let Some(file) = self.file(at)
+                && !self.tray.contains(&file.path)
+            {
+                self.tray.push(file.path.clone());
+            }
+        }
+    }
+
+    /// Picks the photos tray actions work on: the held tray, else the
+    /// selection. A held tray becomes the listing and the selection, so the
+    /// existing commands (slideshow, export, collage, movie) see it.
+    fn take_tray(&mut self) -> bool {
+        if self.tray.is_empty() {
+            return !self.targets().is_empty();
+        }
+        let refs = self.tray_refs();
+        self.select_source(Source::Tray);
+        self.selection = refs.iter().copied().collect();
+        self.current = refs.first().copied();
+        !refs.is_empty()
+    }
+
+    fn tray_panel(&mut self, ui: &mut egui::Ui) {
+        let held = !self.tray.is_empty();
+        let refs = if held { self.tray_refs() } else { self.selection.iter().copied().collect() };
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.set_width(150.0);
+                ui.strong("Photo Tray");
+                let note = if held {
+                    format!("{} held", plural(refs.len(), "photo"))
+                } else if refs.is_empty() {
+                    "Select photos, then Hold".to_owned()
+                } else {
+                    format!("{} selected", plural(refs.len(), "photo"))
+                };
+                ui.label(egui::RichText::new(note).weak());
+                ui.horizontal(|ui| {
+                    let any = !self.targets().is_empty();
+                    let hold = ui.add_enabled(any, egui::Button::new("Hold"));
+                    if hold.on_hover_text("Keep the selection in the tray (Ctrl+H)").clicked() {
+                        self.hold();
+                    }
+                    let clear = ui.add_enabled(held, egui::Button::new("Clear"));
+                    if clear.on_hover_text("Empty the tray; the photos stay where they are").clicked() {
+                        self.tray.clear();
+                        if self.source == Some(Source::Tray) {
+                            self.source = None;
+                        }
+                    }
+                });
+            });
+            ui.separator();
+            let items: Vec<(FileRef, &MediaFile)> =
+                refs.iter().filter_map(|&at| Some((at, self.folders.get(at.0)?.files.get(at.1)?))).collect();
+            let strip_width = (ui.available_width() - 330.0).max(100.0);
+            let picked = ui
+                .allocate_ui(egui::vec2(strip_width, filmstrip::CELL), |ui| {
+                    filmstrip::show(ui, &items, None, &mut self.thumbs, |name| format!("Tray: {name}"))
+                })
+                .inner;
+            if let Some(at) = picked {
+                self.current = Some(at);
+            }
+            ui.separator();
+            ui.add_enabled_ui(!refs.is_empty(), |ui| {
+                egui::Grid::new("tray actions").num_columns(2).show(ui, |ui| {
+                    if ui.button("▶ Slideshow").clicked() && self.take_tray() {
+                        self.start_slideshow(ui.ctx());
+                    }
+                    if ui.button("Export…").clicked() && self.take_tray() {
+                        self.open_export();
+                    }
+                    ui.end_row();
+                    if ui.button("Make a Collage…").clicked() && self.take_tray() {
+                        self.open_collage(ui.ctx());
+                    }
+                    if ui.button("Make a Movie…").clicked() && self.take_tray() {
+                        self.open_movie_dialog();
+                    }
+                    ui.end_row();
+                    if held && ui.button("Show Tray").clicked() {
+                        self.select_source(Source::Tray);
+                    }
+                    let remove = held && {
+                        let button = ui.button("Remove");
+                        button.on_hover_text("Take the selected photos out of the tray").clicked()
+                    };
+                    if remove {
+                        let paths: Vec<PathBuf> =
+                            self.selection.iter().filter_map(|&at| self.file(at).map(|f| f.path.clone())).collect();
+                        self.tray.retain(|p| !paths.contains(p));
+                    }
+                });
+            });
+        });
+    }
+
     fn file(&self, at: FileRef) -> Option<&MediaFile> {
         self.folders.get(at.0)?.files.get(at.1)
     }
@@ -246,6 +366,9 @@ impl PicoApp {
         };
         if self.source == Some(Source::Duplicates) && query.is_empty() {
             return self.duplicates.iter().copied().filter(|&at| self.file(at).is_some()).collect();
+        }
+        if self.source == Some(Source::Tray) && query.is_empty() {
+            return self.tray_refs();
         }
         let month = match &self.source {
             Some(Source::Month(key)) if query.is_empty() => Some(key.as_str()),
@@ -840,6 +963,7 @@ impl PicoApp {
             Some(Source::Starred) => Some("Starred".to_owned()),
             Some(Source::Album(token)) => self.album_name(token),
             Some(Source::Duplicates) => Some("Duplicates".to_owned()),
+            Some(Source::Tray) => Some("Photo Tray".to_owned()),
             Some(Source::Month(key)) => Some(library::month_label(key)),
             Some(Source::Place(key)) => Some(format!("Place {key}")),
             None => None,
@@ -1012,6 +1136,9 @@ impl PicoApp {
             self.rotate_targets(-1);
         }
         self.album_menu(ui);
+        if ui.button("Hold in Tray").on_hover_text("Ctrl+H").clicked() {
+            self.hold();
+        }
         let hide = !self.targets().iter().all(|&at| self.file(at).is_some_and(|f| f.meta.hidden));
         if ui.button(if hide { "Hide" } else { "Unhide" }).clicked() {
             self.edit_targets(|meta| meta.hidden = hide);
@@ -1108,6 +1235,9 @@ impl PicoApp {
             }
         }
         ui.separator();
+        if ui.button("Hold in Tray").on_hover_text("Ctrl+H").clicked() {
+            self.hold();
+        }
         self.album_menu(ui);
         if let Some(Source::Album(token)) = self.source.clone()
             && ui.button("Remove from Album").clicked()
@@ -1135,6 +1265,13 @@ impl PicoApp {
         if ui.selectable_label(self.source == Some(Source::Starred), format!("★ Starred Photos  ({starred})")).clicked()
         {
             self.select_source(Source::Starred);
+        }
+        if !self.tray.is_empty()
+            && ui
+                .selectable_label(self.source == Some(Source::Tray), format!("Photo Tray  ({})", self.tray.len()))
+                .clicked()
+        {
+            self.select_source(Source::Tray);
         }
         let albums = library::albums(&self.folders);
         let mut picked_album = None;
@@ -1216,6 +1353,7 @@ impl PicoApp {
 
     fn library(&mut self, ui: &mut egui::Ui) {
         egui::Panel::left("folders").resizable(true).default_size(260.0).show(ui, |ui| self.folder_list(ui));
+        egui::Panel::bottom("tray").show(ui, |ui| self.tray_panel(ui));
         egui::CentralPanel::default_margins().show(ui, |ui| {
             if self.folders.is_empty() {
                 ui.centered_and_justified(|ui| {
@@ -1281,6 +1419,10 @@ impl PicoApp {
                 }
                 Some(Source::Starred) => {
                     ui.heading("Starred Photos");
+                }
+                Some(Source::Tray) => {
+                    ui.heading("Photo Tray");
+                    ui.label(egui::RichText::new("Held photos from any folder").weak());
                 }
                 Some(Source::Album(token)) => {
                     ui.heading(self.album_name(token).unwrap_or_default());
@@ -1371,8 +1513,12 @@ impl PicoApp {
                 open_editor: cmd && shift && i.key_pressed(egui::Key::O),
                 export: cmd && shift && i.key_pressed(egui::Key::S),
                 new_album: cmd && i.key_pressed(egui::Key::N),
+                hold: cmd && i.key_pressed(egui::Key::H),
             }
         });
+        if keys.hold {
+            self.hold();
+        }
         if keys.new_album && !self.targets().is_empty() {
             self.new_album = Some(String::new());
         }
@@ -1466,8 +1612,9 @@ impl PicoApp {
                 .iter()
                 .filter_map(|&r| Some((r, self.folders.get(r.0).and_then(|f| f.files.get(r.1))?)))
                 .collect();
-            let picked =
-                egui::Panel::top("filmstrip").show(ui, |ui| filmstrip::show(ui, &items, at, &mut self.thumbs)).inner;
+            let picked = egui::Panel::top("filmstrip")
+                .show(ui, |ui| filmstrip::show(ui, &items, Some(at), &mut self.thumbs, str::to_owned))
+                .inner;
             if let Some(other) = picked {
                 self.current = Some(other);
                 self.selection = BTreeSet::from([other]);
@@ -1718,6 +1865,7 @@ struct Keys {
     open_editor: bool,
     export: bool,
     new_album: bool,
+    hold: bool,
 }
 
 struct MovieDialog {
@@ -1848,6 +1996,10 @@ impl PicoApp {
 
     pub fn is_full_screen(&self) -> bool {
         self.viewer.is_full_screen()
+    }
+
+    pub fn tray_len(&self) -> usize {
+        self.tray.len()
     }
 
     pub fn zoom_state(&self) -> (Option<f32>, egui::Vec2, bool) {
