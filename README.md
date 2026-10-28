@@ -1,9 +1,5 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/logo/pico-logo-with-title-paths-dark.svg">
-  <img src="docs/logo/pico-logo-with-title-paths.svg" width="100%" alt="Pico, the photo organizer you remember">
-</picture>
-
-# Pico
+<img src="docs/logo/pico-logo-with-title-paths.svg#gh-light-mode-only" width="100%" alt="Pico, the photo organizer you remember">
+<img src="docs/logo/pico-logo-with-title-paths-dark.svg#gh-dark-mode-only" width="100%" alt="Pico, the photo organizer you remember">
 
 Небольшой локальный органайзер фотографий в духе Picasa 3. Написан на Rust
 и egui, работает на Linux, Windows и macOS.
