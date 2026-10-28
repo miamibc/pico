@@ -6,6 +6,7 @@
 use crate::grid;
 use crate::info;
 use crate::player::{Player, PlayerAction};
+use crate::star;
 use crate::tools::{self, CropTool, Tool, ToolAction};
 use eframe::egui;
 use pico_core::adjust;
@@ -78,6 +79,9 @@ pub struct Viewer {
     /// Uncommitted edits while a slider is being dragged.
     draft: Option<(PathBuf, FilterStack)>,
     show_edit_panel: bool,
+    /// Histogram and camera settings over the photo, as Picasa's "Histogram &
+    /// Camera Information".
+    show_camera_info: bool,
     /// The open Crop or Straighten tool and the file it belongs to.
     tool: Option<(PathBuf, Tool)>,
     player: Player,
@@ -107,10 +111,68 @@ pub struct Viewer {
     redo: Vec<Filter>,
     /// Pixel size from the file header, for the info line.
     header_size: Option<(PathBuf, Option<Size>)>,
+    /// Where the Star button was this frame, for the star to fly from.
+    star_button: Option<egui::Rect>,
+    /// The star flying onto a photo just starred.
+    star_flight: Option<star::Flight>,
+    /// The badge vanishing from a photo just unstarred.
+    star_puff: Option<star::Puff>,
+    /// The space the photo or video is shown in.
+    photo_area: Option<egui::Rect>,
 }
 
 impl Viewer {
     pub fn show(&mut self, ui: &mut egui::Ui, file: &MediaFile, position: (usize, usize)) -> Option<ViewerAction> {
+        self.star_button = None;
+        let action = self.show_photo(ui, file, position);
+        let now = ui.input(|i| i.time);
+        let Some(area) = self.photo_area else { return action };
+        if matches!(action, Some(ViewerAction::ToggleStar)) {
+            if file.meta.star {
+                self.star_flight = None;
+                self.star_puff = Some(star::Puff::new(now));
+            } else {
+                let from = self.star_button.map_or(area.center_bottom(), |r| r.center());
+                self.star_flight = Some(star::Flight::new(now, from));
+                self.star_puff = None;
+            }
+        }
+        let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::unique("star")));
+        // The badge is painted from its left bottom corner (see `picture`).
+        let badge = area.left_bottom() + egui::vec2(24.0, -26.0);
+        if let Some(flight) = &self.star_flight {
+            if flight.paint(&painter, now, area, badge) {
+                ui.ctx().request_repaint();
+            } else {
+                self.star_flight = None;
+            }
+        }
+        if let Some(puff) = &self.star_puff {
+            if puff.paint(&painter, now, badge) {
+                ui.ctx().request_repaint();
+            } else {
+                self.star_puff = None;
+            }
+        }
+        action
+    }
+
+    /// Stops a playing video, when the viewer is left.
+    pub fn stop_video(&mut self) {
+        self.player.stop();
+    }
+
+    #[cfg(test)]
+    pub fn star_flying(&self) -> bool {
+        self.star_flight.is_some()
+    }
+
+    #[cfg(test)]
+    pub fn star_puffing(&self) -> bool {
+        self.star_puff.is_some()
+    }
+
+    fn show_photo(&mut self, ui: &mut egui::Ui, file: &MediaFile, position: (usize, usize)) -> Option<ViewerAction> {
         if self.draft.as_ref().is_some_and(|(path, _)| path != &file.path) {
             self.draft = None;
         }
@@ -119,6 +181,9 @@ impl Viewer {
         }
         if self.view_for.as_ref() != Some(&file.path) {
             self.view_for = Some(file.path.clone());
+            // A star flying for the photo before would land on this one.
+            self.star_flight = None;
+            self.star_puff = None;
             self.zoom = None;
             self.pan = egui::Vec2::ZERO;
             self.wheel = 0.0;
@@ -152,14 +217,13 @@ impl Viewer {
         if file.kind == MediaKind::Video {
             // Videos get the player instead of the photo editor.
             let player_action = self.player.show(ui, file);
-            return action
-                .or(player_action.map(|a| match a {
-                    PlayerAction::SetFilters(stack) => ViewerAction::SetFilters(stack),
-                    PlayerAction::SavedFrame(path) => ViewerAction::FileAdded(path),
-                    PlayerAction::Error(message) => ViewerAction::Status(message),
-                }))
-                .or_else(|| self.navigation_keys(ui, file));
+            self.photo_area = self.player.area();
+            if let Some(area) = self.photo_area {
+                self.paint_star_badge(ui, area, file.meta.star);
+            }
+            return action.or(player_action.map(from_player)).or_else(|| self.navigation_keys(ui, file));
         }
+        self.player.stop();
         if !self.full_screen && (self.show_edit_panel || self.tool.is_some()) {
             egui::Panel::left("edit_panel").resizable(false).default_size(240.0).show(ui, |ui| {
                 egui::ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| {
@@ -174,6 +238,9 @@ impl Viewer {
         self.update_rendering(ui.ctx(), file, &meta);
         self.update_original(ui.ctx(), file);
         let picture_action = egui::CentralPanel::no_frame().show(ui, |ui| self.picture(ui, &meta)).inner;
+        if self.show_camera_info {
+            self.camera_info(ui.ctx(), file);
+        }
         self.update_detail(ui.ctx(), file, &meta);
         if action.is_none() && picture_action.is_some() {
             return picture_action;
@@ -261,6 +328,7 @@ impl Viewer {
             }
             if file.kind != MediaKind::Video {
                 ui.toggle_value(&mut self.show_edit_panel, "Edit").on_hover_text("Show the edit panel");
+                ui.toggle_value(&mut self.show_camera_info, "Info").on_hover_text("Histogram & Camera Information");
             }
             if ui.button("▶ Slideshow").on_hover_text("Ctrl+4").clicked() {
                 action = Some(ViewerAction::Slideshow);
@@ -278,7 +346,9 @@ impl Viewer {
             }
             ui.separator();
             let star = if file.meta.star { "★ Starred" } else { "☆ Star" };
-            if ui.button(star).on_hover_text("S").clicked() {
+            let button = ui.button(star).on_hover_text("S");
+            self.star_button = Some(button.rect);
+            if button.clicked() {
                 action = Some(ViewerAction::ToggleStar);
             }
             if ui.button("⟲").on_hover_text("Rotate counterclockwise (Ctrl+Shift+R)").clicked() {
@@ -299,6 +369,14 @@ impl Viewer {
                 self.zoom_controls(ui);
             } else {
                 self.show_original = false;
+            }
+            if file.kind == MediaKind::Video
+                && ui
+                    .button("Save Frame as Photo")
+                    .on_hover_text("Save the frame on screen next to the video")
+                    .clicked()
+            {
+                action = self.player.save_frame().map(from_player);
             }
             ui.separator();
             let edit = ui.add(
@@ -363,8 +441,29 @@ impl Viewer {
         Some(if near(edited.0, same.0) && near(edited.1, same.1) { (same, None) } else { (edited, Some(same)) })
     }
 
-    /// The histogram of the picture as edited, and the camera settings, as on
-    /// Picasa's Tuning tab.
+    /// A see-through box in the photo's top right corner with its levels and
+    /// camera settings.
+    fn camera_info(&self, ctx: &egui::Context, file: &MediaFile) {
+        let Some(area) = self.photo_area else { return };
+        egui::Area::new(egui::Id::unique("camera info"))
+            .pivot(egui::Align2::RIGHT_TOP)
+            .fixed_pos(area.right_top() + egui::vec2(-10.0, 10.0))
+            .interactable(false)
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(egui::Color32::from_black_alpha(170))
+                    .corner_radius(6.0)
+                    .inner_margin(10.0)
+                    .show(ui, |ui| {
+                        ui.set_width(220.0);
+                        ui.visuals_mut().override_text_color = Some(egui::Color32::from_gray(230));
+                        self.levels_and_camera(ui, file);
+                    });
+            });
+    }
+
+    /// The histogram of the picture as edited, and the camera settings, one
+    /// to a line as in Picasa.
     fn levels_and_camera(&self, ui: &mut egui::Ui, file: &MediaFile) {
         let shown = self.texture.as_ref().map(|(key, _)| key);
         if let Some((_, histogram)) = self.histogram.as_ref().filter(|(key, _)| Some(key) == shown) {
@@ -375,14 +474,21 @@ impl Viewer {
         if let Some(camera) = value("Camera") {
             ui.label(camera);
         }
-        let settings: Vec<String> = ["Exposure", "Aperture", "ISO", "Focal length"]
+        let settings: Vec<String> = ["Focal length", "Exposure", "Aperture", "ISO"]
             .iter()
-            .filter_map(|label| value(label).map(|v| if *label == "ISO" { format!("ISO {v}") } else { v }))
+            .filter_map(|label| {
+                value(label).map(|v| match *label {
+                    "ISO" => format!("ISO {v}"),
+                    "Focal length" => format!("Focal length: {v}"),
+                    _ => v,
+                })
+            })
             .collect();
         if settings.is_empty() && value("Camera").is_none() {
-            ui.label(egui::RichText::new("No camera details. A screenshot, perhaps?").weak());
-        } else if !settings.is_empty() {
-            ui.label(egui::RichText::new(settings.join("  ·  ")).weak());
+            ui.label("No camera details. A screenshot, perhaps?");
+        }
+        for setting in settings {
+            ui.label(setting);
         }
     }
 
@@ -594,9 +700,6 @@ impl Viewer {
             history = Some(ViewerAction::SetFilters(FilterStack::default()));
         }
 
-        ui.separator();
-        self.levels_and_camera(ui, file);
-
         if history.is_some() {
             return history;
         }
@@ -633,6 +736,7 @@ impl Viewer {
     /// the mouse to themselves and always see the whole photo.
     fn picture(&mut self, ui: &mut egui::Ui, meta: &PhotoMeta) -> Option<ViewerAction> {
         let area = ui.max_rect();
+        self.photo_area = Some(area);
         let background = ui.interact(area, ui.scope_id().with("backdrop"), egui::Sense::click());
         let mut double_clicked = false;
         let mut action = None;
@@ -745,13 +849,20 @@ impl Viewer {
         } else {
             ui.centered_and_justified(|ui| ui.spinner());
         }
-        if meta.star {
-            grid::paint_star(ui.painter(), area.left_bottom() + egui::vec2(12.0, -12.0), 28.0);
-        }
+        self.paint_star_badge(ui, area, meta.star);
         if self.tool.is_none() && (double_clicked || background.double_clicked()) {
             return Some(ViewerAction::Close);
         }
         action
+    }
+
+    /// The star in the corner of a starred photo or video. While the star
+    /// flies, the badge waits for it to land.
+    fn paint_star_badge(&self, ui: &egui::Ui, area: egui::Rect, starred: bool) {
+        let now = ui.input(|i| i.time);
+        if starred && self.star_flight.as_ref().is_none_or(|flight| flight.landed(now)) {
+            grid::paint_star(&ui.painter().with_clip_rect(area), area.left_bottom() + egui::vec2(12.0, -12.0), 28.0);
+        }
     }
 
     /// Renders the photo without its edits in the background, once per photo
@@ -947,6 +1058,14 @@ impl Viewer {
     #[cfg(test)]
     pub fn open_edit_panel(&mut self) {
         self.show_edit_panel = true;
+    }
+}
+
+fn from_player(action: PlayerAction) -> ViewerAction {
+    match action {
+        PlayerAction::SavedFrame(path) => ViewerAction::FileAdded(path),
+        PlayerAction::Error(message) => ViewerAction::Status(message),
+        PlayerAction::Close => ViewerAction::Close,
     }
 }
 

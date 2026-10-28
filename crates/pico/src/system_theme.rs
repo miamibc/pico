@@ -1,12 +1,13 @@
 //! Light or dark, as the desktop wants it.
 //!
-//! On Windows and macOS egui learns this from the window system. On Linux,
-//! winit does not ask the desktop under Wayland, so Pico reads the XDG
+//! On Windows and macOS egui learns this from the window system: winit
+//! reports a theme change as an event and "as the system" follows it. On
+//! Linux, winit does not ask the desktop under Wayland, so Pico reads the XDG
 //! portal's `color-scheme` (GNOME, KDE and others publish it there) and
-//! watches it, so a switch in the system settings shows up right away.
+//! listens for the portal's `SettingChanged` signal, so a switch in the
+//! system settings shows up right away without polling.
 
 use std::sync::mpsc::{Receiver, channel};
-use std::time::Duration;
 
 /// `Some(true)` for dark. Sent once at start and again on every change.
 pub fn watch(ctx: &eframe::egui::Context) -> Option<Receiver<bool>> {
@@ -16,24 +17,54 @@ pub fn watch(ctx: &eframe::egui::Context) -> Option<Receiver<bool>> {
     let (tx, rx) = channel();
     let ctx = ctx.clone();
     std::thread::spawn(move || {
-        let mut last = None;
-        loop {
-            let dark = prefers_dark();
-            if dark.is_some() && dark != last {
+        // Subscribe before the first read, so a change in between is not lost.
+        let Some(changes) = changes() else { return };
+        // No portal at all: nothing to watch.
+        let Some(dark) = prefers_dark() else { return };
+        let mut last = dark;
+        if tx.send(dark).is_err() {
+            return;
+        }
+        ctx.request_repaint();
+        for dark in changes {
+            if dark != last {
                 last = dark;
-                if tx.send(dark == Some(true)).is_err() {
+                if tx.send(dark).is_err() {
                     return;
                 }
                 ctx.request_repaint();
             }
-            // No portal at all: nothing to watch.
-            if dark.is_none() && last.is_none() {
-                return;
-            }
-            std::thread::sleep(Duration::from_secs(2));
         }
     });
     Some(rx)
+}
+
+/// Every new `color-scheme` the portal announces, as "is it dark". Blocks
+/// between signals; ends when the session bus goes away.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn changes() -> Option<impl Iterator<Item = bool>> {
+    use zbus::zvariant::OwnedValue;
+    let connection = zbus::blocking::Connection::session().ok()?;
+    let proxy = zbus::blocking::Proxy::new_owned(
+        connection,
+        "org.freedesktop.portal.Desktop",
+        "/org/freedesktop/portal/desktop",
+        "org.freedesktop.portal.Settings",
+    )
+    .ok()?;
+    let signals = proxy
+        .receive_signal_with_args("SettingChanged", &[(0, "org.freedesktop.appearance"), (1, "color-scheme")])
+        .ok()?;
+    Some(signals.filter_map(|message| {
+        let (_, _, value): (String, String, OwnedValue) = message.body().deserialize().ok()?;
+        let scheme: u32 = value.downcast_ref().ok()?;
+        Some(scheme == 1)
+    }))
+}
+
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+fn changes() -> Option<std::iter::Empty<bool>> {
+    None
 }
 
 /// The portal's answer: 1 means dark; 0 (no preference) and 2 mean light,

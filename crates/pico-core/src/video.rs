@@ -91,6 +91,93 @@ pub fn probe(path: &Path) -> io::Result<VideoInfo> {
         .ok_or_else(|| io::Error::other(format!("ffprobe could not read {}", path.display())))
 }
 
+/// What ffprobe says about a video, for the Properties panel: the container,
+/// each stream, and their tags (creation time, device, location…).
+pub fn describe(path: &Path) -> Vec<(String, String)> {
+    let Some(ffprobe) = ffprobe() else { return Vec::new() };
+    let Ok(output) = Command::new(ffprobe)
+        .args(["-v", "error", "-show_format", "-show_streams", "-of", "flat"])
+        .arg(path)
+        .stdin(Stdio::null())
+        .output()
+    else {
+        return Vec::new();
+    };
+    describe_flat(&String::from_utf8_lossy(&output.stdout))
+}
+
+fn describe_flat(text: &str) -> Vec<(String, String)> {
+    let values: Vec<(&str, String)> = text
+        .lines()
+        .filter_map(|line| {
+            let (key, value) = line.split_once('=')?;
+            let value = value.trim_matches('"').replace("\\\"", "\"");
+            (!value.is_empty() && value != "N/A" && value != "unknown").then_some((key, value))
+        })
+        .collect();
+    let get = |key: &str| values.iter().find(|(k, _)| *k == key).map(|(_, v)| v.as_str());
+    let words = |key: &str| {
+        let mut out = String::new();
+        for (i, part) in key.split(['_', '.', '-']).filter(|p| !p.is_empty()).enumerate() {
+            if i > 0 {
+                out.push(' ');
+            }
+            let mut chars = part.chars();
+            out.extend(chars.next().map(|c| c.to_ascii_uppercase()));
+            out.push_str(chars.as_str());
+        }
+        out
+    };
+    let mut rows = Vec::new();
+    let mut push = |label: String, value: Option<String>| {
+        if let Some(value) = value {
+            rows.push((label, value));
+        }
+    };
+    push("Container".into(), get("format.format_long_name").map(str::to_owned));
+    push(
+        "Duration".into(),
+        get("format.duration").and_then(|d| d.parse::<f64>().ok()).map(|d| {
+            let s = d.round() as u64;
+            format!("{}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60)
+        }),
+    );
+    let rate = |key: &str| get(key).and_then(|b| b.parse::<f64>().ok()).map(|b| format!("{:.0} kb/s", b / 1000.0));
+    push("Bit Rate".into(), rate("format.bit_rate"));
+    for (key, value) in values.iter().filter(|(k, _)| k.starts_with("format.tags.")) {
+        push(words(&key["format.tags.".len()..]), Some(value.clone()));
+    }
+    for n in 0.. {
+        let stream = |field: &str| get(&format!("streams.stream.{n}.{field}")).map(str::to_owned);
+        let Some(kind) = stream("codec_type") else { break };
+        let label = |what: &str| format!("Stream {} {what}", n + 1);
+        let codec = stream("codec_long_name").or_else(|| stream("codec_name")).unwrap_or_default();
+        let profile = stream("profile").map(|p| format!(" ({p})")).unwrap_or_default();
+        push(format!("Stream {}", n + 1), Some(format!("{kind}: {codec}{profile}")));
+        push(label("Size"), stream("width").zip(stream("height")).map(|(w, h)| format!("{w} × {h}")));
+        let fps = stream("avg_frame_rate").and_then(|r| {
+            let (a, b) = r.split_once('/')?;
+            let fps = a.parse::<f64>().ok()? / b.parse::<f64>().ok().filter(|b| *b > 0.0)?;
+            (fps > 0.0).then(|| format!("{} fps", (fps * 100.0).round() / 100.0))
+        });
+        push(label("Frame Rate"), fps);
+        push(label("Pixel Format"), stream("pix_fmt"));
+        push(label("Sample Rate"), stream("sample_rate").map(|r| format!("{r} Hz")));
+        push(label("Channels"), stream("channel_layout").or_else(|| stream("channels")));
+        push(label("Bit Rate"), rate(&format!("streams.stream.{n}.bit_rate")));
+        let prefix = format!("streams.stream.{n}.");
+        for (key, value) in values.iter().filter(|(k, _)| k.starts_with(&prefix)) {
+            let field = &key[prefix.len()..];
+            if let Some(tag) = field.strip_prefix("tags.") {
+                push(label(&words(tag)), Some(value.clone()));
+            } else if field.starts_with("side_data_list") && field.ends_with(".rotation") {
+                push(label("Rotation"), Some(format!("{value}°")));
+            }
+        }
+    }
+    rows
+}
+
 fn parse_probe(text: &str) -> Option<VideoInfo> {
     let field = |name: &str| text.lines().find_map(|l| l.strip_prefix(name)?.strip_prefix('='));
     let (mut width, mut height): (u32, u32) = (field("width")?.parse().ok()?, field("height")?.parse().ok()?);
@@ -170,27 +257,71 @@ impl Drop for FrameStream {
 }
 
 /// Plays a video's sound without a window, from `start`, until dropped.
-pub struct SoundPlayer(std::process::Child);
+pub struct SoundPlayer {
+    child: std::process::Child,
+    started: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
 
 impl SoundPlayer {
     pub fn start(path: &Path, start: Duration) -> Option<Self> {
-        let child = Command::new(ffplay()?)
-            .args(["-nodisp", "-autoexit", "-loglevel", "quiet", "-ss"])
-            .arg(format!("{:.3}", start.as_secs_f64()))
+        let at = format!("{:.3}", start.as_secs_f64());
+        // ffplay seeks to the video's key frame before `start`, which can be
+        // seconds early; the trim drops the sound before `start`.
+        let mut child = Command::new(ffplay()?)
+            .args(["-nodisp", "-autoexit", "-vn", "-stats", "-loglevel", "quiet", "-ss", &at])
+            .arg("-af")
+            .arg(format!("atrim=start={at}"))
             .arg(path)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
             .ok()?;
-        Some(Self(child))
+        let started = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let mut stats = child.stderr.take().expect("piped stderr");
+        let flag = started.clone();
+        std::thread::spawn(move || {
+            use std::io::Read;
+            use std::sync::atomic::Ordering;
+            // Status lines start with the playback clock, "nan" until the
+            // sound is out. Read to the end so ffplay never blocks on them.
+            let mut line = Vec::new();
+            let mut buf = [0u8; 512];
+            while let Ok(n) = stats.read(&mut buf)
+                && n > 0
+            {
+                for &byte in &buf[..n] {
+                    if byte == b'\r' || byte == b'\n' {
+                        if clock_started(&String::from_utf8_lossy(&line)) {
+                            flag.store(true, Ordering::Relaxed);
+                        }
+                        line.clear();
+                    } else {
+                        line.push(byte);
+                    }
+                }
+            }
+            // No sound to wait for (a silent video), or ffplay gave up.
+            flag.store(true, Ordering::Relaxed);
+        });
+        Some(Self { child, started })
     }
+
+    /// Whether the sound is playing (or never will), so pictures can start.
+    pub fn started(&self) -> bool {
+        self.started.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+/// Whether an ffplay status line carries a running clock.
+fn clock_started(line: &str) -> bool {
+    line.split_whitespace().next().and_then(|t| t.parse::<f64>().ok()).is_some_and(f64::is_finite)
 }
 
 impl Drop for SoundPlayer {
     fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 
@@ -199,12 +330,42 @@ mod tests {
     use super::*;
 
     #[test]
+    fn describes_container_streams_and_tags() {
+        let flat = "format.format_long_name=\"QuickTime / MOV\"\nformat.duration=\"75.5\"\nformat.bit_rate=\"8000000\"\n\
+                    format.tags.creation_time=\"2022-04-21T10:00:00Z\"\nformat.tags.com_apple_quicktime_model=\"iPhone 12\"\n\
+                    streams.stream.0.codec_type=\"video\"\nstreams.stream.0.codec_long_name=\"H.264\"\n\
+                    streams.stream.0.width=1920\nstreams.stream.0.height=1080\nstreams.stream.0.avg_frame_rate=\"30000/1001\"\n\
+                    streams.stream.0.side_data_list.side_data.0.rotation=-90\nstreams.stream.1.codec_type=\"audio\"\n\
+                    streams.stream.1.codec_long_name=\"AAC\"\nstreams.stream.1.sample_rate=\"48000\"\n";
+        let rows = describe_flat(flat);
+        let get = |l: &str| rows.iter().find(|(k, _)| k == l).map(|(_, v)| v.as_str());
+        assert_eq!(get("Container"), Some("QuickTime / MOV"));
+        assert_eq!(get("Duration"), Some("0:01:16"));
+        assert_eq!(get("Bit Rate"), Some("8000 kb/s"));
+        assert_eq!(get("Creation Time"), Some("2022-04-21T10:00:00Z"));
+        assert_eq!(get("Com Apple Quicktime Model"), Some("iPhone 12"));
+        assert_eq!(get("Stream 1"), Some("video: H.264"));
+        assert_eq!(get("Stream 1 Size"), Some("1920 × 1080"));
+        assert_eq!(get("Stream 1 Frame Rate"), Some("29.97 fps"));
+        assert_eq!(get("Stream 1 Rotation"), Some("-90°"));
+        assert_eq!(get("Stream 2 Sample Rate"), Some("48000 Hz"));
+    }
+
+    #[test]
     fn parses_probe_output_and_rotation() {
         let info =
             parse_probe("width=1920\nheight=1080\nr_frame_rate=30000/1001\nrotation=-90\nduration=12.5\n").unwrap();
         assert_eq!((info.width, info.height), (1080, 1920), "portrait phone video is turned upright");
         assert!((info.fps - 29.97).abs() < 0.01);
         assert_eq!(info.duration, Duration::from_millis(12_500));
+    }
+
+    #[test]
+    fn reads_the_sound_clock_from_ffplay() {
+        assert!(!clock_started("    nan M-A:    nan fd=   0 aq=    7KB vq=    0KB sq=    0B"));
+        assert!(clock_started("  -0.02 M-A: -0.000 fd=   0 aq=    9KB vq=    0KB sq=    0B"));
+        assert!(clock_started("   1.25 M-A:  0.000 fd=   0"));
+        assert!(!clock_started(""));
     }
 
     #[test]

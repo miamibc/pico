@@ -6,8 +6,10 @@ mod filmstrip;
 mod folder_manager;
 mod grid;
 mod info;
+mod logo;
 mod player;
 mod slideshow;
+mod star;
 mod system_theme;
 #[cfg(test)]
 mod tests;
@@ -28,6 +30,7 @@ fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Pico")
+            .with_icon(logo::icon())
             .with_inner_size(size)
             .with_min_inner_size([640.0, 400.0])
             .with_maximized(settings.get("maximized").is_some_and(|v| v == "true")),

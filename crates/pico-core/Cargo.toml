@@ -9,3 +9,5 @@ license.workspace = true
 ab_glyph = "0.2"
 epaint_default_fonts = "0.37"
 image = "0.25.10"
+# Unpacks the place names (data/places.bin); already built for PNG.
+miniz_oxide = "0.8"

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Pico</title>
+  <rect x="40" y="40" width="160" height="168" rx="12" fill="#7c3aed" transform="rotate(-16 120 124)"/>
+  <rect x="56" y="40" width="160" height="168" rx="12" fill="#f59e0b" transform="rotate(10 136 124)"/>
+  <rect x="48" y="44" width="160" height="168" rx="12" fill="#ffffff" stroke="#1e293b" stroke-width="8"/>
+  <rect x="64" y="60" width="128" height="104" rx="4" fill="#0ea5e9"/>
+  <circle cx="156" cy="90" r="12" fill="#fde68a"/>
+  <path d="M64 164 L102 116 L130 146 L148 128 L192 164 Z" fill="#065f46"/>
+  <rect x="80" y="180" width="96" height="10" rx="5" fill="#cbd5e1"/>
+</svg>

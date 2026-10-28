@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 600 256"
+   width="600"
+   height="256"
+   version="1.1"
+   id="svg5"
+   sodipodi:docname="pico-logo-with-title.svg"
+   inkscape:version="1.4.3 (0d15f75042, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <defs
+     id="defs5" />
+  <sodipodi:namedview
+     id="namedview5"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.2167208"
+     inkscape:cx="456.14407"
+     inkscape:cy="93.283517"
+     inkscape:window-width="1920"
+     inkscape:window-height="1131"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg5" />
+  <title
+     id="title1">Pico</title>
+  <g transform="rotate(0 128 128)">
+    <rect x="112" y="30" width="92" height="76" rx="12" fill="#ffffff" stroke="#1e293b" stroke-width="8" stroke-linejoin="round"/>
+    <rect x="122" y="40" width="72" height="44" rx="6" fill="#7c3aed"/>
+  </g>
+  <g transform="rotate(60 128 128)">
+    <rect x="112" y="30" width="92" height="76" rx="12" fill="#ffffff" stroke="#1e293b" stroke-width="8" stroke-linejoin="round"/>
+    <rect x="122" y="40" width="72" height="44" rx="6" fill="#f59e0b"/>
+  </g>
+  <g transform="rotate(120 128 128)">
+    <rect x="112" y="30" width="92" height="76" rx="12" fill="#ffffff" stroke="#1e293b" stroke-width="8" stroke-linejoin="round"/>
+    <rect x="122" y="40" width="72" height="44" rx="6" fill="#0ea5e9"/>
+  </g>
+  <g transform="rotate(180 128 128)">
+    <rect x="112" y="30" width="92" height="76" rx="12" fill="#ffffff" stroke="#1e293b" stroke-width="8" stroke-linejoin="round"/>
+    <rect x="122" y="40" width="72" height="44" rx="6" fill="#065f46"/>
+  </g>
+  <g transform="rotate(240 128 128)">
+    <rect x="112" y="30" width="92" height="76" rx="12" fill="#ffffff" stroke="#1e293b" stroke-width="8" stroke-linejoin="round"/>
+    <rect x="122" y="40" width="72" height="44" rx="6" fill="#f59e0b"/>
+  </g>
+  <g transform="rotate(300 128 128)">
+    <rect x="112" y="30" width="92" height="76" rx="12" fill="#ffffff" stroke="#1e293b" stroke-width="8" stroke-linejoin="round"/>
+    <rect x="122" y="40" width="72" height="44" rx="6" fill="#7c3aed"/>
+  </g>
+  <circle cx="128" cy="128" r="32" fill="#1e293b"/>
+  <circle cx="128" cy="128" r="16" fill="#0ea5e9"/>
+  <circle cx="121" cy="121" r="5" fill="#ffffff"/>
+  <metadata
+     id="metadata5">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:title>Pico</dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <text
+     xml:space="preserve"
+     style="font-size:121.883px;line-height:0;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;stroke-width:3.0471;fill:#1e293b;fill-opacity:1;stroke:none"
+     x="256.66293"
+     y="161.02776"
+     id="text5"><tspan
+       sodipodi:role="line"
+       id="tspan5"
+       x="256.66293"
+       y="161.02776"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Kamerik 105';-inkscape-font-specification:'Kamerik 105, ';stroke-width:3.0471;fill:#1e293b;fill-opacity:1;stroke:none">Pico</tspan></text>
+  <text
+     xml:space="preserve"
+     style="font-size:15.8536px;line-height:1;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;stroke-width:0.396344;fill:#1e293b;fill-opacity:1"
+     x="261.55273"
+     y="192.30481"
+     id="text6"><tspan
+       sodipodi:role="line"
+       x="261.55273"
+       y="192.30481"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;line-height:1;font-family:'Kamerik 105';-inkscape-font-specification:'Kamerik 105, ';stroke-width:0.396344;fill:#1e293b;fill-opacity:1"
+       id="tspan7">The photo organizer you remember</tspan></text>
+</svg>

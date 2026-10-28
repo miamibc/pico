@@ -12,3 +12,7 @@
 
 # Generated test library (testdata/make_testdata.py); source photos are not ours to publish
 /testdata/library/
+
+# Local instructions for Claude Code and the local task list
+/CLAUDE.md
+/docs/tasks.md

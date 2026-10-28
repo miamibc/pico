@@ -9,6 +9,8 @@ license.workspace = true
 eframe = "0.37.0"
 egui = { version = "0.37.0", features = ["monochrome_emoji_fonts"] }
 pico-core = { path = "../pico-core" }
+# Puts copied files on the clipboard; eframe already builds it for text.
+arboard = { version = "3.7", default-features = false, features = ["wayland-data-control"] }
 rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal"] }
 
 # Reads the desktop's light or dark preference from the XDG portal; already
