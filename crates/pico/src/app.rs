@@ -190,6 +190,13 @@ pub struct PicoApp {
     system_theme: Option<Receiver<bool>>,
     /// Width of the folder panel, remembered between runs.
     sidebar_width: f32,
+    /// Width of the Properties panel on the right.
+    info_width: f32,
+    /// Open (true) or closed sections of the left panel, by name, as last
+    /// seen; remembered between runs.
+    sections: RefCell<BTreeMap<String, bool>>,
+    /// Sections whose remembered state was put back this run.
+    sections_restored: RefCell<BTreeSet<String>>,
     /// The folder to open once the first scan is done.
     last_folder: Option<PathBuf>,
     /// Settings as last saved, and since when they have differed.
@@ -274,6 +281,9 @@ impl PicoApp {
             system_dark: None,
             system_theme: None,
             sidebar_width: 260.0,
+            info_width: 280.0,
+            sections: RefCell::default(),
+            sections_restored: RefCell::default(),
             last_folder: None,
             saved_settings: config::Settings::new(),
             settings_changed: None,
@@ -360,6 +370,14 @@ impl PicoApp {
         };
         set("folder_sort", folder_sort.into());
         set("sidebar_width", format!("{}", self.sidebar_width));
+        set("info_width", format!("{}", self.info_width));
+        let sections: Vec<String> = self
+            .sections
+            .borrow()
+            .iter()
+            .map(|(key, open)| format!("{}={}", escape_key(key), u8::from(*open)))
+            .collect();
+        set("left_sections", sections.join("|"));
         let theme = match self.theme {
             egui::ThemePreference::Dark => "dark",
             egui::ThemePreference::Light => "light",
@@ -415,6 +433,18 @@ impl PicoApp {
         if let Some(width) = get("sidebar_width").and_then(|v| v.parse::<f32>().ok()) {
             self.sidebar_width = width.clamp(150.0, 600.0);
         }
+        if let Some(width) = get("info_width").and_then(|v| v.parse::<f32>().ok()) {
+            self.info_width = width.clamp(200.0, 900.0);
+        }
+        *self.sections.get_mut() = get("left_sections")
+            .unwrap_or_default()
+            .split('|')
+            .filter_map(|item| {
+                let (key, open) = item.rsplit_once('=')?;
+                Some((unescape_key(key), open == "1"))
+            })
+            .collect();
+        self.sections_restored.get_mut().clear();
         self.last_folder = get("last_folder").map(PathBuf::from);
         self.theme = match get("theme") {
             Some("dark") => egui::ThemePreference::Dark,
@@ -459,7 +489,9 @@ impl PicoApp {
             return;
         }
         let since = *self.settings_changed.get_or_insert(now);
-        if now - since < 1.0 {
+        // Closing does not wait for the settings to settle.
+        let closing = ctx.input(|i| i.viewport().close_requested());
+        if now - since < 1.0 && !closing {
             ctx.request_repaint_after(std::time::Duration::from_millis(1100));
             return;
         }
@@ -2140,9 +2172,10 @@ impl PicoApp {
         let albums = self.album_list();
         let mut picked_album = None;
         if !albums.is_empty() {
-            egui::CollapsingHeader::new(egui::RichText::new("Albums").strong())
+            let open = self.section_open("albums", true);
+            let section = egui::CollapsingHeader::new(egui::RichText::new("Albums").strong())
                 .id_salt("albums")
-                .default_open(true)
+                .open(Some(open))
                 .show(ui, |ui| {
                     for (token, name, count) in &albums {
                         let open = self.source == Some(Source::Album(token.clone()));
@@ -2164,6 +2197,7 @@ impl PicoApp {
                         });
                     }
                 });
+            self.section_clicked(&section.header_response, "albums", open);
         }
         if let Some(token) = picked_album {
             self.select_source(Source::Album(token));
@@ -2171,7 +2205,8 @@ impl PicoApp {
         let mut picked_source = None;
         let months = library::months(&self.folders);
         if !months.is_empty() {
-            egui::CollapsingHeader::new("Timeline").id_salt("timeline").show(ui, |ui| {
+            let open = self.section_open("timeline", false);
+            let section = egui::CollapsingHeader::new("Timeline").id_salt("timeline").open(Some(open)).show(ui, |ui| {
                 let mut years: Vec<(&str, Vec<&(String, usize)>)> = Vec::new();
                 for entry in &months {
                     match years.last_mut() {
@@ -2181,7 +2216,10 @@ impl PicoApp {
                 }
                 for (year, list) in years {
                     let total: usize = list.iter().map(|(_, n)| n).sum();
-                    egui::CollapsingHeader::new(format!("{year}  ({total})")).id_salt(year).show(ui, |ui| {
+                    let key = format!("timeline/{year}");
+                    let year_open = self.section_open(&key, false);
+                    let header = egui::CollapsingHeader::new(format!("{year}  ({total})")).id_salt(year);
+                    let year_section = header.open(Some(year_open)).show(ui, |ui| {
                         for (key, count) in list {
                             let open = self.source == Some(Source::Month(key.clone()));
                             let label = format!("{}  ({count})", library::month_label(key));
@@ -2190,12 +2228,15 @@ impl PicoApp {
                             }
                         }
                     });
+                    self.section_clicked(&year_section.header_response, &key, year_open);
                 }
             });
+            self.section_clicked(&section.header_response, "timeline", open);
         }
         let places = library::places(&self.folders);
         if !places.is_empty() {
-            egui::CollapsingHeader::new("Places").id_salt("places").show(ui, |ui| {
+            let open = self.section_open("places", false);
+            let section = egui::CollapsingHeader::new("Places").id_salt("places").open(Some(open)).show(ui, |ui| {
                 for place in &places {
                     let open = self.source == Some(Source::Place(place.key.clone()));
                     let label = format!("{}  ({})", place.label(), place.members.len());
@@ -2205,12 +2246,14 @@ impl PicoApp {
                     }
                 }
             });
+            self.section_clicked(&section.header_response, "places", open);
         }
         if let Some(source) = picked_source {
             self.select_source(source);
         }
         ui.separator();
         let id = ui.make_persistent_id("folders");
+        self.restore_state(ui.ctx(), id, "folders");
         egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
             .show_header(ui, |ui| {
                 ui.strong("Folders");
@@ -2223,7 +2266,7 @@ impl PicoApp {
                     let mut rows = Vec::new();
                     if self.folder_tree {
                         for node in self.folder_nodes() {
-                            self.folder_node(ui, &node, &mut rows);
+                            self.folder_node(ui, &node, "tree", &mut rows);
                         }
                     } else if self.folder_sort == FolderSort::Date {
                         let order = self.folder_order();
@@ -2237,14 +2280,17 @@ impl PicoApp {
                         }
                         for (year, list) in years {
                             let title = format!("{year}  ({})", plural(list.len(), "folder"));
-                            egui::CollapsingHeader::new(title).id_salt(("year", &year)).default_open(true).show(
-                                ui,
-                                |ui| {
+                            let key = format!("folders/{year}");
+                            let year_open = self.section_open(&key, true);
+                            let year_section = egui::CollapsingHeader::new(title)
+                                .id_salt(("year", &year))
+                                .open(Some(year_open))
+                                .show(ui, |ui| {
                                     for index in list {
                                         rows.push((index, self.folder_row(ui, index)));
                                     }
-                                },
-                            );
+                                });
+                            self.section_clicked(&year_section.header_response, &key, year_open);
                         }
                     } else {
                         for index in self.folder_order() {
@@ -2254,6 +2300,38 @@ impl PicoApp {
                     self.folder_rows_done(ui, rows);
                 });
             });
+        self.note_section(ui.ctx(), id, "folders");
+    }
+
+    /// Whether the section `key` is open: as last left, else `default`.
+    fn section_open(&self, key: &str, default: bool) -> bool {
+        self.sections.borrow().get(key).copied().unwrap_or(default)
+    }
+
+    /// Opens or closes the section `key` when its header was clicked.
+    fn section_clicked(&self, header: &egui::Response, key: &str, was_open: bool) {
+        if header.clicked() {
+            self.sections.borrow_mut().insert(key.to_owned(), !was_open);
+        }
+    }
+
+    /// Puts back the remembered state of the section with this egui `id`.
+    fn restore_state(&self, ctx: &egui::Context, id: egui::Id, key: &str) {
+        if !self.sections_restored.borrow_mut().insert(key.to_owned()) {
+            return;
+        }
+        if let Some(&open) = self.sections.borrow().get(key) {
+            let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(ctx, id, open);
+            state.set_open(open);
+            state.store(ctx);
+        }
+    }
+
+    /// Remembers whether the section with this egui `id` is open now.
+    fn note_section(&self, ctx: &egui::Context, id: egui::Id, key: &str) {
+        if let Some(state) = egui::collapsing_header::CollapsingState::load(ctx, id) {
+            self.sections.borrow_mut().insert(key.to_owned(), state.is_open());
+        }
     }
 
     /// One folder in the list: name and count, a drop target for photos.
@@ -2281,7 +2359,9 @@ impl PicoApp {
         }
     }
 
-    fn folder_node(&self, ui: &mut egui::Ui, node: &FolderNode, rows: &mut Vec<(usize, egui::Response)>) {
+    /// A folder of the tree and, open or closed as last left, what is in it;
+    /// `parent` names the branch it hangs from, for remembering that.
+    fn folder_node(&self, ui: &mut egui::Ui, node: &FolderNode, parent: &str, rows: &mut Vec<(usize, egui::Response)>) {
         let mut row = |ui: &mut egui::Ui| match node.folder {
             Some(index) => rows.push((index, self.folder_row(ui, index))),
             None => {
@@ -2296,13 +2376,16 @@ impl PicoApp {
             return;
         }
         let id = ui.make_persistent_id(("folder tree", &node.name, node.folder));
+        let key = format!("{parent}/{}", node.name);
+        self.restore_state(ui.ctx(), id, &key);
         let header = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
             .show_header(ui, |ui| row(ui));
         header.body(|ui| {
             for child in &node.children {
-                self.folder_node(ui, child, rows);
+                self.folder_node(ui, child, &key, rows);
             }
         });
+        self.note_section(ui.ctx(), id, &key);
     }
 
     fn folder_list_options(&mut self, ui: &mut egui::Ui) {
@@ -2720,16 +2803,17 @@ impl PicoApp {
     fn info_panel(&mut self, ui: &mut egui::Ui) {
         let targets = self.targets();
         let current = self.current;
-        let action = {
+        let (action, width) = {
             let file = |at: FileRef| self.folders.get(at.0).and_then(|f| f.files.get(at.1));
             let current = current.and_then(file);
             let target_files: Vec<&MediaFile> = targets.iter().filter_map(|&at| file(at)).collect();
-            egui::Panel::right("info")
+            let panel = egui::Panel::right("info")
                 .resizable(true)
-                .default_size(280.0)
-                .show(ui, |ui| self.info.show(ui, current, &target_files))
-                .inner
+                .default_size(self.info_width)
+                .show(ui, |ui| self.info.show(ui, current, &target_files));
+            (panel.inner, panel.response.rect.width().round())
         };
+        self.info_width = width;
         match action {
             Some(TagAction::Add(tag)) => self.edit_targets(|meta| {
                 if !meta.keywords.contains(&tag) {
@@ -3663,6 +3747,15 @@ fn folder_header(folder: &Folder, items: &[(FileRef, &MediaFile)]) -> SectionHea
         detail: if span.is_empty() { count } else { format!("{count}  ·  {span}") },
         note: folder.ini.get("Picasa", "description").filter(|d| !d.is_empty()).map(str::to_owned),
     }
+}
+
+/// A section name in the settings, where `|` and `=` separate them.
+fn escape_key(key: &str) -> String {
+    key.replace('%', "%25").replace('|', "%7C").replace('=', "%3D")
+}
+
+fn unescape_key(key: &str) -> String {
+    key.replace("%3D", "=").replace("%7C", "|").replace("%25", "%")
 }
 
 /// Highlights `response` while photos are dragged over it, and returns them

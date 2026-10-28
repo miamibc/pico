@@ -1156,25 +1156,50 @@ fn settings_come_back_next_time() {
     harness.step();
     harness.state_mut().set_folder_list(true, "size");
     harness.step();
+    // Timeline and its year open: remembered.
+    harness.get_by_label("Timeline").click();
+    harness.run();
+    // The photos are from today: one year, one month.
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    let year = pico_core::fileops::exif_style_date(now)[..4].to_owned();
+    let in_year = format!("{year}  (");
+    assert_eq!(harness.get_all_by_label_contains(&in_year).count(), 1, "the year, closed");
+    harness.get_by_label(&format!("{year}  (4)")).click();
+    harness.run();
+    assert_eq!(harness.get_all_by_label_contains(&in_year).count(), 2, "the year and its month");
     let ctx = harness.ctx.clone();
-    let settings = harness.state().settings_for_test(&ctx);
+    let mut settings = harness.state().settings_for_test(&ctx);
+    let sections = settings.get("left_sections").cloned().unwrap_or_default();
+    assert!(
+        sections.contains("timeline=1") && sections.contains("timeline/") && sections.contains("folders=1"),
+        "{sections}"
+    );
+    assert_eq!(settings.get("info_width").map(String::as_str), Some("280"));
     assert_eq!(settings.get("thumb_size").map(String::as_str), Some("200"));
     assert_eq!(settings.get("folder_tree").map(String::as_str), Some("true"));
     assert!(settings.get("last_folder").is_some_and(|p| p.ends_with("more")), "{settings:?}");
     // (The window size comes from eframe, which the test harness does not report.)
     assert_eq!(settings.get("sidebar_width").map(String::as_str), Some("260"));
+    settings.insert("sidebar_width".into(), "400".into());
     drop(harness);
 
     // A new window with those settings opens where the last one was.
     let dir = fixture.dir.clone();
+    let saved = settings.clone();
     let mut harness = Harness::builder().with_size([1000.0, 800.0]).build_eframe(move |cc| {
         let mut app = PicoApp::new(&cc.egui_ctx, vec![dir], false);
-        app.apply_settings_for_test(&settings);
+        app.apply_settings_for_test(&saved);
         app
     });
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 2);
     assert_eq!(harness.state().current_folder_name().as_deref(), Some("more"));
     assert_eq!(harness.state().thumbnail_size(), 200.0);
+    harness.run();
+    let again = harness.state().settings_for_test(&harness.ctx.clone());
+    assert_eq!(again.get("sidebar_width").map(String::as_str), Some("400"));
+    // The year comes back open, its month showing.
+    assert_eq!(harness.get_all_by_label_contains(&in_year).count(), 2);
+    assert_eq!(again.get("left_sections"), settings.get("left_sections"));
 }
 
 #[test]
