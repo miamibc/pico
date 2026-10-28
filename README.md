@@ -1,4 +1,7 @@
-<p align="center"><img src="docs/logo/pico.svg" width="128" alt="Pico logo"></p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo/pico-logo-with-title-paths-dark.svg">
+  <img src="docs/logo/pico-logo-with-title-paths.svg" width="100%" alt="Pico, the photo organizer you remember">
+</picture>
 
 # Pico
 

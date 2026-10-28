@@ -50,11 +50,14 @@ testdata:
 tour: testdata
 	cargo test -p pico testdata_tour -- --ignored
 
-# Draws the logos for the window and Help → About (needs Inkscape and the
-# Kamerik 105 font the title is set in).
+# Draws the logos for the window and Help → About, and for README the title
+# logo with its text turned into outlines, light and dark (needs Inkscape and
+# the Kamerik 105 font the title is set in).
 logo:
 	inkscape docs/logo/pico.svg -w 256 -h 256 -o crates/pico/assets/pico-256.png
 	inkscape docs/logo/pico-logo-with-title.svg -w 800 -o crates/pico/assets/pico-logo-with-title.png
+	inkscape docs/logo/pico-logo-with-title.svg --export-text-to-path --export-plain-svg -o docs/logo/pico-logo-with-title-paths.svg
+	sed 's/fill:#1e293b/fill:#e2e8f0/g' docs/logo/pico-logo-with-title-paths.svg > docs/logo/pico-logo-with-title-paths-dark.svg
 
 # Lists the crates Pico ships and their license texts for Help → About; run
 # after changing dependencies.
