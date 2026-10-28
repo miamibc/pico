@@ -17,7 +17,3 @@ simple to build and run.
 - **Network:** no network features for now, nothing is uploaded to the cloud.
 - **Video:** read and processed with ffmpeg.
 - **Formats:** support every photo and video format we can.
-
-## Tasks
-
-Current and postponed tasks are in `../TASKS.md`.
