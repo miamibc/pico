@@ -3,6 +3,7 @@
 //! After the exiv2 tag reference (https://exiv2.org/tags.html) and ExifTool's
 //! GPS tags (https://exiftool.org/TagNames/GPS.html). GPS tags are
 //! 0x1_0000 + their number, Interoperability ones 0x2_0000 +.
+//! Made by `data/make_exif_tags.py`; don't edit by hand.
 
 /// `(tag, name, words)`, by tag.
 const TAGS: &[(u32, &str, &str)] = &[

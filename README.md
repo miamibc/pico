@@ -291,19 +291,23 @@ XDG: GNOME, KDE и другие) и меняется сразу, без пере
   теги (`info`), просмотр и правка (`viewer`, `tools`), видео (`player`), слайд-шоу (`slideshow`),
   UI-тесты без окна (`tests`, скриншоты в `target/ui-shots/`).
 - `docs/` — заметки проекта, список заданий (`tasks.md`), описания релизов
-  (`releases/`) и разбор форматов Picasa 3.
+  (`releases/`), разбор форматов Picasa 3 и как обновлять редко меняющиеся
+  данные — места, теги EXIF, лицензии — и какие поля метаданных должны
+  совпадать (`data-updates.md`).
 - `research/` — материалы реверс-инжиниринга (не в git).
 
 Эффекты Creative Kit следуют рецептам Picnik (Google, Apache License 2.0).
 Названия мест — из [GeoNames](https://www.geonames.org/) (`cities1000`,
 CC BY 4.0) и [Natural Earth](https://www.naturalearthdata.com/) (страны, моря,
 континенты; общественное достояние). Они упакованы в
-`crates/pico-core/data/places.bin` скриптом `crates/pico-core/data/make_places.py`.
+`crates/pico-core/data/places.bin` скриптом `crates/pico-core/data/make_places.py`
+(`make places`).
 Метаданные в панели свойств читаются по описаниям форматов:
 
 - EXIF — стандарт [CIPA DC-008 (Exif 3.0)](https://www.cipa.jp/e/std/std-sec.html);
   названия и типы тегов основного каталога, EXIF, DNG и Interoperability — по
-  [справочнику exiv2](https://exiv2.org/tags.html) (`crates/pico-core/src/exif_tags.rs`),
+  [справочнику exiv2](https://exiv2.org/tags.html) (`crates/pico-core/src/exif_tags.rs`,
+  `make exif-tags`),
   GPS-теги и значения их полей — по [ExifTool](https://exiftool.org/TagNames/GPS.html),
   расшифровка кодов (Exposure Program, Metering Mode, Flash…) — по
   [таблице EXIF ExifTool](https://exiftool.org/TagNames/EXIF.html).

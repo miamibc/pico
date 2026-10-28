@@ -3,7 +3,7 @@
 
 PICTURES ?= $(HOME)/Pictures
 
-.PHONY: all build release windows run test lint fmt check testdata tour logo licenses install clean
+.PHONY: all build release windows run test lint fmt check testdata tour logo licenses places exif-tags install clean
 
 all: release
 
@@ -60,6 +60,31 @@ logo:
 # after changing dependencies.
 licenses:
 	python3 -I crates/pico/assets/make_licenses.py
+
+# Rarely changing data, refreshed from the internet (see docs/data-updates.md).
+# Downloads go to target/data-download.
+DATA_DL = target/data-download
+NE_URL = https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson
+
+# Place names for Places: GeoNames towns, Natural Earth countries, seas and
+# continents, packed into crates/pico-core/data/places.bin.
+places:
+	mkdir -p $(DATA_DL)
+	curl -fL -o $(DATA_DL)/cities1000.zip https://download.geonames.org/export/dump/cities1000.zip
+	curl -fL -o $(DATA_DL)/countryInfo.txt https://download.geonames.org/export/dump/countryInfo.txt
+	cd $(DATA_DL) && unzip -o cities1000.zip
+	for f in ne_50m_admin_0_countries ne_10m_geography_marine_polys ne_50m_geography_regions_polys; do \
+		curl -fL -o $(DATA_DL)/$$f.geojson $(NE_URL)/$$f.geojson || exit 1; \
+	done
+	python3 -I crates/pico-core/data/make_places.py $(DATA_DL) crates/pico-core/data/places.bin
+
+# The standard EXIF tag names for Properties, from the exiv2 and ExifTool
+# references, into crates/pico-core/src/exif_tags.rs.
+exif-tags:
+	mkdir -p $(DATA_DL)
+	curl -fL -o $(DATA_DL)/exiv2.html https://exiv2.org/tags.html
+	curl -fL -o $(DATA_DL)/gps.html https://exiftool.org/TagNames/GPS.html
+	python3 -I crates/pico-core/data/make_exif_tags.py $(DATA_DL) crates/pico-core/src/exif_tags.rs
 
 # Installs the binary into ~/.cargo/bin; on Linux also the menu entry and
 # icon into ~/.local/share (GNOME on Wayland takes the icon only from there).
