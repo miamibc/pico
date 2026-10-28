@@ -310,7 +310,7 @@ in the viewer and the slideshow are always on a dark background.
   (`collage_view`), properties and tags (`info`), viewing and editing
   (`viewer`, `tools`), video (`player`), slideshow (`slideshow`), windowless UI
   tests (`tests`, screenshots in `target/ui-shots/`).
-- `docs/` — project notes, the task list (`TASKS.md`), release notes
+- `docs/` — project notes, release notes
   (`releases/`), an analysis of the Picasa 3 formats, and how to update rarely
   changing data — places, EXIF tags, licenses — and which metadata fields must
   agree (`data-updates.md`).
