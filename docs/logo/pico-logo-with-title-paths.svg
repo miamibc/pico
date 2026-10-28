@@ -14,60 +14,162 @@
      id="defs5" />
   <title
      id="title1">Pico</title>
-  <rect
-     x="1.1723714"
-     y="68.272934"
-     width="160"
-     height="168"
-     rx="12"
-     fill="#7c3aed"
-     transform="rotate(-16)"
-     id="rect1" />
-  <rect
-     x="75.466225"
-     y="14.50001"
-     width="160"
-     height="168"
-     rx="12"
-     fill="#f59e0b"
-     transform="rotate(10)"
-     id="rect2" />
-  <rect
-     x="48"
-     y="44"
-     width="160"
-     height="168"
-     rx="12"
-     fill="#ffffff"
-     stroke="#1e293b"
-     stroke-width="8"
-     id="rect3" />
-  <rect
-     x="64"
-     y="60"
-     width="128"
-     height="104"
-     rx="4"
-     fill="#0ea5e9"
-     id="rect4" />
+  <g
+     transform="rotate(0 128 128)"
+     id="g2">
+    <rect
+       x="112"
+       y="30"
+       width="92"
+       height="76"
+       rx="12"
+       fill="#ffffff"
+       stroke="#1e293b"
+       stroke-width="8"
+       stroke-linejoin="round"
+       id="rect1" />
+    <rect
+       x="122"
+       y="40"
+       width="72"
+       height="44"
+       rx="6"
+       fill="#7c3aed"
+       id="rect2" />
+  </g>
+  <g
+     transform="rotate(60 128 128)"
+     id="g4">
+    <rect
+       x="112"
+       y="30"
+       width="92"
+       height="76"
+       rx="12"
+       fill="#ffffff"
+       stroke="#1e293b"
+       stroke-width="8"
+       stroke-linejoin="round"
+       id="rect3" />
+    <rect
+       x="122"
+       y="40"
+       width="72"
+       height="44"
+       rx="6"
+       fill="#f59e0b"
+       id="rect4" />
+  </g>
+  <g
+     transform="rotate(120 128 128)"
+     id="g6">
+    <rect
+       x="112"
+       y="30"
+       width="92"
+       height="76"
+       rx="12"
+       fill="#ffffff"
+       stroke="#1e293b"
+       stroke-width="8"
+       stroke-linejoin="round"
+       id="rect5" />
+    <rect
+       x="122"
+       y="40"
+       width="72"
+       height="44"
+       rx="6"
+       fill="#0ea5e9"
+       id="rect6" />
+  </g>
+  <g
+     transform="rotate(180 128 128)"
+     id="g8">
+    <rect
+       x="112"
+       y="30"
+       width="92"
+       height="76"
+       rx="12"
+       fill="#ffffff"
+       stroke="#1e293b"
+       stroke-width="8"
+       stroke-linejoin="round"
+       id="rect7" />
+    <rect
+       x="122"
+       y="40"
+       width="72"
+       height="44"
+       rx="6"
+       fill="#065f46"
+       id="rect8" />
+  </g>
+  <g
+     transform="rotate(240 128 128)"
+     id="g10">
+    <rect
+       x="112"
+       y="30"
+       width="92"
+       height="76"
+       rx="12"
+       fill="#ffffff"
+       stroke="#1e293b"
+       stroke-width="8"
+       stroke-linejoin="round"
+       id="rect9" />
+    <rect
+       x="122"
+       y="40"
+       width="72"
+       height="44"
+       rx="6"
+       fill="#f59e0b"
+       id="rect10" />
+  </g>
+  <g
+     transform="rotate(300 128 128)"
+     id="g12">
+    <rect
+       x="112"
+       y="30"
+       width="92"
+       height="76"
+       rx="12"
+       fill="#ffffff"
+       stroke="#1e293b"
+       stroke-width="8"
+       stroke-linejoin="round"
+       id="rect11" />
+    <rect
+       x="122"
+       y="40"
+       width="72"
+       height="44"
+       rx="6"
+       fill="#7c3aed"
+       id="rect12" />
+  </g>
   <circle
-     cx="156"
-     cy="90"
-     r="12"
-     fill="#fde68a"
-     id="circle4" />
-  <path
-     d="m 64,164 38,-48 28,30 18,-18 44,36 z"
-     fill="#065f46"
-     id="path4" />
-  <rect
-     x="80"
-     y="180"
-     width="96"
-     height="10"
-     rx="5"
-     fill="#cbd5e1"
-     id="rect5" />
+     cx="128"
+     cy="128"
+     r="32"
+     fill="#1e293b"
+     id="circle12" />
+  <circle
+     cx="128"
+     cy="128"
+     r="16"
+     fill="#0ea5e9"
+     id="circle13" />
+  <circle
+     cx="121"
+     cy="121"
+     r="5"
+     fill="#ffffff"
+     id="circle14" />
   <metadata
      id="metadata5">
     <rdf:RDF>
