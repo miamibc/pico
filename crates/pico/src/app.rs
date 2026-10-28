@@ -3236,7 +3236,7 @@ impl PicoApp {
                 });
                 egui::Frame::new().inner_margin(egui::Margin::symmetric(6, 10)).show(ui, |ui| {
                     ui.vertical_centered(|ui| {
-                        ui.strong(format!("Version {}", env!("CARGO_PKG_VERSION")));
+                        ui.strong(format!("Version {}", env!("PICO_VERSION")));
                         ui.label("No cloud. No uploads. Your photos stay exactly where you left them.");
                         ui.label(egui::RichText::new(pico_core::geo::CREDITS).weak());
                     });

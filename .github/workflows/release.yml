@@ -40,7 +40,10 @@ jobs:
             # name: linux-armv7
     runs-on: ubuntu-latest
     steps:
+      # The whole history: the build number counts commits (crates/pico/build.rs).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -82,7 +85,10 @@ jobs:
             # name: windows-arm64
     runs-on: ubuntu-latest
     steps:
+      # The whole history: the build number counts commits (crates/pico/build.rs).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
