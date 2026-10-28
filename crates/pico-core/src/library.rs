@@ -276,7 +276,7 @@ pub struct Album {
     pub members: Vec<(usize, usize)>,
 }
 
-pub(crate) const ALBUM_PREFIX: &str = ".album:";
+pub const ALBUM_PREFIX: &str = ".album:";
 
 /// Collects albums from every folder's INI. An album is declared by a
 /// `[.album:<token>]` section in each folder holding its photos; photos list
@@ -305,6 +305,40 @@ pub fn albums(folders: &[Folder]) -> Vec<Album> {
     found
 }
 
+/// 1970-01-01 in Picasa's album dates, which count days from 1899-12-30
+/// (an OLE Automation date).
+const UNIX_EPOCH_DAYS: f64 = 25_569.0;
+
+/// An album date as Picasa writes it: `43880.743600`.
+pub fn format_album_date(days: f64) -> String {
+    format!("{days:.6}")
+}
+
+/// An album date in days from 1899-12-30: Picasa's number, or the
+/// `2026-10-27T21:15:00` older Pico versions wrote.
+pub fn parse_album_date(text: &str) -> Option<f64> {
+    let text = text.trim();
+    if let Ok(days) = text.parse::<f64>() {
+        return days.is_finite().then_some(days);
+    }
+    let (date, time) = text.split_once('T').unwrap_or((text, "00:00:00"));
+    let mut ymd = date.split('-').map(|p| p.parse::<i64>().ok());
+    let (y, m, d) = (ymd.next()??, ymd.next()??, ymd.next()??);
+    let mut hms = time.split(':').map(|p| p.parse::<f64>().ok());
+    let (h, min, s) = (hms.next()??, hms.next().flatten().unwrap_or(0.0), hms.next().flatten().unwrap_or(0.0));
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    // Days from 1970-01-01 to the civil date (Howard Hinnant's algorithm).
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * (m + if m > 2 { -3 } else { 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    Some(days as f64 + UNIX_EPOCH_DAYS + (h * 3600.0 + min * 60.0 + s) / 86_400.0)
+}
+
 /// A new album token: 16 hex digits, unique enough for one library.
 pub fn new_album_token() -> String {
     let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
@@ -324,14 +358,52 @@ impl Folder {
             section.set("name", name);
             section.set("token", token);
             let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-            section.set("date", crate::fileops::exif_style_date(secs).replacen(':', "-", 2).replacen(' ', "T", 1));
+            section.set("date", format_album_date(secs as f64 / 86_400.0 + UNIX_EPOCH_DAYS));
         }
+    }
+
+    /// Renames the album where this folder declares it; whether it did. The
+    /// caller saves the INI.
+    pub fn rename_album(&mut self, token: &str, name: &str) -> bool {
+        let declaration = format!("{ALBUM_PREFIX}{token}");
+        let Some(section) = self.ini.sections.iter_mut().find(|s| s.name == declaration) else { return false };
+        section.set("name", name);
+        true
+    }
+
+    /// Takes the album out of this folder: its declaration, and its photos'
+    /// membership (the photos stay). Returns the photos that left it, for
+    /// [`Folder::save_metas`]; whether anything changed at all is the second.
+    pub fn forget_album(&mut self, token: &str) -> (Vec<usize>, bool) {
+        let declaration = format!("{ALBUM_PREFIX}{token}");
+        let before = self.ini.sections.len();
+        self.ini.sections.retain(|s| s.name != declaration);
+        let mut left = Vec::new();
+        for (i, file) in self.files.iter_mut().enumerate() {
+            if file.meta.albums.iter().any(|t| t == token) {
+                file.meta.albums.retain(|t| t != token);
+                left.push(i);
+            }
+        }
+        let changed = !left.is_empty() || self.ini.sections.len() != before;
+        (left, changed)
     }
 }
 
 #[cfg(test)]
 mod album_tests {
     use super::*;
+
+    #[test]
+    fn album_dates_old_and_new() {
+        assert_eq!(parse_album_date("43880.743600"), Some(43880.7436));
+        // 2020-02-19 17:50:47 is 43880.7436 in Picasa's count.
+        let old = parse_album_date("2020-02-19T17:50:47").unwrap();
+        assert!((old - 43880.7436).abs() < 1e-5, "{old}");
+        assert_eq!(parse_album_date("1970-01-01T00:00:00"), Some(25_569.0));
+        assert_eq!(parse_album_date("tomorrow"), None);
+        assert_eq!(format_album_date(43880.7436), "43880.743600");
+    }
 
     #[test]
     fn albums_span_folders() {
@@ -362,6 +434,24 @@ mod album_tests {
         folders[0].save_metas(&[0]).unwrap();
         let reread = albums(&scan(&root));
         let new = reread.iter().find(|a| a.token == token).expect("new album");
+
+        // Renamed and deleted where declared; the photos stay.
+        let mut folders = scan(&root);
+        for folder in &mut folders {
+            if folder.rename_album("aa11", "Best") {
+                folder.ini.save(&folder.ini_path).unwrap();
+            }
+        }
+        assert!(albums(&scan(&root)).iter().any(|a| a.token == "aa11" && a.name == "Best"));
+        for folder in &mut folders {
+            let (left, changed) = folder.forget_album("aa11");
+            if changed {
+                folder.save_metas(&left).unwrap();
+            }
+        }
+        let after = scan(&root);
+        assert!(albums(&after).iter().all(|a| a.token != "aa11"));
+        assert_eq!(after.iter().map(|f| f.files.len()).sum::<usize>(), 2, "the photos stay");
         assert_eq!((new.name.as_str(), new.members.len()), ("New", 1));
         std::fs::remove_dir_all(&root).unwrap();
     }

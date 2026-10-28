@@ -522,6 +522,152 @@ fn ctrl_c_copies_the_files() {
     assert_eq!(harness.state().clipboard_files(), ["b.png"]);
 }
 
+/// Drags with the mouse from `from` to `to`, letting go there.
+fn drag_to(harness: &mut Harness<'_, PicoApp>, from: egui::Pos2, to: egui::Pos2) {
+    harness.drag_at(from);
+    harness.step();
+    harness.hover_at(from + egui::vec2(15.0, 15.0));
+    harness.step();
+    harness.hover_at(to);
+    harness.step();
+    harness.drop_at(to);
+    harness.step();
+    harness.step();
+}
+
+#[test]
+fn albums_of_photos_all_outside_pico_can_be_arranged() {
+    let fixture = Fixture::new("album-outside");
+    let away = fixture.dir.with_extension("away");
+    std::fs::create_dir_all(&away).unwrap();
+    for name in ["d.png", "e.png"] {
+        RgbImage::from_pixel(60, 40, Rgb([9, 9, 9])).save(away.join(name)).unwrap();
+    }
+    std::fs::write(
+        away.join(".picasa.ini"),
+        "[.album:bb22]\r\nname=Lost\r\ntoken=bb22\r\n[d.png]\r\nalbums=bb22\r\n[e.png]\r\nalbums=bb22\r\n",
+    )
+    .unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().set_album_order("bb22", "Lost", &[away.join("d.png"), away.join("e.png")]);
+    harness.step();
+    // Known from its own file only, with both photos as black tiles.
+    assert_eq!(harness.state().album_names(), ["Lost (2)"]);
+    harness.state_mut().open_album("Lost");
+    harness.step();
+    harness.step();
+    let (d, e) = (harness.get_by_label("d.png").rect(), harness.get_by_label("e.png").rect());
+    drag_to(&mut harness, e.center(), d.left_center() - egui::vec2(2.0, 0.0));
+    let text = harness.state().album_file_text("bb22");
+    let at = |name: &str| text.find(&format!("{}</filename>", away.join(name).display())).unwrap_or(usize::MAX);
+    assert!(at("e.png") < at("d.png"), "{text}");
+
+    // Once their folder is in Pico, the photos show in that order.
+    harness.get_all_by_label("Add Folder").next().expect("a button").click();
+    harness.step();
+    wait_until(&mut harness, "the rescan", |app| app.folder_count() == 2);
+    harness.state_mut().open_album("Lost");
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["e.png", "d.png"]);
+    std::fs::remove_dir_all(&away).unwrap();
+}
+
+#[test]
+fn albums_keep_a_custom_order() {
+    let fixture = Fixture::new("custom-order");
+    std::fs::write(
+        fixture.dir.join(".picasa.ini"),
+        "[.album:aa11]\r\nname=Trip\r\ntoken=aa11\r\n[a.png]\r\nalbums=aa11\r\n[b.png]\r\nalbums=aa11\r\n[c.png]\r\nalbums=aa11\r\n",
+    )
+    .unwrap();
+    // One photo of the album sits in a folder Pico does not watch.
+    let elsewhere = fixture.dir.with_extension("elsewhere");
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    RgbImage::from_pixel(60, 40, Rgb([9, 9, 9])).save(elsewhere.join("d.png")).unwrap();
+    std::fs::write(
+        elsewhere.join(".picasa.ini"),
+        "[.album:aa11]\r\nname=Trip\r\ntoken=aa11\r\n[d.png]\r\nalbums=aa11\r\n",
+    )
+    .unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    let order = ["d.png", "c.png", "a.png"].map(|n| if n == "d.png" { elsewhere.join(n) } else { fixture.dir.join(n) });
+    harness.state_mut().set_album_order("aa11", "Trip", &order);
+    harness.state_mut().open_album("Trip");
+    harness.state_mut().sort("custom", false);
+    harness.step();
+    // Photos the order does not know (b) come last.
+    assert_eq!(harness.state().listing_names(), ["c.png", "a.png", "b.png"]);
+    let note = harness.state().album_note("aa11").expect("a note");
+    assert!(note.contains("1 photo of this album is in folders Pico does not watch"), "{note}");
+    assert!(note.contains(&elsewhere.display().to_string()), "{note}");
+
+    // Dragging a photo before another one moves it there.
+    harness.state_mut().sort("name", false);
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["a.png", "b.png", "c.png"]);
+    let (c, a) = (harness.get_by_label("c.png").rect(), harness.get_by_label("a.png").rect());
+    let to = a.left_center() - egui::vec2(2.0, 0.0);
+    harness.drag_at(c.center());
+    harness.step();
+    harness.hover_at(c.center() + egui::vec2(15.0, 15.0));
+    harness.step();
+    harness.hover_at(to);
+    harness.step();
+    screenshot(&mut harness, "album-reorder");
+    harness.drop_at(to);
+    harness.step();
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["c.png", "a.png", "b.png"], "switched to Custom Order");
+
+    // The album's file is a Picasa album file: the album, then its photos in
+    // order. Edits stay in the folders, as in Picasa.
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::R);
+    harness.step();
+    harness.step();
+    let text = harness.state().album_file_text("aa11");
+    assert!(text.contains("<property name=\"name\" type=\"string\" value=\"Trip\"/>"), "{text}");
+    let at = |name: &str| text.find(&format!(">{}</filename>", fixture.dir.join(name).display())).unwrap_or(usize::MAX);
+    assert!(at("c.png") < at("a.png") && at("a.png") < at("b.png"), "{text}");
+    assert!(!text.contains("rotate"), "{text}");
+    assert!(text.contains(&format!(">{}</filename>", elsewhere.join("d.png").display())), "kept: {text}");
+
+    // The photo Pico cannot show has a black tile, at its place in the album;
+    // it can be dragged like a photo. Its button adds the folder.
+    harness.state_mut().open_album("Trip");
+    harness.step();
+    let (d, c) = (harness.get_by_label("d.png").rect(), harness.get_by_label("c.png").rect());
+    drag_to(&mut harness, d.center(), c.left_center() - egui::vec2(2.0, 0.0));
+    screenshot(&mut harness, "album-missing");
+    harness.get_by_label("Add Folder").click();
+    harness.step();
+    wait_until(&mut harness, "the rescan", |app| app.folder_count() == 2);
+    harness.state_mut().open_album("Trip");
+    harness.step();
+    // It shows up at the place it was dragged to.
+    assert_eq!(harness.state().listing_names(), ["d.png", "c.png", "a.png", "b.png"]);
+
+    // Reversed, a click that moves a little changes nothing, and a drag keeps
+    // the reverse and what the screen shows.
+    harness.state_mut().sort("custom", true);
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["b.png", "a.png", "c.png", "d.png"]);
+    let before = harness.state().album_file_text("aa11");
+    let a = harness.get_by_label("a.png").rect();
+    drag_to(&mut harness, a.center(), a.center() + egui::vec2(12.0, 4.0));
+    assert!(harness.state().is_reversed());
+    assert_eq!(harness.state().album_file_text("aa11"), before);
+    let (b, d) = (harness.get_by_label("b.png").rect(), harness.get_by_label("d.png").rect());
+    drag_to(&mut harness, b.center(), d.left_center() - egui::vec2(2.0, 0.0));
+    assert!(harness.state().is_reversed());
+    assert_eq!(harness.state().listing_names(), ["a.png", "c.png", "b.png", "d.png"]);
+    assert!(harness.query_by_label("Add Folder").is_none());
+    std::fs::remove_dir_all(&elsewhere).unwrap();
+}
+
 #[test]
 fn context_menus_on_photos_and_folders() {
     let fixture = Fixture::new("context-menu");
@@ -1762,6 +1908,46 @@ fn albums_create_open_add_and_remove() {
     harness.step();
     assert_eq!(harness.state().listing_names(), ["c.png"]);
     assert_eq!(fixture.ini().matches(&format!("albums={token}")).count(), 1, "{}", fixture.ini());
+
+    // Delete in an album takes the photo out of it; the file stays.
+    harness.get_by_label("c.png").click();
+    harness.step();
+    harness.key_press(Key::Delete);
+    harness.step();
+    harness.step();
+    assert!(harness.query_by_label("Move to Trash").is_none(), "no trash dialog");
+    assert!(harness.state().listing_names().is_empty());
+    assert!(!fixture.ini().contains(&format!("albums={token}")), "{}", fixture.ini());
+    assert!(fixture.dir.join("c.png").is_file());
+
+    // Rename and delete from the album's menu in the left panel.
+    harness.get_by_label("Trip  (0)").click_secondary();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Rename Album…").click();
+    harness.step();
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    harness.event(egui::Event::Text("Summer".into()));
+    harness.step();
+    harness.key_press(Key::Enter);
+    harness.step();
+    assert_eq!(harness.state().album_names(), ["Summer (0)"]);
+    assert!(fixture.ini().contains(&format!("[.album:{token}]\r\nname=Summer\r\n")), "{}", fixture.ini());
+
+    harness.get_by_label("Summer  (0)").click_secondary();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Delete Album…").click();
+    harness.step();
+    harness.step();
+    // The dialog's title says it too; the button comes last.
+    harness.get_all_by_label("Delete Album").last().expect("the button").click();
+    harness.step();
+    assert!(harness.state().album_names().is_empty());
+    let ini = fixture.ini();
+    assert!(!ini.contains(&token), "{ini}");
+    assert!(fixture.dir.join("c.png").is_file(), "the photos stay");
 }
 
 #[test]

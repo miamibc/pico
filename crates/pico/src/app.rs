@@ -9,6 +9,7 @@ use crate::slideshow::{Slideshow, SlideshowAction};
 use crate::thumbs::ThumbCache;
 use crate::viewer::{Viewer, ViewerAction};
 use eframe::egui;
+use pico_core::album_file::{self, Album, Entry};
 use pico_core::export::{self, ExportOptions};
 use pico_core::filters::{Filter, FilterStack};
 use pico_core::folders::FolderRules;
@@ -16,7 +17,8 @@ use pico_core::library::{self, Folder, MediaFile};
 use pico_core::meta::PhotoMeta;
 use pico_core::movie::{self, MovieOptions};
 use pico_core::{config, fileops, video};
-use std::collections::{BTreeMap, BTreeSet};
+use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, channel};
 
@@ -42,6 +44,8 @@ enum SortBy {
     /// Date taken (EXIF), else file date.
     Date,
     Size,
+    /// The album's own order, arranged by dragging; albums only.
+    Custom,
 }
 
 /// How the folder list is ordered.
@@ -122,6 +126,13 @@ pub struct PicoApp {
     info: InfoPanel,
     /// "Copy All Effects" clipboard.
     copied_filters: Option<FilterStack>,
+    /// Albums' own files (their photos in Custom Order), by token, read on
+    /// first use.
+    album_files: RefCell<HashMap<String, Album>>,
+    /// A folder INI changed: the album files catch up in the next frame.
+    albums_dirty: bool,
+    /// Files' identities on disk, for matching them to album orders.
+    file_ids: RefCell<HashMap<PathBuf, Option<String>>>,
     /// Kept open: on X11 the clipboard is served by whoever set it.
     clipboard: Option<arboard::Clipboard>,
     /// What Ctrl+C put on the clipboard, for tests (which leave the real one alone).
@@ -146,6 +157,10 @@ pub struct PicoApp {
     /// The photo clicked in the tray strip; Unhold works on it.
     tray_pick: Option<PathBuf>,
     new_album: Option<String>,
+    /// Album being renamed: its token and the name typed so far.
+    album_rename: Option<(String, String)>,
+    /// Album to delete once confirmed, by token.
+    confirm_album_delete: Option<String>,
     /// Duplicate files, group after group, once a search finished.
     duplicates: Vec<FileRef>,
     duplicate_job: Option<Receiver<Vec<Vec<PathBuf>>>>,
@@ -213,6 +228,9 @@ impl PicoApp {
             folder_sort: FolderSort::Name,
             info: InfoPanel::default(),
             copied_filters: None,
+            album_files: RefCell::default(),
+            albums_dirty: false,
+            file_ids: RefCell::default(),
             clipboard: None,
             #[cfg(test)]
             clipboard_files: Vec::new(),
@@ -231,6 +249,8 @@ impl PicoApp {
             rename: None,
             tray_pick: None,
             new_album: None,
+            album_rename: None,
+            confirm_album_delete: None,
             duplicates: Vec::new(),
             duplicate_job: None,
             folder_manager: None,
@@ -256,6 +276,11 @@ impl PicoApp {
             settings_changed: None,
         };
         if persist_settings {
+            // Albums whose photos are all in folders Pico does not watch
+            // live only in their own files.
+            for album in album_file::list() {
+                app.album_files.get_mut().insert(album.token.clone(), album);
+            }
             app.saved_settings = config::load_settings();
             app.apply_settings(&app.saved_settings.clone());
         }
@@ -315,6 +340,7 @@ impl PicoApp {
                 SortBy::Name => "name",
                 SortBy::Date => "date",
                 SortBy::Size => "size",
+                SortBy::Custom => "custom",
             }
             .into(),
         );
@@ -367,6 +393,7 @@ impl PicoApp {
         self.sort_by = match get("sort") {
             Some("date") => SortBy::Date,
             Some("size") => SortBy::Size,
+            Some("custom") => SortBy::Custom,
             _ => SortBy::Name,
         };
         self.reverse = flag("reverse", false);
@@ -462,6 +489,7 @@ impl PicoApp {
         self.selection.clear();
         self.view = View::Library;
         self.scan = None;
+        self.albums_dirty = true;
     }
 
     fn watch_folder(&mut self, ctx: &egui::Context, path: PathBuf) {
@@ -727,22 +755,256 @@ impl PicoApp {
                 })
             })
             .collect();
+        // Custom Order is the albums' own; elsewhere it falls back to names.
+        let sort_by = match (self.sort_by, album) {
+            (SortBy::Custom, None) => SortBy::Name,
+            (sort_by, _) => sort_by,
+        };
         // Folders are already in name order; other orders (and names across
         // several folders) need sorting.
-        if self.sort_by != SortBy::Name || all_folders {
+        if sort_by != SortBy::Name || all_folders {
             let file = |at: &FileRef| &self.folders[at.0].files[at.1];
             // Timeline and Places read best in the order the photos were taken.
-            let sort_by = if by_date && self.sort_by == SortBy::Name { SortBy::Date } else { self.sort_by };
+            let sort_by = if by_date && sort_by == SortBy::Name { SortBy::Date } else { sort_by };
             match sort_by {
                 SortBy::Name => listing.sort_by(|a, b| library::natural_cmp(&file(a).name(), &file(b).name())),
                 SortBy::Date => listing.sort_by_cached_key(|at| file(at).sort_date()),
                 SortBy::Size => listing.sort_by_key(|at| file(at).size),
+                SortBy::Custom => {
+                    // Photos the order does not know yet (added since, or in
+                    // Picasa) follow, by date.
+                    let order = self.album_order(album.unwrap_or_default());
+                    let rank = self.ranks(&order);
+                    listing.sort_by_cached_key(|at| {
+                        let f = file(at);
+                        (rank(&f.path).unwrap_or(usize::MAX), f.sort_date())
+                    });
+                }
             }
         }
         if self.reverse {
             listing.reverse();
         }
         listing
+    }
+
+    /// An album's own file, read from Pico's config on first use (tests keep
+    /// it in memory only).
+    fn album_file(&self, token: &str) -> Album {
+        let mut files = self.album_files.borrow_mut();
+        let persist = self.persist_settings;
+        files
+            .entry(token.to_owned())
+            .or_insert_with(|| {
+                if persist { album_file::load(token) } else { Album { token: token.to_owned(), ..Album::default() } }
+            })
+            .clone()
+    }
+
+    fn store_album_file(&mut self, album: Album) {
+        if self.persist_settings
+            && let Err(e) = album_file::save(&album)
+        {
+            self.status = format!("Could not save the album: {e}");
+        }
+        self.album_files.borrow_mut().insert(album.token.clone(), album);
+    }
+
+    /// The album's photos in its Custom Order.
+    fn album_order(&self, token: &str) -> Vec<Entry> {
+        self.album_file(token).files
+    }
+
+    /// Brings every album's own file up to date with the folders' INIs: its
+    /// photos and its declaration. Photos new to an album join at the end,
+    /// by date.
+    fn sync_album_files(&mut self) {
+        for album in library::albums(&self.folders) {
+            let declaration = format!("{}{}", library::ALBUM_PREFIX, album.token);
+            let declaration =
+                self.folders.iter().find_map(|f| f.ini.section(&declaration)).cloned().unwrap_or_default();
+            let mut members: Vec<(String, Entry)> = album
+                .members
+                .iter()
+                .filter_map(|&(fi, i)| {
+                    let file = self.folders.get(fi)?.files.get(i)?;
+                    Some((file.sort_date(), Entry { id: self.file_id(&file.path), path: file.path.clone() }))
+                })
+                .collect();
+            members.sort_by(|a, b| a.0.cmp(&b.0));
+            let members: Vec<Entry> = members.into_iter().map(|(_, m)| m).collect();
+            let previous = self.album_file(&album.token);
+            let updated = album_file::update(&previous, &declaration, &members, |e| !self.watched_path(&e.path));
+            if updated != previous {
+                self.store_album_file(updated);
+            }
+        }
+    }
+
+    /// Whether `path` is in one of the library's folders.
+    fn watched_path(&self, path: &Path) -> bool {
+        self.folders.iter().any(|f| Some(f.path.as_path()) == path.parent())
+    }
+
+    fn file_id(&self, path: &Path) -> Option<String> {
+        self.file_ids.borrow_mut().entry(path.to_path_buf()).or_insert_with(|| album_file::file_id(path)).clone()
+    }
+
+    /// Where a path stands in `order`: by identity on disk, so renamed and
+    /// moved photos keep their place, else by path.
+    fn ranks<'a>(&'a self, order: &'a [Entry]) -> impl Fn(&Path) -> Option<usize> + 'a {
+        let mut by_id = HashMap::new();
+        let mut by_path = HashMap::new();
+        for (i, e) in order.iter().enumerate().rev() {
+            if let Some(id) = &e.id {
+                by_id.insert(id.as_str(), i);
+            }
+            by_path.insert(e.path.as_path(), i);
+        }
+        move |path| {
+            self.file_id(path).and_then(|id| by_id.get(id.as_str()).copied()).or_else(|| by_path.get(path).copied())
+        }
+    }
+
+    /// Moves `photos` and the missing photos at tiles `missing` to stand
+    /// before tile `to` (or last), and switches to Custom Order.
+    fn move_in_album(&mut self, token: &str, photos: &[FileRef], missing: &[usize], to: usize) {
+        self.sync_album_files();
+        // The tiles as on screen: the photos, and the missing ones among them.
+        let listing = self.listing();
+        let mut tiles: Vec<Entry> = listing
+            .iter()
+            .filter_map(|&at| self.file(at))
+            .map(|f| Entry { id: self.file_id(&f.path), path: f.path.clone() })
+            .collect();
+        for (place, entry) in self.album_missing(token, &listing) {
+            tiles.insert(place.at.min(tiles.len()), entry);
+        }
+        let moving: BTreeSet<usize> = photos
+            .iter()
+            .filter_map(|&at| self.slot_of(&tiles, at))
+            .chain(missing.iter().copied().filter(|&slot| slot < tiles.len()))
+            .collect();
+        if moving.is_empty() {
+            return;
+        }
+        // In their order on screen, which a BTreeSet keeps.
+        let moved: Vec<Entry> = moving.iter().map(|&slot| tiles[slot].clone()).collect();
+        let mut arranged: Vec<Entry> =
+            tiles.iter().enumerate().filter(|(slot, _)| !moving.contains(slot)).map(|(_, e)| e.clone()).collect();
+        let at = (to - moving.iter().filter(|&&slot| slot < to).count()).min(arranged.len());
+        arranged.splice(at..at, moved);
+        // Let go where it was picked up (or a click that moved a little).
+        if arranged == tiles {
+            return;
+        }
+        // Reversed, the album's order is the other way round from the screen.
+        if self.reverse {
+            arranged.reverse();
+        }
+        // The tiles on screen take the places of the tiles on screen, in their
+        // new order; photos hidden by a filter keep theirs.
+        let album = self.album_file(token);
+        let mut shown = arranged.iter();
+        let mut order: Vec<Entry> = album
+            .files
+            .iter()
+            .map(|e| if tiles.iter().any(|t| t.matches(e)) { shown.next().unwrap_or(e).clone() } else { e.clone() })
+            .collect();
+        order.extend(shown.cloned());
+        let arranged = album_file::arrange(&album, &order);
+        self.store_album_file(arranged);
+        self.sort_by = SortBy::Custom;
+    }
+
+    /// Where the photo `at` is among `tiles`.
+    fn slot_of(&self, tiles: &[Entry], at: FileRef) -> Option<usize> {
+        let file = self.file(at)?;
+        let entry = Entry { id: self.file_id(&file.path), path: file.path.clone() };
+        tiles.iter().position(|t| t.matches(&entry))
+    }
+
+    /// Photos in the album's order that are not in the library: their folder
+    /// is not watched, or they were moved or deleted.
+    fn missing_from_album(&self, token: &str) -> Vec<Entry> {
+        let watched = |path: &Path| self.folders.iter().any(|f| Some(f.path.as_path()) == path.parent());
+        // A photo moved into a watched folder is in the album under its new path.
+        let members: BTreeSet<String> = self
+            .folders
+            .iter()
+            .flat_map(|f| &f.files)
+            .filter(|f| f.meta.albums.iter().any(|t| t == token))
+            .filter_map(|f| self.file_id(&f.path))
+            .collect();
+        self.album_order(token)
+            .into_iter()
+            .filter(|e| !watched(&e.path) && e.id.as_ref().is_none_or(|id| !members.contains(id)))
+            .collect()
+    }
+
+    /// Says which photos of the album's Custom Order are not in the library:
+    /// where they are, if their folders are just not in Pico.
+    fn album_missing_note(&self, token: &str) -> Option<String> {
+        let missing = self.missing_from_album(token);
+        let (found, lost): (Vec<&Entry>, Vec<&Entry>) = missing
+            .iter()
+            .partition(|e| self.file_id(&e.path).is_some_and(|id| e.id.as_ref().is_none_or(|known| known == &id)));
+        let mut folders: Vec<String> =
+            found.iter().filter_map(|e| e.path.parent()).map(|p| p.display().to_string()).collect();
+        folders.sort();
+        folders.dedup();
+        let mut lines = Vec::new();
+        if !found.is_empty() {
+            lines.push(format!(
+                "{} of this album {} in folders Pico does not watch; add them with File > Add Folder to Pico: {}",
+                plural(found.len(), "photo"),
+                if found.len() == 1 { "is" } else { "are" },
+                folders.join(", ")
+            ));
+        }
+        if !lost.is_empty() {
+            lines.push(format!("{} of this album could not be found: moved or deleted.", plural(lost.len(), "photo")));
+        }
+        (!lines.is_empty()).then(|| lines.join("\n"))
+    }
+
+    /// The album's photos that are not in the library, for black tiles: with
+    /// their folder when they are there but the folder is not in Pico. In
+    /// Custom Order each takes its place among the `listing` (mirrored when
+    /// reversed); otherwise they follow it. By place.
+    fn album_missing(&self, token: &str, listing: &[FileRef]) -> Vec<(grid::MissingPhoto, Entry)> {
+        let order = self.album_order(token);
+        let rank = self.ranks(&order);
+        let mut ranks: Vec<usize> =
+            listing.iter().filter_map(|&at| self.file(at)).map(|f| rank(&f.path).unwrap_or(usize::MAX)).collect();
+        if self.reverse {
+            ranks.reverse();
+        }
+        let custom = self.sort_by == SortBy::Custom;
+        let missing = self.missing_from_album(token);
+        let last = (listing.len() + missing.len()).saturating_sub(1);
+        let mut tiles: Vec<(grid::MissingPhoto, Entry)> = missing
+            .into_iter()
+            .enumerate()
+            .map(|(k, e)| {
+                let place = order.iter().position(|o| o == &e).unwrap_or(usize::MAX);
+                let in_order = k + ranks.iter().filter(|&&r| r < place).count();
+                let at = match (custom, self.reverse) {
+                    (false, _) => listing.len() + k,
+                    (true, false) => in_order,
+                    (true, true) => last - in_order,
+                };
+                let found = self.file_id(&e.path).is_some_and(|id| e.id.as_ref().is_none_or(|known| known == &id));
+                let tile = grid::MissingPhoto {
+                    at,
+                    name: Folder::file_name(&e.path),
+                    folder: found.then(|| e.path.parent().map(Path::to_path_buf)).flatten(),
+                };
+                (tile, e)
+            })
+            .collect();
+        tiles.sort_by_key(|(tile, _)| tile.at);
+        tiles
     }
 
     /// What batch commands act on: the selection, or the current photo.
@@ -776,6 +1038,7 @@ impl PicoApp {
             }
             match folder.save_metas(&changed) {
                 Ok(()) => {
+                    self.albums_dirty = true;
                     saved += changed.len();
                     for (i, old) in &before {
                         let file = &folder.files[*i];
@@ -1061,7 +1324,88 @@ impl PicoApp {
     }
 
     fn album_name(&self, token: &str) -> Option<String> {
-        library::albums(&self.folders).into_iter().find(|a| a.token == token).map(|a| a.name)
+        self.album_list().into_iter().find(|a| a.0 == token).map(|a| a.1)
+    }
+
+    /// Every album: token, name and its photos, missing ones included. Those
+    /// declared in the folders first, then those with only a file of their
+    /// own (none of their photos' folders is in Pico).
+    fn album_list(&self) -> Vec<(String, String, usize)> {
+        let mut list: Vec<(String, String, usize)> = library::albums(&self.folders)
+            .into_iter()
+            .map(|a| {
+                let count = a.members.len() + self.missing_from_album(&a.token).len();
+                (a.token, a.name, count)
+            })
+            .collect();
+        let mut own: Vec<(String, String, usize)> = self
+            .album_files
+            .borrow()
+            .values()
+            .filter(|a| !list.iter().any(|l| l.0 == a.token))
+            .map(|a| (a.token.clone(), a.name.clone(), a.files.len()))
+            .collect();
+        own.sort_by(|a, b| library::natural_cmp(&a.1, &b.1));
+        list.extend(own);
+        list
+    }
+
+    /// Renames the album in every folder that declares it.
+    fn rename_album(&mut self, token: &str, name: &str) {
+        for folder in &mut self.folders {
+            if folder.rename_album(token, name)
+                && let Err(e) = folder.ini.save(&folder.ini_path)
+            {
+                self.status = format!("Could not write {}: {e}", folder.ini_path.display());
+                return;
+            }
+        }
+        // An album with only a file of its own is renamed there.
+        let mut album = self.album_file(token);
+        if album.name != name {
+            album.name = name.to_owned();
+            self.store_album_file(album);
+        }
+        self.albums_dirty = true;
+        self.status = format!("Renamed the album to \"{name}\"");
+    }
+
+    /// Deletes the album: its declarations, its photos' membership and its
+    /// own file. The photos stay.
+    fn delete_album(&mut self, token: &str) {
+        let name = self.album_name(token).unwrap_or_default();
+        for folder in &mut self.folders {
+            let (left, changed) = folder.forget_album(token);
+            if changed && let Err(e) = folder.save_metas(&left) {
+                self.status = format!("Could not write {}: {e}", folder.ini_path.display());
+                return;
+            }
+        }
+        if self.persist_settings
+            && let Err(e) = album_file::remove(token)
+        {
+            self.status = format!("Could not delete the album file: {e}");
+            return;
+        }
+        self.album_files.borrow_mut().remove(token);
+        if self.source == Some(Source::Album(token.to_owned())) {
+            self.source = (!self.folders.is_empty()).then_some(Source::Folder(0));
+        }
+        self.status = format!("Deleted the album \"{name}\"");
+    }
+
+    /// Delete: in an album the targets leave the album and the files stay;
+    /// elsewhere they go to the trash, once confirmed.
+    fn delete_targets(&mut self) {
+        let targets = self.targets();
+        let Some(Source::Album(token)) = self.source.clone() else {
+            self.confirm_trash = Some(targets);
+            return;
+        };
+        self.edit_files(&targets, |meta| meta.albums.retain(|t| t != &token));
+        self.selection.clear();
+        let name = self.album_name(&token).unwrap_or_default();
+        self.status = format!("Took {} out of \"{name}\"; the files stay", plural(targets.len(), "photo"));
     }
 
     /// Puts the targets into an album, declaring it in each affected folder.
@@ -1118,7 +1462,15 @@ impl PicoApp {
                 .interactable(false)
                 .show(ctx, |ui| {
                     egui::Frame::popup(ui.style()).show(ui, |ui| {
-                        ui.label(format!("{}: drop on a folder, an album or the tray", plural(drag.0.len(), "photo")));
+                        let arrange = if matches!(self.source, Some(Source::Album(_))) {
+                            ", or between photos to arrange them"
+                        } else {
+                            ""
+                        };
+                        ui.label(format!(
+                            "{}: drop on a folder, an album or the tray{arrange}",
+                            plural(drag.0.len() + drag.1.len(), "photo")
+                        ));
                     });
                 });
         }
@@ -1328,6 +1680,12 @@ impl PicoApp {
                     ui.radio_value(&mut self.sort_by, SortBy::Name, "By Name");
                     ui.radio_value(&mut self.sort_by, SortBy::Date, "By Date Taken");
                     ui.radio_value(&mut self.sort_by, SortBy::Size, "By Size");
+                    let in_album = matches!(self.source, Some(Source::Album(_)));
+                    ui.add_enabled_ui(in_album, |ui| {
+                        ui.radio_value(&mut self.sort_by, SortBy::Custom, "Custom Order")
+                            .on_hover_text("The album's own order: drag photos to arrange them")
+                            .on_disabled_hover_text("Albums only");
+                    });
                     ui.separator();
                     ui.checkbox(&mut self.reverse, "Reverse Order");
                 });
@@ -1401,8 +1759,11 @@ impl PicoApp {
         if ui.button("Open in Editor").on_hover_text("Ctrl+Shift+O").clicked() {
             self.open_in_editor();
         }
-        if ui.button("Move to Trash…").on_hover_text("Delete").clicked() {
-            self.confirm_trash = Some(self.targets());
+        // In an album, Delete takes photos out of the album; the files stay.
+        let label =
+            if matches!(self.source, Some(Source::Album(_))) { "Remove from Album" } else { "Move to Trash…" };
+        if ui.button(label).on_hover_text("Delete").clicked() {
+            self.delete_targets();
         }
     }
 
@@ -1476,6 +1837,7 @@ impl PicoApp {
             match op(folder, i) {
                 Ok(()) => {
                     done += 1;
+                    self.albums_dirty = true;
                     self.thumbs.invalidate(&path);
                 }
                 Err(e) => {
@@ -1552,7 +1914,10 @@ impl PicoApp {
         for (fi, i) in files {
             let Some(folder) = self.folders.get_mut(fi) else { continue };
             match fileops::trash(folder, i) {
-                Ok(_) => moved += 1,
+                Ok(_) => {
+                    moved += 1;
+                    self.albums_dirty = true;
+                }
                 Err(e) => {
                     self.status = format!("Could not move to the trash: {e}");
                     break;
@@ -1614,8 +1979,11 @@ impl PicoApp {
                 ui.ctx().copy_text(file.path.display().to_string());
             }
         }
-        if ui.button("Move to Trash…").on_hover_text("Delete").clicked() {
-            self.confirm_trash = Some(self.targets());
+        // In an album, Delete takes photos out of the album; the files stay.
+        let label =
+            if matches!(self.source, Some(Source::Album(_))) { "Remove from Album" } else { "Move to Trash…" };
+        if ui.button(label).on_hover_text("Delete").clicked() {
+            self.delete_targets();
         }
     }
 
@@ -1649,9 +2017,9 @@ impl PicoApp {
 
     fn album_menu(&mut self, ui: &mut egui::Ui) {
         ui.menu_button("Add to Album", |ui| {
-            for album in library::albums(&self.folders) {
-                if ui.button(&album.name).clicked() {
-                    self.add_to_album(&album.token, &album.name);
+            for (token, name, _) in self.album_list() {
+                if ui.button(&name).clicked() {
+                    self.add_to_album(&token, &name);
                 }
             }
             if ui.button("New Album…").on_hover_text("Ctrl+N").clicked() {
@@ -1690,11 +2058,10 @@ impl PicoApp {
             self.hold();
         }
         self.album_menu(ui);
-        if let Some(Source::Album(token)) = self.source.clone()
-            && ui.button("Remove from Album").clicked()
+        if matches!(self.source, Some(Source::Album(_)))
+            && ui.button("Remove from Album").on_hover_text("Delete").clicked()
         {
-            self.edit_targets(|meta| meta.albums.retain(|t| t != &token));
-            self.selection.clear();
+            self.delete_targets();
         }
         ui.separator();
         if ui.button("Undo All Edits").clicked() {
@@ -1724,23 +2091,31 @@ impl PicoApp {
         {
             self.select_source(Source::Tray);
         }
-        let albums = library::albums(&self.folders);
+        let albums = self.album_list();
         let mut picked_album = None;
         if !albums.is_empty() {
             egui::CollapsingHeader::new(egui::RichText::new("Albums").strong())
                 .id_salt("albums")
                 .default_open(true)
                 .show(ui, |ui| {
-                    for album in &albums {
-                        let open = self.source == Some(Source::Album(album.token.clone()));
-                        let response = ui.selectable_label(open, format!("{}  ({})", album.name, album.members.len()));
+                    for (token, name, count) in &albums {
+                        let open = self.source == Some(Source::Album(token.clone()));
+                        let response = ui.selectable_label(open, format!("{name}  ({count})"));
                         if response.clicked() {
-                            picked_album = Some(album.token.clone());
+                            picked_album = Some(token.clone());
                         }
                         if let Some(drag) = drop_target(ui, &response) {
                             self.selection = drag.0.iter().copied().collect();
-                            self.add_to_album(&album.token, &album.name);
+                            self.add_to_album(token, name);
                         }
+                        response.context_menu(|ui| {
+                            if ui.button("Rename Album…").clicked() {
+                                self.album_rename = Some((token.clone(), name.clone()));
+                            }
+                            if ui.button("Delete Album…").clicked() {
+                                self.confirm_album_delete = Some(token.clone());
+                            }
+                        });
                     }
                 });
         }
@@ -1993,7 +2368,18 @@ impl PicoApp {
             } else {
                 vec![(None, self.listing())]
             };
-            if parts.iter().all(|(_, refs)| refs.is_empty()) {
+            // An album's photos can be dragged into its own order; the ones
+            // Pico cannot show get black tiles.
+            let album = match &self.source {
+                Some(Source::Album(token)) if self.search.trim().is_empty() => Some(token.clone()),
+                _ => None,
+            };
+            let listed = parts.first().map_or(&[][..], |(_, refs)| refs.as_slice());
+            let mut missing = album
+                .as_ref()
+                .map(|token| self.album_missing(token, listed).into_iter().map(|(tile, _)| tile).collect::<Vec<_>>())
+                .filter(|m| !m.is_empty());
+            if parts.iter().all(|(_, refs)| refs.is_empty()) && missing.is_none() {
                 ui.centered_and_justified(|ui| {
                     ui.label(if self.search.trim().is_empty() {
                         "Nothing to show here."
@@ -2014,7 +2400,7 @@ impl PicoApp {
                     let items: Vec<(FileRef, &MediaFile)> =
                         refs.iter().filter_map(|&at| Some((at, self.folders.get(at.0)?.files.get(at.1)?))).collect();
                     let header = folder.and_then(|fi| self.folders.get(fi)).map(|f| folder_header(f, &items));
-                    GridSection { header, items }
+                    GridSection { header, items, missing: missing.take().unwrap_or_default() }
                 })
                 .collect();
             let jump = self.ribbon_jump.take().and_then(|fi| parts.iter().position(|(f, _)| *f == Some(fi)));
@@ -2028,9 +2414,14 @@ impl PicoApp {
                 captions: self.captions,
                 scroll_to_section: jump,
                 reveal,
+                reorder: album.is_some(),
             };
             let output = grid::show(ui, view, &mut self.thumbs);
             self.hovered = output.hovered;
+            if let Some(folder) = output.add_folder {
+                self.status = format!("Adding {}", folder.display());
+                self.watch_folder(ui.ctx(), folder);
+            }
             // Scrolling by hand moves the folder highlight along. A scroll the
             // grid made itself shows in the offset a frame later; skip those.
             let scrolled = (output.offset - self.ribbon_offset).abs() > 0.5;
@@ -2086,6 +2477,11 @@ impl PicoApp {
                     self.selection = BTreeSet::from([at]);
                     self.view = View::Photo;
                 }
+                Some(GridAction::Reorder { photos, missing, to }) => {
+                    if let Some(token) = &album {
+                        self.move_in_album(token, &photos, &missing, to);
+                    }
+                }
                 None => {}
             }
         });
@@ -2093,6 +2489,7 @@ impl PicoApp {
     }
 
     fn grid_header(&mut self, ui: &mut egui::Ui) {
+        let mut album_note = None;
         ui.horizontal(|ui| {
             let searching = !self.search.trim().is_empty();
             match &self.source {
@@ -2109,6 +2506,7 @@ impl PicoApp {
                 Some(Source::Album(token)) => {
                     ui.heading(self.album_name(token).unwrap_or_default());
                     ui.label(egui::RichText::new("Album").weak());
+                    album_note = self.album_missing_note(token);
                 }
                 Some(Source::Month(key)) => {
                     ui.heading(library::month_label(key));
@@ -2163,6 +2561,9 @@ impl PicoApp {
                 }
             });
         });
+        if let Some(note) = album_note {
+            ui.label(egui::RichText::new(note).color(ui.visuals().warn_fg_color));
+        }
         ui.separator();
     }
 
@@ -2213,7 +2614,7 @@ impl PicoApp {
             self.start_rename();
         }
         if keys.trash && !self.targets().is_empty() {
-            self.confirm_trash = Some(self.targets());
+            self.delete_targets();
         }
         if keys.locate {
             self.locate_on_disk();
@@ -2449,7 +2850,10 @@ impl PicoApp {
             });
             if submit {
                 match self.folders.get_mut(at.0).map(|f| fileops::rename(f, at.1, &name)) {
-                    Some(Ok(())) => self.status = format!("Renamed to {name}"),
+                    Some(Ok(())) => {
+                        self.status = format!("Renamed to {name}");
+                        self.albums_dirty = true;
+                    }
                     Some(Err(e)) => self.status = format!("Could not rename: {e}"),
                     None => {}
                 }
@@ -2472,6 +2876,42 @@ impl PicoApp {
                 self.add_to_album(&token, name.trim());
             } else if open && !ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                 self.new_album = Some(name);
+            }
+        }
+
+        if let Some((token, mut name)) = self.album_rename.take() {
+            let mut open = true;
+            let mut rename = false;
+            dialog_window(ctx, "Rename Album").open(&mut open).show_dialog(ctx, |ui| {
+                let field = ui.add(egui::TextEdit::singleline(&mut name).hint_text("Album name"));
+                field.request_focus();
+                rename = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter))
+                    || ui.button("Rename").clicked();
+            });
+            if rename && !name.trim().is_empty() {
+                self.rename_album(&token, name.trim());
+            } else if open && !ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.album_rename = Some((token, name));
+            }
+        }
+
+        if let Some(token) = self.confirm_album_delete.take() {
+            let mut open = true;
+            let mut confirmed = false;
+            let mut keep = false;
+            let name = self.album_name(&token).unwrap_or_default();
+            dialog_window(ctx, "Delete Album").open(&mut open).show_dialog(ctx, |ui| {
+                ui.label(format!("Delete the album \"{name}\"?"));
+                ui.label(egui::RichText::new("The photos stay where they are.").weak());
+                ui.horizontal(|ui| {
+                    confirmed = ui.button("Delete Album").clicked();
+                    keep = ui.button("Keep").clicked();
+                });
+            });
+            if confirmed {
+                self.delete_album(&token);
+            } else if open && !keep && !ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.confirm_album_delete = Some(token);
             }
         }
 
@@ -3040,9 +3480,14 @@ impl PicoApp {
         self.sort_by = match by {
             "date" => SortBy::Date,
             "size" => SortBy::Size,
+            "custom" => SortBy::Custom,
             _ => SortBy::Name,
         };
         self.reverse = reverse;
+    }
+
+    pub fn is_reversed(&self) -> bool {
+        self.reverse
     }
 
     pub fn set_search(&mut self, text: &str) {
@@ -3058,12 +3503,28 @@ impl PicoApp {
     }
 
     pub fn album_names(&self) -> Vec<String> {
-        library::albums(&self.folders).into_iter().map(|a| format!("{} ({})", a.name, a.members.len())).collect()
+        self.album_list().into_iter().map(|(_, name, count)| format!("{name} ({count})")).collect()
+    }
+
+    /// Gives the album an order, as if read from Pico's config.
+    pub fn set_album_order(&mut self, token: &str, name: &str, paths: &[PathBuf]) {
+        let files = paths.iter().map(|p| Entry::of(p)).collect();
+        let album = Album { token: token.to_owned(), name: name.to_owned(), files, ..Album::default() };
+        self.album_files.borrow_mut().insert(token.to_owned(), album);
+    }
+
+    /// The album's own file, as Pico would save it.
+    pub fn album_file_text(&self, token: &str) -> String {
+        album_file::to_text(&self.album_file(token))
+    }
+
+    pub fn album_note(&self, token: &str) -> Option<String> {
+        self.album_missing_note(token)
     }
 
     pub fn open_album(&mut self, name: &str) {
-        if let Some(album) = library::albums(&self.folders).into_iter().find(|a| a.name == name) {
-            self.select_source(Source::Album(album.token));
+        if let Some((token, ..)) = self.album_list().into_iter().find(|a| a.1 == name) {
+            self.select_source(Source::Album(token));
         }
     }
 
@@ -3161,11 +3622,12 @@ fn folder_header(folder: &Folder, items: &[(FileRef, &MediaFile)]) -> SectionHea
 /// Highlights `response` while photos are dragged over it, and returns them
 /// when they are dropped on it.
 fn drop_target(ui: &egui::Ui, response: &egui::Response) -> Option<std::sync::Arc<PhotoDrag>> {
-    if response.dnd_hover_payload::<PhotoDrag>().is_some() {
+    // Missing photos' tiles only arrange their album.
+    if response.dnd_hover_payload::<PhotoDrag>().is_some_and(|drag| !drag.0.is_empty()) {
         let stroke = egui::Stroke::new(2.0, ui.visuals().selection.stroke.color);
         ui.painter().rect_stroke(response.rect, 4.0, stroke, egui::StrokeKind::Inside);
     }
-    response.dnd_release_payload::<PhotoDrag>()
+    response.dnd_release_payload::<PhotoDrag>().filter(|drag| !drag.0.is_empty())
 }
 
 /// The Help > Keyboard Shortcuts list, by where the keys work.
@@ -3230,6 +3692,9 @@ impl eframe::App for PicoApp {
         self.take_dropped_files(ctx);
         self.poll_system_theme(ctx);
         self.save_settings_when_settled(ctx);
+        if std::mem::take(&mut self.albums_dirty) {
+            self.sync_album_files();
+        }
         if self.view != View::Photo {
             self.viewer.stop_video();
         }

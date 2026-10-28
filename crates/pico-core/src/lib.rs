@@ -4,6 +4,7 @@
 //! edits. See `docs/research/picasa3-analysis.md` for where each detail comes from.
 
 pub mod adjust;
+pub mod album_file;
 pub mod collage;
 pub mod config;
 pub mod effects;
