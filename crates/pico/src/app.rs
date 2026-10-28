@@ -126,6 +126,8 @@ pub struct PicoApp {
     info: InfoPanel,
     /// "Copy All Effects" clipboard.
     copied_filters: Option<FilterStack>,
+    /// Width of the tray's actions and size slider, as of the last frame.
+    tray_actions_width: f32,
     /// Albums' own files (their photos in Custom Order), by token, read on
     /// first use.
     album_files: RefCell<HashMap<String, Album>>,
@@ -228,6 +230,7 @@ impl PicoApp {
             folder_sort: FolderSort::Name,
             info: InfoPanel::default(),
             copied_filters: None,
+            tray_actions_width: 480.0,
             album_files: RefCell::default(),
             albums_dirty: false,
             file_ids: RefCell::default(),
@@ -347,6 +350,7 @@ impl PicoApp {
         set("reverse", self.reverse.to_string());
         set("filmstrip", self.show_filmstrip.to_string());
         set("info_panel", self.show_info.to_string());
+        set("info_sections", self.info.open_sections.iter().cloned().collect::<Vec<_>>().join(","));
         set("folder_tree", self.folder_tree.to_string());
         let folder_sort = match self.folder_sort {
             FolderSort::Name => "name",
@@ -399,6 +403,8 @@ impl PicoApp {
         self.reverse = flag("reverse", false);
         self.show_filmstrip = flag("filmstrip", true);
         self.show_info = flag("info_panel", false);
+        self.info.open_sections =
+            get("info_sections").unwrap_or_default().split(',').filter(|s| !s.is_empty()).map(str::to_owned).collect();
         self.folder_tree = flag("folder_tree", false);
         self.folder_sort = match get("folder_sort") {
             Some("date") => FolderSort::Date,
@@ -578,6 +584,7 @@ impl PicoApp {
         if picked.is_none() {
             self.tray_pick = None;
         }
+        let mut actions_beside = true;
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.set_width(150.0);
@@ -617,80 +624,119 @@ impl PicoApp {
                 });
             });
             ui.separator();
-            let items: Vec<(FileRef, &MediaFile)> =
-                refs.iter().filter_map(|&at| Some((at, self.folders.get(at.0)?.files.get(at.1)?))).collect();
-            let strip_width = (ui.available_width() - 480.0).max(100.0);
-            let mut chosen = None;
-            let mut menu = |ui: &mut egui::Ui, at: FileRef| {
-                if ui.button("View").clicked() {
-                    chosen = Some(TrayChoice::View(at));
-                }
-                if held_refs.contains(&at) {
-                    if ui.button("Unhold").on_hover_text("Take the photo out of the tray").clicked() {
-                        chosen = Some(TrayChoice::Unhold(at));
-                    }
-                } else if ui.button("Hold").on_hover_text("Keep the photo in the tray").clicked() {
-                    chosen = Some(TrayChoice::Hold(at));
-                }
-            };
-            let clicked = ui
-                .allocate_ui(egui::vec2(strip_width, filmstrip::CELL), |ui| {
-                    let label = |name: &str| format!("Tray: {name}");
-                    filmstrip::show(ui, &items, picked, &held_refs, &mut self.thumbs, label, Some(&mut menu))
-                })
-                .inner;
-            match clicked {
-                Some(filmstrip::Pick::Clicked(at)) => {
-                    self.tray_pick = path_of(self, at);
-                    self.current = Some(at);
-                }
-                Some(filmstrip::Pick::DoubleClicked(at)) => chosen = Some(TrayChoice::View(at)),
-                None => {}
+            // The strip gets what the actions leave, as wide as they were last
+            // frame; where even that is too tight, the actions go below.
+            actions_beside = ui.available_width() >= self.tray_actions_width + 120.0;
+            let reserve = if actions_beside { self.tray_actions_width } else { 0.0 };
+            let strip_width = (ui.available_width() - reserve).max(0.0);
+            self.tray_strip(ui, strip_width, &refs, &held_refs, picked);
+            if actions_beside {
+                ui.separator();
+                self.tray_actions(ui, !refs.is_empty(), held);
             }
-            match chosen {
-                Some(TrayChoice::View(at)) => self.view_in_tray(at),
-                Some(TrayChoice::Hold(at)) => {
-                    if let Some(path) = path_of(self, at)
-                        && !self.tray.contains(&path)
-                    {
-                        self.tray.push(path);
-                    }
-                }
-                Some(TrayChoice::Unhold(at)) => {
-                    if let Some(path) = path_of(self, at) {
-                        self.tray.retain(|p| p != &path);
-                    }
-                }
-                None => {}
+        });
+        if !actions_beside {
+            self.tray_actions(ui, !refs.is_empty(), held);
+        }
+    }
+
+    /// Slideshow, Export, Collage and Movie for the tray, and the thumbnail
+    /// size; remembers how wide they are.
+    fn tray_actions(&mut self, ui: &mut egui::Ui, any: bool, held: bool) {
+        let actions = egui::Grid::new("tray actions").num_columns(2).show(ui, |ui| {
+            if ui.add_enabled(any, egui::Button::new("▶ Slideshow")).clicked() && self.take_tray() {
+                self.start_slideshow(ui.ctx());
             }
-            ui.separator();
-            ui.add_enabled_ui(!refs.is_empty(), |ui| {
-                egui::Grid::new("tray actions").num_columns(2).show(ui, |ui| {
-                    if ui.button("▶ Slideshow").clicked() && self.take_tray() {
-                        self.start_slideshow(ui.ctx());
-                    }
-                    if ui.button("Export…").clicked() && self.take_tray() {
-                        self.open_export();
-                    }
-                    ui.end_row();
-                    if ui.button("Make a Collage…").clicked() && self.take_tray() {
-                        self.open_collage(ui.ctx());
-                    }
-                    if ui.button("Make a Movie…").clicked() && self.take_tray() {
-                        self.open_movie_dialog();
-                    }
-                    ui.end_row();
-                    if held && ui.button("Show Tray").clicked() {
-                        self.select_source(Source::Tray);
-                    }
-                });
-            });
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.add_enabled(any, egui::Button::new("Export…")).clicked() && self.take_tray() {
+                self.open_export();
+            }
+            ui.end_row();
+            if ui.add_enabled(any, egui::Button::new("Make a Collage…")).clicked() && self.take_tray() {
+                self.open_collage(ui.ctx());
+            }
+            if ui.add_enabled(any, egui::Button::new("Make a Movie…")).clicked() && self.take_tray() {
+                self.open_movie_dialog();
+            }
+            ui.end_row();
+            if held && ui.button("Show Tray").clicked() {
+                self.select_source(Source::Tray);
+            }
+            if !held {
+                ui.label("");
+            }
+            // The thumbnail size, under the actions to leave the strip room.
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("🗖").weak());
                 let slider = egui::Slider::new(&mut self.thumb_size, MIN_THUMB..=MAX_THUMB).show_value(false);
                 ui.add_sized([110.0, 18.0], slider).on_hover_text("Thumbnail size (Ctrl+wheel over the photos)");
-                ui.label(egui::RichText::new("🗖").weak());
             });
         });
+        let wanted = actions.response.rect.width() + 4.0 * ui.spacing().item_spacing.x;
+        if (wanted - self.tray_actions_width).abs() > 0.5 {
+            self.tray_actions_width = wanted;
+            ui.ctx().request_repaint();
+        }
+    }
+
+    /// The tray's photos in a strip, in whatever width is left.
+    fn tray_strip(
+        &mut self,
+        ui: &mut egui::Ui,
+        strip_width: f32,
+        refs: &[FileRef],
+        held_refs: &[FileRef],
+        picked: Option<FileRef>,
+    ) {
+        let path_of = |app: &Self, at: FileRef| app.file(at).map(|f| f.path.clone());
+        let items: Vec<(FileRef, &MediaFile)> =
+            refs.iter().filter_map(|&at| Some((at, self.folders.get(at.0)?.files.get(at.1)?))).collect();
+        let mut chosen = None;
+        let mut menu = |ui: &mut egui::Ui, at: FileRef| {
+            if ui.button("View").clicked() {
+                chosen = Some(TrayChoice::View(at));
+            }
+            if held_refs.contains(&at) {
+                if ui.button("Unhold").on_hover_text("Take the photo out of the tray").clicked() {
+                    chosen = Some(TrayChoice::Unhold(at));
+                }
+            } else if ui.button("Hold").on_hover_text("Keep the photo in the tray").clicked() {
+                chosen = Some(TrayChoice::Hold(at));
+            }
+        };
+        let clicked = ui
+            .allocate_ui_with_layout(
+                egui::vec2(strip_width, filmstrip::CELL),
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    let label = |name: &str| format!("Tray: {name}");
+                    filmstrip::show(ui, &items, picked, held_refs, &mut self.thumbs, label, Some(&mut menu))
+                },
+            )
+            .inner;
+        match clicked {
+            Some(filmstrip::Pick::Clicked(at)) => {
+                self.tray_pick = path_of(self, at);
+                self.current = Some(at);
+            }
+            Some(filmstrip::Pick::DoubleClicked(at)) => chosen = Some(TrayChoice::View(at)),
+            None => {}
+        }
+        match chosen {
+            Some(TrayChoice::View(at)) => self.view_in_tray(at),
+            Some(TrayChoice::Hold(at)) => {
+                if let Some(path) = path_of(self, at)
+                    && !self.tray.contains(&path)
+                {
+                    self.tray.push(path);
+                }
+            }
+            Some(TrayChoice::Unhold(at)) => {
+                if let Some(path) = path_of(self, at) {
+                    self.tray.retain(|p| p != &path);
+                }
+            }
+            None => {}
+        }
     }
 
     fn file(&self, at: FileRef) -> Option<&MediaFile> {

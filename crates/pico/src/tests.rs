@@ -1831,6 +1831,148 @@ fn sorting_by_name_date_and_size() {
     assert_eq!(harness.state().listing_names(), ["b.png", "a.png", "c.png"]);
 }
 
+/// A JPEG with EXIF (a long description, the artist, manual exposure, a
+/// position in Tallinn) and an XMP packet naming another creator and a
+/// position a little north.
+fn jpeg_with_metadata(path: &Path, description: &str) {
+    let mut tiff: Vec<u8> = b"II*\0\x08\0\0\0".to_vec();
+    let text_at = 8 + 2 + 4 * 12 + 4;
+    let description = format!("{description}\0");
+    let artist = "Ann Example\0";
+    let exif_at = text_at + description.len() + artist.len();
+    let entry = |t: &mut Vec<u8>, tag: u16, kind: u16, n: u32, value: u32| {
+        t.extend_from_slice(&tag.to_le_bytes());
+        t.extend_from_slice(&kind.to_le_bytes());
+        t.extend_from_slice(&n.to_le_bytes());
+        t.extend_from_slice(&value.to_le_bytes());
+    };
+    let gps_at = exif_at + 2 + 12 + 4;
+    tiff.extend_from_slice(&4u16.to_le_bytes());
+    entry(&mut tiff, 0x010e, 2, description.len() as u32, text_at as u32);
+    entry(&mut tiff, 0x013b, 2, artist.len() as u32, (text_at + description.len()) as u32);
+    entry(&mut tiff, 0x8769, 4, 1, exif_at as u32);
+    entry(&mut tiff, 0x8825, 4, 1, gps_at as u32);
+    tiff.extend_from_slice(&0u32.to_le_bytes());
+    tiff.extend_from_slice(description.as_bytes());
+    tiff.extend_from_slice(artist.as_bytes());
+    // The EXIF directory: Exposure Program 1, manual.
+    tiff.extend_from_slice(&1u16.to_le_bytes());
+    entry(&mut tiff, 0x8822, 3, 1, 1);
+    tiff.extend_from_slice(&0u32.to_le_bytes());
+    // The GPS directory: 59° 26' N, 24° 45' E.
+    let rationals = gps_at + 2 + 4 * 12 + 4;
+    tiff.extend_from_slice(&4u16.to_le_bytes());
+    entry(&mut tiff, 1, 2, 2, u32::from_le_bytes(*b"N\0\0\0"));
+    entry(&mut tiff, 2, 5, 3, rationals as u32);
+    entry(&mut tiff, 3, 2, 2, u32::from_le_bytes(*b"E\0\0\0"));
+    entry(&mut tiff, 4, 5, 3, rationals as u32 + 24);
+    tiff.extend_from_slice(&0u32.to_le_bytes());
+    for (n, d) in [(59u32, 1u32), (26, 1), (0, 1), (24, 1), (45, 1), (0, 1)] {
+        tiff.extend_from_slice(&n.to_le_bytes());
+        tiff.extend_from_slice(&d.to_le_bytes());
+    }
+    let segment = |header: &[u8], body: &[u8]| {
+        let mut s = vec![0xff, 0xe1];
+        s.extend_from_slice(&((2 + header.len() + body.len()) as u16).to_be_bytes());
+        s.extend_from_slice(header);
+        s.extend_from_slice(body);
+        s
+    };
+    let xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="r"><rdf:Description xmlns:dc="d" xmlns:exif="e" exif:GPSLatitude="59,30.0N" exif:GPSLongitude="24,45.0E"><dc:creator><rdf:Seq><rdf:li>Bob Other</rdf:li></rdf:Seq></dc:creator></rdf:Description></rdf:RDF></x:xmpmeta>"#;
+    let mut jpeg = Vec::new();
+    RgbImage::from_pixel(60, 40, Rgb([90, 120, 150]))
+        .write_to(&mut std::io::Cursor::new(&mut jpeg), pico_core::image::ImageFormat::Jpeg)
+        .unwrap();
+    let jpeg = pico_core::exif::insert(&jpeg, &segment(b"http://ns.adobe.com/xap/1.0/\0", xmp.as_bytes()));
+    let jpeg = pico_core::exif::insert(&jpeg, &segment(b"Exif\0\0", &tiff));
+    // IPTC in Photoshop's APP13: the by-line, as in EXIF.
+    let mut iptc = vec![0x1c, 2, 80];
+    iptc.extend_from_slice(&(artist.len() as u16 - 1).to_be_bytes());
+    iptc.extend_from_slice(artist.trim_end_matches('\0').as_bytes());
+    let mut resources = b"8BIM\x04\x04\0\0".to_vec();
+    resources.extend_from_slice(&(iptc.len() as u32).to_be_bytes());
+    resources.extend_from_slice(&iptc);
+    if iptc.len() % 2 == 1 {
+        resources.push(0);
+    }
+    let mut app13 = vec![0xff, 0xed];
+    app13.extend_from_slice(&((2 + 14 + resources.len()) as u16).to_be_bytes());
+    app13.extend_from_slice(b"Photoshop 3.0\0");
+    app13.extend_from_slice(&resources);
+    let jpeg = pico_core::exif::insert(&jpeg, &app13);
+    std::fs::write(path, jpeg).unwrap();
+}
+
+#[test]
+fn properties_show_every_field_without_widening() {
+    let fixture = Fixture::new("properties");
+    let name = "2022-04-21 A very long file name that goes on and on and on, far wider than the panel.jpg";
+    let description = "A description long enough to need several lines in the panel, which must wrap it.";
+    jpeg_with_metadata(&fixture.dir.join(name), description);
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    harness.step();
+    let narrow = harness.get_by_label("Properties").rect().left();
+    harness.get_by_label(name).click();
+    harness.step();
+    harness.step();
+    // The sections start closed; opened ones stay open, also after a restart.
+    assert!(harness.query_by_label("Exposure Program").is_none(), "closed at first");
+    for section in ["EXIF", "XMP", "IPTC", "JPEG"] {
+        harness.get_by_label(section).click();
+        // Let the section finish opening, so the next header stands still.
+        harness.run();
+    }
+    let ctx = harness.ctx.clone();
+    let settings = harness.state().settings_for_test(&ctx);
+    assert_eq!(settings.get("info_sections").map(String::as_str), Some("EXIF,IPTC,JPEG,XMP"));
+    harness.get_by_label("JPEG").click();
+    harness.run();
+    let mut settings = harness.state().settings_for_test(&ctx);
+    assert_eq!(settings.get("info_sections").map(String::as_str), Some("EXIF,IPTC,XMP"));
+    settings.insert("info_sections".into(), "EXIF,IPTC,JPEG,XMP".into());
+    harness.state_mut().apply_settings_for_test(&settings);
+    harness.step();
+    harness.step();
+    for label in ["Exposure Program", "Manual", "Description", description, "Artist", "Creator"] {
+        harness.get_all_by_label(label).next().unwrap_or_else(|| panic!("{label} shown"));
+    }
+    // EXIF, IPTC and XMP disagree on the author, EXIF and XMP on the
+    // position: the three author rows, the position in File, and both sides'
+    // latitude and longitude say so.
+    assert_eq!(harness.get_all_by_label("Differs").count(), 8);
+    harness.get_by_label("By-line");
+    harness.get_by_label("Photoshop Resource 0x0404 (IPTC-NAA)");
+    // The position in one piece links to the map; its parts do not.
+    let link = harness.get_by_label("59.433333, 24.750000");
+    assert_eq!(link.accesskit_node().role(), egui::accesskit::Role::Link);
+
+    // Everything goes to the clipboard as tab-separated values.
+    harness.get_by_label("Copy").hover();
+    harness.run();
+    screenshot(&mut harness, "copy-hover");
+    harness.get_by_label("Copy").click();
+    harness.run_steps(1);
+    let copied = harness.output().platform_output.commands.iter().find_map(|c| match c {
+        egui::OutputCommand::CopyText(text) => Some(text.clone()),
+        _ => None,
+    });
+    let copied = copied.expect("text copied");
+    assert!(copied.starts_with("Section\tField\tValue\n"), "{copied}");
+    assert!(copied.contains(&format!("File\tName\t{name}\n")), "{copied}");
+    assert!(copied.contains("EXIF\tExposure Program\tManual\n"), "{copied}");
+    assert!(copied.contains("XMP\tCreator\tBob Other\n"), "{copied}");
+    // Other metadata gets sections of its own: here JPEG's JFIF header.
+    harness.get_by_label("JFIF Version");
+    assert!(copied.contains("JPEG\tJFIF Version\t1.02\n"), "{copied}");
+    harness.step();
+    harness.step();
+    screenshot(&mut harness, "properties");
+    let left = harness.get_by_label("Properties").rect().left();
+    assert!((left - narrow).abs() < 1.0, "the panel kept its width: {narrow} then {left}");
+}
+
 #[test]
 fn info_panel_tags_selected_photos() {
     let fixture = Fixture::new("tags");

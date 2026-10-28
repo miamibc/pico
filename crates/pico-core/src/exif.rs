@@ -153,18 +153,87 @@ pub struct Exif {
     pub taken: Option<String>,
     /// Latitude and longitude in degrees (south and west negative).
     pub gps: Option<(f64, f64)>,
-    /// Human-readable `(label, value)` pairs in display order.
+    /// Human-readable `(label, value)` pairs in display order: the summary.
     pub fields: Vec<(&'static str, String)>,
+    /// Every tag of the main, EXIF and GPS directories, named and readable,
+    /// in file order; what cannot be read (the maker's notes, pointers) in
+    /// hex.
+    pub all: Vec<(String, String)>,
 }
 
 /// Reads EXIF from a JPEG's first segments. Returns `None` when there is none.
+/// Besides JPEG: PNG's `eXIf` chunk, WebP's `EXIF` chunk, TIFF and the RAW
+/// files built like it, and wherever else an `Exif` block shows near the
+/// start (HEIC, AVIF).
 pub fn read(path: &std::path::Path) -> Option<Exif> {
     use std::io::Read;
     let mut head = Vec::new();
     // EXIF sits at the start; 256 KiB covers it even with large previews.
     std::fs::File::open(path).ok()?.take(256 * 1024).read_to_end(&mut head).ok()?;
-    let segment = exif_segment(&head)?;
-    parse(&segment[4 + EXIF_HEADER.len()..])
+    if head.starts_with(b"II*\0") || head.starts_with(b"MM\0*") {
+        // TIFF and RAW: the whole file is the block, with values further in.
+        head.clear();
+        std::fs::File::open(path).ok()?.take(16 * 1024 * 1024).read_to_end(&mut head).ok()?;
+        return parse(&head);
+    }
+    parse(&tiff_block(&head)?)
+}
+
+/// The TIFF-structured EXIF block of a file's first bytes.
+fn tiff_block(head: &[u8]) -> Option<Vec<u8>> {
+    if let Some(segment) = exif_segment(head) {
+        return Some(segment[4 + EXIF_HEADER.len()..].to_vec());
+    }
+    if let Some(data) = png_chunk(head, b"eXIf") {
+        return Some(data.to_vec());
+    }
+    // ImageMagick keeps EXIF in PNG as hex text.
+    if let Some(bytes) = png_chunks(head)
+        .filter(|(kind, _)| matches!(kind, b"tEXt" | b"zTXt" | b"iTXt"))
+        .filter_map(|(kind, data)| crate::metadata::png_text(&kind, data))
+        .find(|(key, _)| key == "Raw profile type exif")
+        .and_then(|(_, text)| crate::metadata::raw_profile(&text))
+    {
+        return Some(bytes.strip_prefix(EXIF_HEADER).unwrap_or(&bytes).to_vec());
+    }
+    if let Some(data) = riff_chunk(head, b"EXIF") {
+        return Some(data.strip_prefix(EXIF_HEADER).unwrap_or(data).to_vec());
+    }
+    let at = head.windows(8).position(|w| w[..6] == *EXIF_HEADER && (w[6..] == *b"II" || w[6..] == *b"MM"))?;
+    Some(head[at + EXIF_HEADER.len()..].to_vec())
+}
+
+/// The data of the first PNG chunk of `kind`.
+pub(crate) fn png_chunk<'a>(file: &'a [u8], kind: &[u8; 4]) -> Option<&'a [u8]> {
+    png_chunks(file).find(|(k, _)| k == kind).map(|(_, data)| data)
+}
+
+/// A PNG file's chunks: kind and data.
+pub(crate) fn png_chunks(file: &[u8]) -> impl Iterator<Item = ([u8; 4], &[u8])> {
+    let mut at = if file.starts_with(b"\x89PNG\r\n\x1a\n") { 8 } else { file.len() };
+    std::iter::from_fn(move || {
+        let len = u32::from_be_bytes(file.get(at..at + 4)?.try_into().ok()?) as usize;
+        let kind: [u8; 4] = file.get(at + 4..at + 8)?.try_into().ok()?;
+        let data = file.get(at + 8..at + 8 + len)?;
+        at += 12 + len;
+        Some((kind, data))
+    })
+}
+
+/// The data of the first chunk of `kind` in a RIFF file (WebP).
+pub(crate) fn riff_chunk<'a>(file: &'a [u8], kind: &[u8; 4]) -> Option<&'a [u8]> {
+    if !file.starts_with(b"RIFF") || file.get(8..12)? != b"WEBP" {
+        return None;
+    }
+    let mut at = 12;
+    while let Some(header) = file.get(at..at + 8) {
+        let len = u32::from_le_bytes(header[4..].try_into().ok()?) as usize;
+        if &header[..4] == kind {
+            return file.get(at + 8..at + 8 + len);
+        }
+        at += 8 + len + len % 2;
+    }
+    None
 }
 
 /// Parses a TIFF-structured EXIF block.
@@ -179,14 +248,35 @@ pub fn parse(tiff: &[u8]) -> Option<Exif> {
     let ifd0 = reader.u32(4)? as usize;
     let mut subs = Vec::new();
     reader.read_ifd(ifd0, &mut tags, &mut subs);
-    for (tag, offset) in subs {
+    let mut all: Vec<(String, String)> = tags.iter().filter_map(|(&t, v)| describe(t, v)).collect();
+    // The EXIF and GPS directories, and the Interoperability one inside EXIF.
+    let mut pending = std::collections::VecDeque::from(subs);
+    let mut seen = vec![ifd0];
+    while let Some((tag, offset)) = pending.pop_front() {
+        if seen.contains(&offset) || seen.len() > 8 {
+            continue;
+        }
+        seen.push(offset);
         let mut nested = Vec::new();
         let mut found = std::collections::BTreeMap::new();
         reader.read_ifd(offset, &mut found, &mut nested);
+        // GPS and Interoperability tags reuse small numbers; keep them apart.
+        let base = match tag {
+            0x8825 => 0x1_0000,
+            0xa005 => 0x2_0000,
+            _ => 0,
+        };
         for (t, v) in found {
-            // GPS tags reuse small numbers; keep them apart.
-            tags.insert(if tag == 0x8825 { 0x1_0000 + t } else { t }, v);
+            all.extend(describe(base + t, &v));
+            tags.insert(base + t, v);
         }
+        pending.extend(nested);
+    }
+    // IFD1 describes the embedded thumbnail.
+    if let Some(ifd1) = reader.next_ifd(ifd0).filter(|&at| at != 0 && !seen.contains(&at)) {
+        let mut found = std::collections::BTreeMap::new();
+        reader.read_ifd(ifd1, &mut found, &mut Vec::new());
+        all.extend(found.iter().filter_map(|(&t, v)| describe(t, v)).map(|(name, v)| (format!("Thumbnail {name}"), v)));
     }
     let text = |t: u32| match tags.get(&t) {
         Some(Value::Text(s)) => Some(s.clone()),
@@ -201,7 +291,7 @@ pub fn parse(tiff: &[u8]) -> Option<Exif> {
         Some(Value::Numbers(n)) => n.first().copied(),
         _ => None,
     };
-    let mut exif = Exif { taken: text(0x9003).or_else(|| text(0x0132)), gps: None, fields: Vec::new() };
+    let mut exif = Exif { taken: text(0x9003).or_else(|| text(0x0132)), gps: None, fields: Vec::new(), all };
     let mut push = |label: &'static str, value: Option<String>| {
         if let Some(v) = value.filter(|v| !v.trim().is_empty()) {
             exif.fields.push((label, v.trim().to_owned()));
@@ -244,6 +334,562 @@ enum Value {
     Text(String),
     Numbers(Vec<u32>),
     Rationals(Vec<(f64, f64)>),
+    /// BYTE and UNDEFINED values, as they are.
+    Bytes(Vec<u8>),
+    /// SBYTE, SSHORT and SLONG.
+    Signed(Vec<i32>),
+    /// FLOAT and DOUBLE.
+    Floats(Vec<f64>),
+}
+
+impl Value {
+    /// The value at `at` as a number, whatever its type.
+    fn number(&self, at: usize) -> Option<f64> {
+        match self {
+            Value::Numbers(n) => n.get(at).map(|&v| v as f64),
+            Value::Signed(n) => n.get(at).map(|&v| v as f64),
+            Value::Floats(n) => n.get(at).copied(),
+            Value::Bytes(b) => b.get(at).map(|&v| v as f64),
+            Value::Rationals(r) => r.get(at).map(|(n, d)| if *d == 0.0 { 0.0 } else { n / d }),
+            Value::Text(t) => (at == 0).then(|| t.trim().parse().ok()).flatten(),
+        }
+    }
+
+    fn count(&self) -> usize {
+        match self {
+            Value::Numbers(n) => n.len(),
+            Value::Signed(n) => n.len(),
+            Value::Floats(n) => n.len(),
+            Value::Bytes(b) => b.len(),
+            Value::Rationals(r) => r.len(),
+            Value::Text(_) => 1,
+        }
+    }
+}
+
+/// A value from XMP (where EXIF's `exif:` and `tiff:` properties are text)
+/// in the words the EXIF tag `name` gets; `None` when it has no special form.
+pub(crate) fn readable(name: &str, text: &str) -> Option<String> {
+    let tag = crate::exif_tags::tag_named(name)?;
+    let value = match text.split_once('/') {
+        Some((n, d)) => Value::Rationals(vec![(n.trim().parse().ok()?, d.trim().parse().ok()?)]),
+        None => Value::Numbers(vec![text.trim().parse::<u32>().ok()?]),
+    };
+    let (_, shown) = describe(tag, &value)?;
+    (shown != text.trim()).then_some(shown)
+}
+
+/// A tag's name and readable value, for the list of all tags; pointers and
+/// binary blocks in hex.
+fn describe(tag: u32, value: &Value) -> Option<(String, String)> {
+    if matches!(tag, 0x8769 | 0x8825 | 0xa005 | 0x0201 | 0xea1d)
+        && let Value::Numbers(n) = value
+    {
+        let name = tag_name(tag).or_else(|| crate::exif_tags::standard_name(tag)).unwrap_or("Pointer");
+        return n.first().map(|offset| (name.to_owned(), format!("0x{offset:08X}")));
+    }
+    let name = match tag_name(tag).or_else(|| crate::exif_tags::standard_name(tag)) {
+        Some(name) => name.to_owned(),
+        None if tag >= 0x2_0000 => format!("Interoperability Tag 0x{:04X}", tag & 0xffff),
+        None if tag >= 0x1_0000 => format!("GPS Tag 0x{:04X}", tag & 0xffff),
+        None => format!("Tag 0x{tag:04X}"),
+    };
+    let first = || value.number(0).filter(|n| *n >= 0.0).map(|n| n as u32);
+    let ratio = |at: usize| value.number(at);
+    // Degrees and percent stick to the number; other units keep a space.
+    let unit = |suffix: &str| {
+        let gap = if suffix == "°" || suffix == "%" { "" } else { " " };
+        ratio(0).map(|v| format!("{}{gap}{suffix}", trim_number(v)))
+    };
+    let text = match tag {
+        0x829a => ratio(0).map(exposure),
+        // APEX: the shutter is open 2^-v seconds, apertures are f/2^(v/2).
+        0x9201 => ratio(0).map(|v| exposure(2f64.powf(-v))),
+        0x829d => ratio(0).map(|f| format!("f/{f:.1}")),
+        0x9202 | 0x9205 => ratio(0).map(|v| format!("f/{:.1}", 2f64.powf(v / 2.0))),
+        0x9203 => ratio(0).map(|ev| format!("{ev:.2} EV")),
+        0x9204 => ratio(0).map(|ev| format!("{ev:+.1} EV")),
+        0x9206 => match value {
+            Value::Rationals(r) if r.first().is_some_and(|(n, _)| *n == u32::MAX as f64) => Some("Infinity".into()),
+            _ => unit("m"),
+        },
+        0x920a => ratio(0).map(|f| format!("{f:.1} mm")),
+        0xa405 => first().map(|f| if f == 0 { "Unknown".into() } else { format!("{f} mm") }),
+        0xa404 => ratio(0).map(|z| if z == 0.0 { "Not used".into() } else { format!("{}×", trim_number(z)) }),
+        0xa432 | 0xc630 => lens(value),
+        0x9209 => first().map(flash),
+        0x4746 => first().map(|stars| {
+            let stars = stars.min(5) as usize;
+            format!("{}{} ({stars})", "★".repeat(stars), "☆".repeat(5 - stars))
+        }),
+        0x4749 | 0x9401 => unit("%"),
+        0x882a => ratio(0).map(|h| format!("{h:+} h")),
+        0x882b => unit("s"),
+        0x9400 => unit("°C"),
+        0x9402 => unit("hPa"),
+        0x9403 | 0x1_0006 | 0x1_001f => unit("m"),
+        0x9404 => unit("mGal"),
+        0x9405 | 0x1_000f | 0x1_0011 | 0x1_0018 => unit("°"),
+        // GPS references are letters, spelt out.
+        0x1_0001 | 0x1_0003 | 0x1_0009 | 0x1_000a | 0x1_000c | 0x1_000e | 0x1_0010 | 0x1_0013 | 0x1_0015 | 0x1_0017
+        | 0x1_0019 => match value {
+            Value::Text(t) => gps_letter(tag, t.trim()).map(str::to_owned),
+            _ => None,
+        },
+        0x1_0000 => match value {
+            Value::Bytes(b) => Some(b.iter().map(u8::to_string).collect::<Vec<_>>().join(".")),
+            _ => None,
+        },
+        0x1_0002 | 0x1_0004 | 0x1_0014 | 0x1_0016 => {
+            let [d, m, s] = [ratio(0)?, ratio(1)?, ratio(2)?];
+            Some(format!("{d:.0}° {m:.0}' {s:.2}\""))
+        }
+        0x1_0007 => {
+            let [h, m, s] = [ratio(0)?, ratio(1)?, ratio(2)?];
+            Some(format!("{h:02.0}:{m:02.0}:{s:02.0}"))
+        }
+        0x9101 => match value {
+            Value::Bytes(b) => {
+                Some(b.iter().filter_map(|c| ["", "Y", "Cb", "Cr", "R", "G", "B"].get(*c as usize).copied()).collect())
+            }
+            _ => None,
+        },
+        0x9000 | 0xa000 | 0x2_0002 => match value {
+            Value::Bytes(b) if b.len() == 4 && b.iter().all(u8::is_ascii_digit) => {
+                let v = String::from_utf8_lossy(b).into_owned();
+                Some(format!("{}.{}", v[..2].trim_start_matches('0'), &v[2..]))
+            }
+            _ => None,
+        },
+        0x2_0001 => match value {
+            Value::Text(t) => Some(match t.trim() {
+                "R98" => "R98 (sRGB)".to_owned(),
+                "R03" => "R03 (Adobe RGB)".to_owned(),
+                "THM" => "THM (thumbnail)".to_owned(),
+                other => other.to_owned(),
+            }),
+            _ => None,
+        },
+        // Text after an 8-byte character code.
+        0x9286 | 0x1_001b | 0x1_001c => match value {
+            Value::Bytes(b) => user_comment(b),
+            _ => None,
+        },
+        0x9c9b..=0x9c9f => match value {
+            Value::Bytes(b) => Some(utf16(b)),
+            _ => None,
+        },
+        _ if value.count() == 1 => first().and_then(|n| choice(tag, n)).map(str::to_owned),
+        _ => None,
+    };
+    let text = text.or_else(|| plain(value))?;
+    let text = text.trim().to_owned();
+    (!text.is_empty()).then_some((name, text))
+}
+
+/// An exposure time: "1/250 s", or "2.5 s".
+fn exposure(seconds: f64) -> String {
+    if seconds > 0.0 && seconds < 1.0 { format!("1/{:.0} s", 1.0 / seconds) } else { format!("{seconds:.1} s") }
+}
+
+/// A number without needless decimals: 56, 56.5, 0.0123.
+fn trim_number(v: f64) -> String {
+    format!("{}", (v * 10_000.0).round() / 10_000.0)
+}
+
+/// LensSpecification: the shortest and longest focal length and the widest
+/// aperture at each, 0 where unknown: "70–200 mm f/2.8".
+fn lens(value: &Value) -> Option<String> {
+    let [short, long, at_short, at_long] = [value.number(0)?, value.number(1)?, value.number(2)?, value.number(3)?];
+    let focal = if short == long || long == 0.0 {
+        format!("{} mm", trim_number(short))
+    } else {
+        format!("{}–{} mm", trim_number(short), trim_number(long))
+    };
+    let aperture = match (at_short, at_long) {
+        (a, b) if a > 0.0 && (b == 0.0 || a == b) => format!(" f/{}", trim_number(a)),
+        (a, b) if a > 0.0 => format!(" f/{}–{}", trim_number(a), trim_number(b)),
+        _ => String::new(),
+    };
+    Some(focal + &aperture)
+}
+
+/// Any value as text: numbers and ratios as they are.
+fn plain(value: &Value) -> Option<String> {
+    let ratio = |(n, d): &(f64, f64)| {
+        if *d == 1.0 || *d == 0.0 { format!("{n}") } else { format!("{}", ((n / d) * 10_000.0).round() / 10_000.0) }
+    };
+    Some(match value {
+        Value::Text(s) => s.clone(),
+        Value::Numbers(n) if n.len() > 16 => format!("{} values", n.len()),
+        Value::Numbers(n) => n.iter().map(u32::to_string).collect::<Vec<_>>().join(", "),
+        Value::Rationals(r) => r.iter().map(ratio).collect::<Vec<_>>().join(", "),
+        Value::Signed(n) if n.len() > 16 => format!("{} values", n.len()),
+        Value::Signed(n) => n.iter().map(i32::to_string).collect::<Vec<_>>().join(", "),
+        Value::Floats(n) => n.iter().map(|&v| trim_number(v)).collect::<Vec<_>>().join(", "),
+        Value::Bytes(b) if !b.is_empty() && b.iter().all(|c| c.is_ascii_graphic() || *c == b' ') => {
+            String::from_utf8_lossy(b).into_owned()
+        }
+        Value::Bytes(b) if b.len() <= 8 => b.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(", "),
+        Value::Bytes(b) => hex(b),
+    })
+}
+
+/// The first bytes of a binary block in hex, and its size.
+fn hex(bytes: &[u8]) -> String {
+    const SHOWN: usize = 32;
+    let head: Vec<String> = bytes.iter().take(SHOWN).map(|b| format!("{b:02X}")).collect();
+    if bytes.len() > SHOWN { format!("{} … ({} bytes)", head.join(" "), bytes.len()) } else { head.join(" ") }
+}
+
+/// UserComment: an 8-byte character code, then the text.
+fn user_comment(bytes: &[u8]) -> Option<String> {
+    let (code, text) = (bytes.get(..8)?, bytes.get(8..)?);
+    let text = if code.starts_with(b"UNICODE") {
+        utf16(text)
+    } else {
+        String::from_utf8_lossy(text).trim_end_matches('\0').to_owned()
+    };
+    Some(text)
+}
+
+/// Windows' XP tags: UTF-16LE, zero-terminated.
+fn utf16(bytes: &[u8]) -> String {
+    let units: Vec<u16> =
+        bytes.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&u| u != 0).collect();
+    String::from_utf16_lossy(&units)
+}
+
+fn flash(value: u32) -> String {
+    let mut parts = vec![if value & 1 == 1 { "Fired" } else { "Did not fire" }];
+    match (value >> 3) & 3 {
+        1 => parts.push("compulsory"),
+        2 => parts.push("suppressed"),
+        3 => parts.push("auto"),
+        _ => {}
+    }
+    if value & 0x40 != 0 {
+        parts.push("red-eye reduction");
+    }
+    if value & 0x20 != 0 {
+        return "No flash function".to_owned();
+    }
+    parts.join(", ")
+}
+
+/// What the GPS reference letters mean.
+fn gps_letter(tag: u32, letter: &str) -> Option<&'static str> {
+    Some(match (tag, letter) {
+        (0x1_0001 | 0x1_0013, "N") => "North",
+        (0x1_0001 | 0x1_0013, "S") => "South",
+        (0x1_0003 | 0x1_0015, "E") => "East",
+        (0x1_0003 | 0x1_0015, "W") => "West",
+        (0x1_0009, "A") => "Measurement active",
+        (0x1_0009, "V") => "Measurement void",
+        (0x1_000a, "2") => "2-dimensional",
+        (0x1_000a, "3") => "3-dimensional",
+        (0x1_000c, "K") => "km/h",
+        (0x1_000c, "M") => "mph",
+        (0x1_000c, "N") => "knots",
+        (0x1_0019, "K") => "Kilometers",
+        (0x1_0019, "M") => "Miles",
+        (0x1_0019, "N") => "Nautical miles",
+        (0x1_000e | 0x1_0010 | 0x1_0017, "T") => "True north",
+        (0x1_000e | 0x1_0010 | 0x1_0017, "M") => "Magnetic north",
+        _ => return None,
+    })
+}
+
+/// Words for the tags whose values are codes.
+fn choice(tag: u32, value: u32) -> Option<&'static str> {
+    let pick = |options: &[&'static str]| options.get(value as usize).copied().filter(|o| !o.is_empty());
+    match tag {
+        0x0112 => pick(&[
+            "",
+            "Normal",
+            "Mirrored",
+            "Rotated 180°",
+            "Flipped",
+            "Mirrored, rotated 90° counterclockwise",
+            "Rotated 90° clockwise",
+            "Mirrored, rotated 90° clockwise",
+            "Rotated 90° counterclockwise",
+        ]),
+        0x0128 | 0xa210 | 0x9210 => pick(&["", "None", "Inches", "Centimeters"]),
+        0x0213 => pick(&["", "Centered", "Co-sited"]),
+        0x00fe => match value {
+            0 => Some("Full-resolution image"),
+            1 => Some("Reduced-resolution image"),
+            2 => Some("Single page of multi-page image"),
+            4 => Some("Transparency mask"),
+            _ => None,
+        },
+        0x00ff => pick(&["", "Full-resolution image", "Reduced-resolution image", "Single page of multi-page image"]),
+        0x0103 => match value {
+            1 => Some("Uncompressed"),
+            2 => Some("CCITT 1D"),
+            3 => Some("T4/Group 3 Fax"),
+            4 => Some("T6/Group 4 Fax"),
+            5 => Some("LZW"),
+            6 => Some("JPEG (old-style)"),
+            7 => Some("JPEG"),
+            8 | 32946 => Some("Deflate"),
+            99 => Some("JPEG"),
+            32773 => Some("PackBits"),
+            34712 => Some("JPEG 2000"),
+            34892 => Some("Lossy JPEG"),
+            52546 => Some("JPEG XL"),
+            _ => None,
+        },
+        0x0106 => match value {
+            0 => Some("WhiteIsZero"),
+            1 => Some("BlackIsZero"),
+            2 => Some("RGB"),
+            3 => Some("RGB Palette"),
+            4 => Some("Transparency Mask"),
+            5 => Some("CMYK"),
+            6 => Some("YCbCr"),
+            8 => Some("CIELab"),
+            9 => Some("ICCLab"),
+            10 => Some("ITULab"),
+            32803 => Some("Color Filter Array"),
+            34892 => Some("Linear Raw"),
+            _ => None,
+        },
+        0x010a => pick(&["", "Normal", "Reversed"]),
+        0x011c => pick(&["", "Chunky", "Planar"]),
+        0x013d => match value {
+            1 => Some("None"),
+            2 => Some("Horizontal differencing"),
+            3 => Some("Floating point"),
+            _ => None,
+        },
+        0xa460 => pick(&[
+            "Unknown",
+            "Not a composite image",
+            "General composite image",
+            "Composite image captured while shooting",
+        ]),
+        0x8822 => pick(&[
+            "Not defined",
+            "Manual",
+            "Normal program",
+            "Aperture priority",
+            "Shutter priority",
+            "Creative program",
+            "Action program",
+            "Portrait mode",
+            "Landscape mode",
+        ]),
+        0x8830 => pick(&[
+            "Unknown",
+            "Standard output sensitivity",
+            "Recommended exposure index",
+            "ISO speed",
+            "Standard output sensitivity and recommended exposure index",
+            "Standard output sensitivity and ISO speed",
+            "Recommended exposure index and ISO speed",
+            "All three",
+        ]),
+        0x9207 => match value {
+            255 => Some("Other"),
+            _ => pick(&["Unknown", "Average", "Center-weighted average", "Spot", "Multi-spot", "Pattern", "Partial"]),
+        },
+        0x9208 | 0xc65a | 0xc65b | 0xcd31 => match value {
+            0 => Some("Unknown"),
+            1 => Some("Daylight"),
+            2 => Some("Fluorescent"),
+            3 => Some("Tungsten"),
+            4 => Some("Flash"),
+            9 => Some("Fine weather"),
+            10 => Some("Cloudy"),
+            11 => Some("Shade"),
+            12..=16 => Some("Fluorescent"),
+            17 => Some("Standard light A"),
+            18 => Some("Standard light B"),
+            19 => Some("Standard light C"),
+            20..=23 => Some("Daylight (D-series)"),
+            24 => Some("ISO studio tungsten"),
+            255 => Some("Other"),
+            _ => None,
+        },
+        0xa001 => match value {
+            1 => Some("sRGB"),
+            2 => Some("Adobe RGB"),
+            0xffff => Some("Uncalibrated"),
+            _ => None,
+        },
+        0xa217 | 0x9217 => pick(&[
+            "",
+            "Not defined",
+            "One-chip color area",
+            "Two-chip color area",
+            "Three-chip color area",
+            "Color sequential area",
+            "",
+            "Trilinear",
+            "Color sequential linear",
+        ]),
+        0xa300 => pick(&["Others", "Film scanner", "Reflection print scanner", "Digital camera"]),
+        0xa301 => pick(&["", "Directly photographed"]),
+        0xa401 => pick(&["Normal", "Custom"]),
+        0xa402 => pick(&["Auto", "Manual", "Auto bracket"]),
+        0xa403 => pick(&["Auto", "Manual"]),
+        0xa406 => pick(&["Standard", "Landscape", "Portrait", "Night scene"]),
+        0xa407 => pick(&["None", "Low gain up", "High gain up", "Low gain down", "High gain down"]),
+        0xa408 | 0xa40a => pick(&["Normal", "Soft", "Hard"]),
+        0xa409 => pick(&["Normal", "Low", "High"]),
+        0xa40c => pick(&["Unknown", "Macro", "Close", "Distant"]),
+        0x1_0005 => pick(&[
+            "Above sea level",
+            "Below sea level",
+            "Positive sea-level reference",
+            "Negative sea-level reference",
+        ]),
+        0x1_001e => pick(&["No correction", "Differential corrected"]),
+        _ => None,
+    }
+}
+
+/// Names of the standard tags; GPS ones are 0x1_0000 + their number.
+fn tag_name(tag: u32) -> Option<&'static str> {
+    Some(match tag {
+        0x0100 => "Image Width",
+        0x0101 => "Image Height",
+        0x0102 => "Bits per Sample",
+        0x0103 => "Compression",
+        0x0106 => "Photometric Interpretation",
+        0x010e => "Description",
+        0x010f => "Make",
+        0x0110 => "Model",
+        0x0112 => "Orientation",
+        0x011a => "X Resolution",
+        0x011b => "Y Resolution",
+        0x0128 => "Resolution Unit",
+        0x0131 => "Software",
+        0x0132 => "Date Modified",
+        0x013b => "Artist",
+        0x013e => "White Point",
+        0x013f => "Primary Chromaticities",
+        0x0211 => "YCbCr Coefficients",
+        0x0201 => "Thumbnail Offset",
+        0x0202 => "Thumbnail Length",
+        0x0213 => "YCbCr Positioning",
+        0x02bc => "XMP Packet",
+        0x83bb => "IPTC Data",
+        0x8769 => "Exif IFD Pointer",
+        0x8773 => "ICC Profile",
+        0x8825 => "GPS IFD Pointer",
+        0x927c => "Maker Note",
+        0xa005 => "Interoperability IFD Pointer",
+        0xc4a5 => "Print Image Matching",
+        0xea1c => "Padding",
+        0xea1d => "Offset Schema",
+        0x4746 => "Rating",
+        0x4749 => "Rating Percent",
+        0x8298 => "Copyright",
+        0x829a => "Exposure Time",
+        0x829d => "F Number",
+        0x8822 => "Exposure Program",
+        0x8824 => "Spectral Sensitivity",
+        0x8827 => "ISO",
+        0x8830 => "Sensitivity Type",
+        0x8831 => "Standard Output Sensitivity",
+        0x8832 => "Recommended Exposure Index",
+        0x9000 => "Exif Version",
+        0x9003 => "Date Taken",
+        0x9004 => "Date Digitized",
+        0x9010 => "Time Zone",
+        0x9011 => "Time Zone (Taken)",
+        0x9012 => "Time Zone (Digitized)",
+        0x9101 => "Components Configuration",
+        0x9102 => "Compressed Bits per Pixel",
+        0x9201 => "Shutter Speed Value",
+        0x9202 => "Aperture Value",
+        0x9203 => "Brightness Value",
+        0x9204 => "Exposure Compensation",
+        0x9205 => "Max Aperture Value",
+        0x9206 => "Subject Distance",
+        0x9207 => "Metering Mode",
+        0x9208 => "Light Source",
+        0x9209 => "Flash",
+        0x920a => "Focal Length",
+        0x9214 => "Subject Area",
+        0x9286 => "User Comment",
+        0x9290 => "Subseconds",
+        0x9291 => "Subseconds (Taken)",
+        0x9292 => "Subseconds (Digitized)",
+        0x9c9b => "Title",
+        0x9c9c => "Comment",
+        0x9c9d => "Author",
+        0x9c9e => "Keywords",
+        0x9c9f => "Subject",
+        0xa000 => "FlashPix Version",
+        0xa001 => "Color Space",
+        0xa002 => "Width (camera)",
+        0xa003 => "Height (camera)",
+        0xa004 => "Related Sound File",
+        0xa20e => "Focal Plane X Resolution",
+        0xa20f => "Focal Plane Y Resolution",
+        0xa210 => "Focal Plane Resolution Unit",
+        0xa215 => "Exposure Index",
+        0xa217 => "Sensing Method",
+        0xa300 => "File Source",
+        0xa301 => "Scene Type",
+        0xa302 => "CFA Pattern",
+        0xa401 => "Custom Rendered",
+        0xa402 => "Exposure Mode",
+        0xa403 => "White Balance",
+        0xa404 => "Digital Zoom Ratio",
+        0xa405 => "Focal Length (35 mm)",
+        0xa406 => "Scene Capture Type",
+        0xa407 => "Gain Control",
+        0xa408 => "Contrast",
+        0xa409 => "Saturation",
+        0xa40a => "Sharpness",
+        0xa40c => "Subject Distance Range",
+        0xa420 => "Image Unique ID",
+        0xa500 => "Gamma",
+        0xa430 => "Camera Owner",
+        0xa431 => "Body Serial Number",
+        0xa432 => "Lens Specification",
+        0xa433 => "Lens Make",
+        0xa434 => "Lens Model",
+        0xa435 => "Lens Serial Number",
+        0x1_0000 => "GPS Version",
+        0x1_0001 => "GPS Latitude Ref",
+        0x1_0002 => "GPS Latitude",
+        0x1_0003 => "GPS Longitude Ref",
+        0x1_0004 => "GPS Longitude",
+        0x1_0005 => "GPS Altitude Ref",
+        0x1_0006 => "GPS Altitude",
+        0x1_0007 => "GPS Time (UTC)",
+        0x1_0008 => "GPS Satellites",
+        0x1_0009 => "GPS Status",
+        0x1_000a => "GPS Measure Mode",
+        0x1_000b => "GPS Precision (DOP)",
+        0x1_000c => "GPS Speed Ref",
+        0x1_000d => "GPS Speed",
+        0x1_000e => "GPS Track Ref",
+        0x1_000f => "GPS Track",
+        0x1_0010 => "GPS Image Direction Ref",
+        0x1_0011 => "GPS Image Direction",
+        0x1_0012 => "GPS Map Datum",
+        0x1_0013 => "GPS Destination Latitude Ref",
+        0x1_0014 => "GPS Destination Latitude",
+        0x1_0015 => "GPS Destination Longitude Ref",
+        0x1_0016 => "GPS Destination Longitude",
+        0x1_0017 => "GPS Destination Bearing Ref",
+        0x1_0018 => "GPS Destination Bearing",
+        0x1_0019 => "GPS Destination Distance Ref",
+        0x1_001a => "GPS Destination Distance",
+        0x1_001b => "GPS Processing Method",
+        0x1_001c => "GPS Area Information",
+        0x1_001d => "GPS Date",
+        0x1_001e => "GPS Differential",
+        0x1_001f => "GPS Horizontal Error",
+        _ => return None,
+    })
 }
 
 struct Tiff<'a> {
@@ -262,7 +908,14 @@ impl Tiff<'_> {
         Some(if self.little { u32::from_le_bytes(b) } else { u32::from_be_bytes(b) })
     }
 
-    /// Reads one IFD's entries; pointers to the EXIF and GPS IFDs go to `subs`.
+    /// Where the directory after the one at `at` starts (0 for none).
+    fn next_ifd(&self, at: usize) -> Option<usize> {
+        let count = self.u16(at)? as usize;
+        self.u32(at + 2 + count * 12).map(|v| v as usize)
+    }
+
+    /// Reads one IFD's entries; pointers to the EXIF, GPS and
+    /// Interoperability IFDs go to `subs`.
     fn read_ifd(&self, at: usize, tags: &mut std::collections::BTreeMap<u32, Value>, subs: &mut Vec<(u16, usize)>) {
         let Some(count) = self.u16(at) else { return };
         for i in 0..count as usize {
@@ -272,10 +925,10 @@ impl Tiff<'_> {
             };
             let n = n as usize;
             let size: usize = match kind {
-                1 | 2 | 7 => 1,
-                3 => 2,
-                4 | 9 => 4,
-                5 | 10 => 8,
+                1 | 2 | 6 | 7 => 1,
+                3 | 8 => 2,
+                4 | 9 | 11 | 13 => 4,
+                5 | 10 | 12 => 8,
                 _ => continue,
             };
             let Some(total) = size.checked_mul(n) else { continue };
@@ -283,9 +936,10 @@ impl Tiff<'_> {
             if start + total > self.data.len() {
                 continue;
             }
-            if tag == 0x8769 || tag == 0x8825 {
+            if tag == 0x8769 || tag == 0x8825 || tag == 0xa005 {
                 if let Some(offset) = self.u32(entry + 8) {
                     subs.push((tag, offset as usize));
+                    tags.insert(tag as u32, Value::Numbers(vec![offset]));
                 }
                 continue;
             }
@@ -296,7 +950,22 @@ impl Tiff<'_> {
                     Value::Text(String::from_utf8_lossy(text).into_owned())
                 }
                 3 => Value::Numbers((0..n).filter_map(|k| self.u16(start + 2 * k).map(u32::from)).collect()),
-                4 | 9 => Value::Numbers((0..n).filter_map(|k| self.u32(start + 4 * k)).collect()),
+                // LONG, and IFD (an offset, as in DNG).
+                4 | 13 => Value::Numbers((0..n).filter_map(|k| self.u32(start + 4 * k)).collect()),
+                6 => Value::Signed(self.data[start..start + total].iter().map(|&b| b as i8 as i32).collect()),
+                8 => Value::Signed((0..n).filter_map(|k| self.u16(start + 2 * k).map(|v| v as i16 as i32)).collect()),
+                9 => Value::Signed((0..n).filter_map(|k| self.u32(start + 4 * k).map(|v| v as i32)).collect()),
+                11 => Value::Floats(
+                    (0..n).filter_map(|k| self.u32(start + 4 * k).map(|v| f32::from_bits(v) as f64)).collect(),
+                ),
+                12 => Value::Floats(
+                    (0..n)
+                        .filter_map(|k| {
+                            let (a, b) = (self.u32(start + 8 * k)? as u64, self.u32(start + 8 * k + 4)? as u64);
+                            Some(f64::from_bits(if self.little { b << 32 | a } else { a << 32 | b }))
+                        })
+                        .collect(),
+                ),
                 5 | 10 => Value::Rationals(
                     (0..n)
                         .filter_map(|k| {
@@ -309,7 +978,7 @@ impl Tiff<'_> {
                         })
                         .collect(),
                 ),
-                _ => Value::Numbers(self.data[start..start + total].iter().map(|&b| b as u32).collect()),
+                _ => Value::Bytes(self.data[start..start + total].to_vec()),
             };
             tags.insert(tag as u32, value);
         }
@@ -388,6 +1057,22 @@ pub(crate) mod read_tests {
         segment.extend_from_slice(EXIF_HEADER);
         segment.extend_from_slice(&tiff);
         segment
+    }
+
+    #[test]
+    fn names_and_spells_out_more_tags() {
+        let text = |t: &str| Value::Text(t.into());
+        let shown = |tag, value| describe(tag, &value).unwrap();
+        let named = |name: &str, value: &str| (name.to_owned(), value.to_owned());
+        assert_eq!(shown(0x1_0017, text("T")), named("GPS Destination Bearing Ref", "True north"));
+        assert_eq!(
+            shown(0x1_0018, Value::Rationals(vec![(2_448_307.0, 10_000.0)])),
+            named("GPS Destination Bearing", "244.8307°")
+        );
+        assert_eq!(shown(0x1_001f, Value::Rationals(vec![(5.0, 1.0)])), named("GPS Horizontal Error", "5 m"));
+        assert_eq!(shown(0xa43a, text("darktable")), named("RAW Developing Software", "darktable"));
+        assert_eq!(shown(0x1_0030, text("x")).0, "GPS Tag 0x0030");
+        assert_eq!(shown(0x7777, text("x")).0, "Tag 0x7777");
     }
 
     #[test]
