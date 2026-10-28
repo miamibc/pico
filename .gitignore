@@ -6,7 +6,6 @@
 /research/picasa3/*.snapshot
 /research/picasa3/resources/
 /docs/research/picasa-strings-en.tsv
-/docs/tasks.md
 /research/picasa3/exe_strings.txt
 /research/picasa3/runtime/
 /research/picnik-src/
@@ -16,3 +15,4 @@
 
 # Local instructions for Claude Code and the local task list
 /CLAUDE.md
+/TASKS.md
