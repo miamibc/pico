@@ -1143,6 +1143,31 @@ fn home_end_pages_and_ctrl_3_in_the_grid() {
 }
 
 #[test]
+fn the_grid_never_runs_under_the_properties_panel() {
+    let fixture = Fixture::new("grid-fit");
+    for k in 0..30 {
+        RgbImage::from_pixel(40, 30, Rgb([k * 8, 50, 50])).save(fixture.dir.join(format!("z{k:02}.png"))).unwrap();
+    }
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().select_folder(0);
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    harness.run_steps(4);
+    for zoom in [1.0, 1.1, 1.2, 1.3, 0.6, 0.8] {
+        let first = harness.get_all_by_label("z00.png").map(|n| n.rect()).min_by(|a, b| a.left().total_cmp(&b.left()));
+        harness.hover_at(first.unwrap().center());
+        harness.event(egui::Event::Zoom(zoom));
+        harness.run_steps(4);
+        let edge = harness.get_by_label("Properties").rect().left();
+        // The thumbnails, not the file name in the panel.
+        let cells = harness.get_all_by_label_contains(".png").map(|n| n.rect()).filter(|r| r.left() < edge);
+        let right = cells.map(|r| r.right()).fold(0.0, f32::max);
+        let size = harness.state().thumbnail_size();
+        assert!(right < edge, "thumbnails at {size} reach {right}, the panel starts at {edge}");
+    }
+}
+
+#[test]
 fn settings_come_back_next_time() {
     let fixture = Fixture::new("settings");
     std::fs::create_dir_all(fixture.dir.join("more")).unwrap();

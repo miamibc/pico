@@ -170,8 +170,9 @@ pub struct GridOutput {
     pub add_folder: Option<PathBuf>,
 }
 
-pub fn columns_for(width: f32, thumb_size: f32) -> usize {
-    ((width / (thumb_size + 8.0)).floor() as usize).max(1)
+/// How many cells fit across `width`, with `spacing` between them.
+pub fn columns_for(width: f32, thumb_size: f32, spacing: f32) -> usize {
+    (((width + spacing) / (thumb_size + 8.0 + spacing)).floor() as usize).max(1)
 }
 
 const HEADER_HEIGHT: f32 = 44.0;
@@ -192,7 +193,7 @@ impl Layout {
         let text_height = if view.captions == CaptionMode::None { 0.0 } else { 18.0 };
         let cell = egui::vec2(view.thumb_size + 8.0, view.thumb_size + 8.0 + text_height);
         let step = cell + spacing;
-        let columns = columns_for(width, view.thumb_size);
+        let columns = columns_for(width, view.thumb_size, spacing.x);
         let mut y = 0.0;
         let mut tops = Vec::new();
         for section in view.sections {

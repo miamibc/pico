@@ -2755,7 +2755,8 @@ impl PicoApp {
         if keys.export && !self.targets().is_empty() {
             self.open_export();
         }
-        let columns = grid::columns_for(ui.available_width().max(self.thumb_size), self.thumb_size) as isize;
+        let width = ui.available_width().max(self.thumb_size);
+        let columns = grid::columns_for(width, self.thumb_size, ui.spacing().item_spacing.x) as isize;
         // A page is about the rows that fit on screen.
         let rows = (ui.ctx().content_rect().height() * 0.6 / (self.thumb_size + 16.0)).floor().max(1.0) as isize;
         self.step(keys.vertical * columns + keys.horizontal + keys.page * rows * columns);
