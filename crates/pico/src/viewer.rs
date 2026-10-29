@@ -17,7 +17,7 @@ use pico_core::image::imageops::FilterType;
 use pico_core::library::MediaFile;
 use pico_core::media::MediaKind;
 use pico_core::meta::PhotoMeta;
-use pico_core::render::{self, Histogram};
+use pico_core::render;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, channel};
@@ -52,8 +52,8 @@ pub enum ViewerAction {
 /// A decoded working copy and its scale, or why decoding failed.
 type BaseResult = Result<(DynamicImage, f32), String>;
 
-/// A rendered picture and its levels.
-type Rendered = (egui::ColorImage, Box<Histogram>);
+/// A rendered picture.
+type Rendered = egui::ColorImage;
 
 /// Width and height in pixels.
 type Size = (u32, u32);
@@ -71,8 +71,6 @@ pub struct Viewer {
     base_loading: Option<(PathBuf, Receiver<BaseResult>)>,
     texture: Option<(RenderKey, egui::TextureHandle)>,
     rendering: Option<(RenderKey, Receiver<Rendered>)>,
-    /// Levels of the picture on screen, edits included.
-    histogram: Option<(RenderKey, Box<Histogram>)>,
     error: Option<String>,
     caption: String,
     caption_for: Option<PathBuf>,
@@ -444,12 +442,6 @@ impl Viewer {
         let slack = per_px.ceil() as u32 + 1;
         let near = |a: u32, b: u32| a.abs_diff(b) <= slack;
         Some(if near(edited.0, same.0) && near(edited.1, same.1) { (same, None) } else { (edited, Some(same)) })
-    }
-
-    /// The levels of `path` as shown, edits included, once it is on screen.
-    pub fn histogram(&self, path: &std::path::Path) -> Option<&Histogram> {
-        let shown = self.texture.as_ref().map(|(key, _)| key).filter(|key| key.0 == path)?;
-        self.histogram.as_ref().filter(|(key, _)| key == shown).map(|(_, h)| h.as_ref())
     }
 
     /// Fit, 1:1 and the zoom slider; greyed out until the photo is `ready`.
@@ -952,11 +944,10 @@ impl Viewer {
         }
 
         if let Some((key, rx)) = &self.rendering
-            && let Ok((image, histogram)) = rx.try_recv()
+            && let Ok(image) = rx.try_recv()
         {
             let texture = ctx.load_texture("viewer", image, egui::TextureOptions::LINEAR);
             self.texture = Some((key.clone(), texture));
-            self.histogram = Some((key.clone(), histogram));
             self.rendering = None;
         }
 
@@ -974,8 +965,7 @@ impl Viewer {
         std::thread::spawn(move || {
             let rgba = render::apply_edits_scaled((*base).clone(), &meta, scale).to_rgba8();
             let size = [rgba.width() as usize, rgba.height() as usize];
-            let histogram = render::histogram(&rgba);
-            let _ = tx.send((egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()), histogram));
+            let _ = tx.send(egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()));
             ctx.request_repaint();
         });
         self.rendering = Some((wanted, rx));

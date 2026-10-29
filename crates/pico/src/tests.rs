@@ -64,6 +64,16 @@ fn wait_until(harness: &mut Harness<'_, PicoApp>, what: &str, done: impl Fn(&Pic
     harness.step();
 }
 
+/// Steps the UI until a node labelled `label` shows (background work).
+fn wait_for_label(harness: &mut Harness<'_, PicoApp>, label: &str) {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while harness.query_by_label(label).is_none() {
+        assert!(Instant::now() < deadline, "timed out waiting for {label}");
+        harness.step();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
 /// Saves a screenshot for eyeballing; skipped where no GPU adapter exists.
 fn screenshot(harness: &mut Harness<'_, PicoApp>, name: &str) {
     let Ok(image) = harness.render() else { return };
@@ -355,15 +365,27 @@ fn histogram_in_properties() {
     let fixture = Fixture::new("histogram");
     let mut harness = harness(&fixture.dir);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    // In the library, for the photo picked.
+    harness.get_by_label("b.png").click();
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    wait_for_label(&mut harness, "Histogram");
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    harness.run_steps(3);
+
+    // In the viewer.
     harness.state_mut().open_file_named("a.png");
     wait_until(&mut harness, "the photo to load", |app| app.viewer_loaded());
     harness.step();
     assert!(harness.query_by_label("Histogram").is_none(), "hidden with Properties");
     harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
-    harness.run_steps(3);
-    harness.get_by_label("Histogram");
+    wait_for_label(&mut harness, "Histogram");
     harness.get_by_label("No camera details in this file.");
     screenshot(&mut harness, "histogram");
+
+    // Back in the library it is the very same, there at once.
+    harness.key_press(Key::Escape);
+    harness.step();
+    harness.get_by_label("Histogram");
 }
 
 #[test]
@@ -2018,9 +2040,15 @@ fn properties_show_every_field_without_widening() {
     harness.get_by_label(name).click();
     harness.step();
     harness.step();
+    // The histogram comes from the background; the sections settle under it.
+    wait_for_label(&mut harness, "Histogram");
+    harness.run_steps(2);
     // The sections start closed; opened ones stay open, also after a restart.
     assert!(harness.query_by_label("Exposure Program").is_none(), "closed at first");
     for section in ["EXIF", "XMP", "IPTC", "JPEG"] {
+        // Lower ones may be out of sight, under the histogram and EXIF.
+        harness.get_by_label(section).scroll_to_me();
+        harness.run();
         harness.get_by_label(section).click();
         // Let the section finish opening, so the next header stands still.
         harness.run();
@@ -2479,4 +2507,26 @@ fn viewer_bar_never_runs_under_the_properties_panel() {
         .expect("the caption field");
     assert!(caption.right() < edge + 1.0, "the caption reaches {}, the panel starts at {edge}", caption.right());
     screenshot(&mut harness, "viewer-bar-fit");
+}
+
+#[test]
+fn filmstrip_stays_put_at_the_last_photos() {
+    let fixture = Fixture::new("filmstrip-end");
+    for k in 0..40 {
+        RgbImage::from_pixel(30, 20, Rgb([k * 6, 90, 90])).save(fixture.dir.join(format!("f{k:02}.png"))).unwrap();
+    }
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().open_file_named("f36.png");
+    harness.run_steps(3);
+    for _ in 0..3 {
+        harness.key_press(Key::ArrowRight);
+        // Where the last thumbnail sits, frame after frame: it never moves.
+        let mut seen = Vec::new();
+        for _ in 0..4 {
+            harness.step();
+            seen.push(harness.get_by_label("f39.png").rect().left());
+        }
+        assert!(seen.windows(2).all(|w| w[0] == w[1]), "the strip jerks: {seen:?}");
+    }
 }

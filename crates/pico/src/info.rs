@@ -8,6 +8,13 @@ use pico_core::metadata;
 use pico_core::render::Histogram;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
+use std::sync::mpsc::{Receiver, channel};
+
+/// A file with its edits, as `path` and `rotate|filters`.
+type LevelsKey = (PathBuf, String);
+
+/// The longest side the panel's own histogram is measured at.
+const LEVELS_SIDE: u32 = 512;
 
 /// A file's EXIF (if any), pixel size (if known), XMP properties and other
 /// metadata by kind.
@@ -29,6 +36,9 @@ pub struct InfoPanel {
     pub open_sections: BTreeSet<String>,
     /// The Copy button was clicked; the properties copy themselves.
     copy: bool,
+    /// The levels of the photo picked in the library, measured here.
+    levels: Option<(LevelsKey, Box<Histogram>)>,
+    levels_job: Option<(LevelsKey, Receiver<Option<Box<Histogram>>>)>,
 }
 
 impl InfoPanel {
@@ -38,7 +48,6 @@ impl InfoPanel {
         ui: &mut egui::Ui,
         current: Option<&MediaFile>,
         targets: &[&MediaFile],
-        histogram: Option<&Histogram>,
     ) -> Option<TagAction> {
         let mut action = None;
         // The heading and Copy stay put above the scrolling list.
@@ -57,8 +66,9 @@ impl InfoPanel {
             }
         });
         egui::ScrollArea::vertical().show(ui, |ui| {
-            // The levels of the photo open in the viewer, as edited.
-            if let Some(histogram) = histogram {
+            // Measured here in the library and in the viewer alike, so it
+            // looks the same in both.
+            if let Some(histogram) = current.and_then(|file| self.levels(ui.ctx(), file)) {
                 paint_histogram(ui, histogram);
             }
             match current {
@@ -72,6 +82,40 @@ impl InfoPanel {
             action = self.tags(ui, targets);
         });
         action
+    }
+
+    /// The levels of a photo, edits included, from a small copy decoded in
+    /// the background; while new edits are measured, the photo's last ones.
+    /// `None` until there are any, and for videos.
+    fn levels(&mut self, ctx: &egui::Context, file: &MediaFile) -> Option<&Histogram> {
+        if file.kind != MediaKind::Photo {
+            return None;
+        }
+        let key: LevelsKey = (file.path.clone(), format!("{}|{}", file.meta.rotate, file.meta.filters));
+        if let Some((job, rx)) = &self.levels_job
+            && let Ok(levels) = rx.try_recv()
+        {
+            self.levels = levels.map(|h| (job.clone(), h));
+            self.levels_job = None;
+        }
+        let measured = self.levels.as_ref().is_some_and(|(k, _)| k == &key);
+        let measuring = self.levels_job.as_ref().is_some_and(|(k, _)| k == &key);
+        if !measured && !measuring && self.levels_job.is_none() {
+            let (tx, rx) = channel();
+            let (path, meta, ctx) = (file.path.clone(), file.meta.clone(), ctx.clone());
+            std::thread::spawn(move || {
+                let levels = pico_core::render::decode(&path, MediaKind::Photo, &meta).ok().map(|img| {
+                    let side = img.width().max(img.height()).max(1);
+                    let scale = (LEVELS_SIDE as f32 / side as f32).min(1.0);
+                    let img = img.thumbnail(LEVELS_SIDE, LEVELS_SIDE);
+                    pico_core::render::histogram(&pico_core::render::apply_edits_scaled(img, &meta, scale).to_rgba8())
+                });
+                let _ = tx.send(levels);
+                ctx.request_repaint();
+            });
+            self.levels_job = Some((key.clone(), rx));
+        }
+        self.levels.as_ref().filter(|(k, _)| k.0 == key.0).map(|(_, h)| h.as_ref())
     }
 
     fn properties(&mut self, ui: &mut egui::Ui, file: &MediaFile) {
@@ -336,7 +380,7 @@ impl ModifiedText for MediaFile {
 
 /// Red, green and blue levels drawn over each other on a dark strip.
 fn paint_histogram(ui: &mut egui::Ui, histogram: &Histogram) {
-    let width = ui.available_width().min(256.0);
+    let width = ui.available_width();
     let (rect, response) = ui.allocate_exact_size(egui::vec2(width, 64.0), egui::Sense::hover());
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, "Histogram"));
     let painter = ui.painter_at(rect);

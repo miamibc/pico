@@ -42,7 +42,10 @@ pub fn show(
         && let Some(index) = items.iter().position(|(at, _)| *at == current)
     {
         let offset = (index as f32 + 0.5) * CELL - ui.available_width() / 2.0;
-        area = area.horizontal_scroll_offset(offset.max(0.0));
+        // Never past the end: the scroll area would show that for a frame
+        // and then jump back, which jerks the strip near the last photos.
+        let end = (items.len() as f32 * CELL - ui.available_width()).max(0.0);
+        area = area.horizontal_scroll_offset(offset.clamp(0.0, end));
         ui.data_mut(|d| d.insert_temp(centered_on, current));
     }
 

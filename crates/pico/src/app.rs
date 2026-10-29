@@ -2947,11 +2947,10 @@ impl PicoApp {
             let file = |at: FileRef| self.folders.get(at.0).and_then(|f| f.files.get(at.1));
             let current = current.and_then(file);
             let target_files: Vec<&MediaFile> = targets.iter().filter_map(|&at| file(at)).collect();
-            let histogram = current.filter(|_| self.view == View::Photo).and_then(|f| self.viewer.histogram(&f.path));
             let panel = egui::Panel::right("info")
                 .resizable(true)
                 .default_size(self.info_width)
-                .show(ui, |ui| self.info.show(ui, current, &target_files, histogram));
+                .show(ui, |ui| self.info.show(ui, current, &target_files));
             (panel.inner, panel.response.rect.width().round())
         };
         self.info_width = width;
