@@ -1969,7 +1969,7 @@ fn jpeg_with_metadata(path: &Path, description: &str) {
         t.extend_from_slice(&n.to_le_bytes());
         t.extend_from_slice(&value.to_le_bytes());
     };
-    let gps_at = exif_at + 2 + 12 + 4;
+    let gps_at = exif_at + 2 + 2 * 12 + 4;
     tiff.extend_from_slice(&4u16.to_le_bytes());
     entry(&mut tiff, 0x010e, 2, description.len() as u32, text_at as u32);
     entry(&mut tiff, 0x013b, 2, artist.len() as u32, (text_at + description.len()) as u32);
@@ -1978,9 +1978,10 @@ fn jpeg_with_metadata(path: &Path, description: &str) {
     tiff.extend_from_slice(&0u32.to_le_bytes());
     tiff.extend_from_slice(description.as_bytes());
     tiff.extend_from_slice(artist.as_bytes());
-    // The EXIF directory: Exposure Program 1, manual.
-    tiff.extend_from_slice(&1u16.to_le_bytes());
+    // The EXIF directory: Exposure Program 1, manual; the flash fired.
+    tiff.extend_from_slice(&2u16.to_le_bytes());
     entry(&mut tiff, 0x8822, 3, 1, 1);
+    entry(&mut tiff, 0x9209, 3, 1, 1);
     tiff.extend_from_slice(&0u32.to_le_bytes());
     // The GPS directory: 59° 26' N, 24° 45' E.
     let rationals = gps_at + 2 + 4 * 12 + 4;
@@ -2398,6 +2399,7 @@ fn picture_collage_previews_saves_and_files_into_album() {
 #[test]
 fn speaks_russian() {
     let fixture = Fixture::new("russian");
+    jpeg_with_metadata(&fixture.dir.join("meta.jpg"), "Sea");
     // Back to English for the other tests, also when this one fails.
     struct English;
     impl Drop for English {
@@ -2410,12 +2412,22 @@ fn speaks_russian() {
     let mut harness = harness(&fixture.dir);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
     harness.get_by_label("Библиотека");
-    harness.get_by_label("Holiday, 3 фотографии  ·  Октябрь 2026");
+    harness.get_by_label("Holiday, 4 фотографии  ·  Октябрь 2026");
     harness.get_by_label("Файл").click();
     harness.step();
     harness.step();
     harness.get_by_label("Добавить папку в Pico…");
     screenshot(&mut harness, "russian");
+
+    // Properties: what the metadata says, in Russian too.
+    harness.key_press(Key::Escape);
+    harness.step();
+    harness.get_by_label("meta.jpg").click();
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    harness.run_steps(3);
+    harness.get_by_label("Вспышка");
+    harness.get_by_label("Сработала");
+    harness.get_by_label("Размер файла");
 }
 
 #[test]

@@ -24,6 +24,8 @@ PLURAL = re.compile(r"\btrn!\(\s*" + STRING + r"\s*,\s*" + STRING)
 CORE_TEXTS = {
     "effects.rs": re.compile(r'(?:label: |slider\(|color\()' + STRING),
     "collage.rs": re.compile(r"\(Layout::\w+, " + STRING + r"\)"),
+    # The labels of the File block in Properties, and the flash's two words.
+    "exif.rs": re.compile(r'\bpush\(\s*"([A-Z](?:[^"\\]|\\.)*)"|"(Fired|Did not fire)"'),
 }
 
 
@@ -69,7 +71,8 @@ def collect():
         source = (CORE / file).read_text()
         name = (CORE / file).relative_to(ROOT)
         for m in pattern.finditer(source):
-            add(rust_text(m.group(1)), None, f"{name}:{line_of(source, m.start())}")
+            text = next(g for g in m.groups() if g is not None)
+            add(rust_text(text), None, f"{name}:{line_of(source, m.start())}")
     return texts
 
 

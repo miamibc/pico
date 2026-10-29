@@ -137,9 +137,11 @@ impl InfoPanel {
             summary.push((tr_mark!("Created").into(), created));
         }
         summary.push((tr_mark!("Modified").into(), file.sort_date_if_modified()));
-        summary.extend(
-            exif.iter().flat_map(|e| &e.fields).filter(|(l, _)| *l != "GPS").map(|(l, v)| (l.to_string(), v.clone())),
-        );
+        // The flash's "Fired" and "Did not fire" are words to translate too.
+        summary.extend(exif.iter().flat_map(|e| &e.fields).filter(|(l, _)| *l != "GPS").map(|(l, v)| {
+            let value = if *l == "Flash" { crate::i18n::tr(v).to_owned() } else { v.clone() };
+            (l.to_string(), value)
+        }));
         // The position from wherever the file has one: EXIF, XMP, a video's
         // ISO 6709 tag. The first found is shown, linked to the map; where
         // they disagree, every one of them gets a warning mark.
