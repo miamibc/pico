@@ -119,6 +119,8 @@ pub struct Viewer {
     star_puff: Option<star::Puff>,
     /// The space the photo or video is shown in.
     photo_area: Option<egui::Rect>,
+    /// Starring shows no flying star (Options > Animations off).
+    pub still: bool,
 }
 
 impl Viewer {
@@ -127,7 +129,7 @@ impl Viewer {
         let action = self.show_photo(ui, file, position);
         let now = ui.input(|i| i.time);
         let Some(area) = self.photo_area else { return action };
-        if matches!(action, Some(ViewerAction::ToggleStar)) {
+        if matches!(action, Some(ViewerAction::ToggleStar)) && !self.still {
             if file.meta.star {
                 self.star_flight = None;
                 self.star_puff = Some(star::Puff::new(now));

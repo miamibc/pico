@@ -176,6 +176,9 @@ pub struct PicoApp {
     folder_picker: Option<(FolderPurpose, Receiver<Option<PathBuf>>)>,
     picked_export_dir: Option<PathBuf>,
     show_options: bool,
+    /// How many times Options said the settings are saved, to say it in
+    /// turn three ways.
+    settings_saved: usize,
     confirm_trash: Option<Vec<FileRef>>,
     /// Photos dropped on a folder, waiting for "Move" (folder index).
     confirm_move: Option<(Vec<FileRef>, usize)>,
@@ -186,6 +189,10 @@ pub struct PicoApp {
     status: String,
     /// Light, dark, or as the system says.
     theme: egui::ThemePreference,
+    /// The interface language's code; `None` for the system's.
+    language: Option<String>,
+    /// The flying star and scrolling with weight.
+    animations: bool,
     /// The desktop's light or dark wish, where Pico reads it itself (Linux).
     system_dark: Option<bool>,
     system_theme: Option<Receiver<bool>>,
@@ -271,6 +278,7 @@ impl PicoApp {
             folder_picker: None,
             picked_export_dir: None,
             show_options: false,
+            settings_saved: 0,
             confirm_trash: None,
             confirm_move: None,
             show_about: false,
@@ -279,6 +287,8 @@ impl PicoApp {
             status: String::new(),
             persist_settings,
             theme: egui::ThemePreference::System,
+            language: None,
+            animations: true,
             system_dark: None,
             system_theme: None,
             sidebar_width: 260.0,
@@ -385,6 +395,8 @@ impl PicoApp {
             egui::ThemePreference::System => "system",
         };
         set("theme", theme.into());
+        set("language", self.language.clone().unwrap_or_else(|| "auto".into()));
+        set("animations", self.animations.to_string());
         if let Some(Source::Folder(i)) = self.source
             && let Some(folder) = self.folders.get(i)
         {
@@ -452,6 +464,9 @@ impl PicoApp {
             Some("light") => egui::ThemePreference::Light,
             _ => egui::ThemePreference::System,
         };
+        // main() sets the language itself, before the window opens.
+        self.language = get("language").filter(|l| *l != "auto").map(str::to_owned);
+        self.animations = flag("animations", true);
     }
 
     /// Sets the chosen theme; "as the system" uses the desktop's wish when
@@ -2666,6 +2681,7 @@ impl PicoApp {
                 reveal,
                 home,
                 reorder: albums,
+                kinetic: self.animations,
             };
             let output = grid::show(ui, view, &mut self.thumbs);
             self.hovered = output.hovered;
@@ -2968,6 +2984,7 @@ impl PicoApp {
                 return;
             }
         }
+        self.viewer.still = !self.animations;
         match self.viewer.show(ui, file, (position, listing.len().max(1))) {
             Some(ViewerAction::Close) => {
                 self.set_full_screen(ui.ctx(), false);
@@ -3273,6 +3290,7 @@ impl PicoApp {
         if self.show_options {
             let mut open = true;
             dialog_window(ctx, tr!("Options")).open(&mut open).show_dialog(ctx, |ui| {
+                let was = (self.theme, self.animations, self.language.clone());
                 ui.heading(tr!("Look"));
                 ui.horizontal(|ui| {
                     let before = self.theme;
@@ -3284,6 +3302,40 @@ impl PicoApp {
                     }
                 });
                 ui.label(egui::RichText::new(tr!("Photos keep their dark backdrop either way.")).weak());
+                ui.checkbox(&mut self.animations, tr!("Animations")).on_hover_text(tr!(
+                    "A star flies onto a starred photo; the photos glide on after the wheel and spring back at the ends"
+                ));
+                ui.separator();
+                ui.heading(tr!("Language"));
+                let system = crate::i18n::system_language();
+                let name = |code: &str| {
+                    crate::i18n::LANGUAGES
+                        .iter()
+                        .find(|l| l.0 == code)
+                        .map_or_else(|| code.to_owned(), |l| l.1.to_owned())
+                };
+                let auto = tr!("As the system ({language})", language = name(system));
+                let chosen = self.language.as_deref().map_or(auto.clone(), name);
+                let before = self.language.clone();
+                egui::ComboBox::from_id_salt("language").selected_text(chosen).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.language, None, auto);
+                    for (code, name, _) in crate::i18n::LANGUAGES {
+                        ui.selectable_value(&mut self.language, Some(code.to_string()), *name);
+                    }
+                });
+                if self.language != before {
+                    crate::i18n::set_language(self.language.as_deref());
+                }
+                // Settings keep at once; the status says so (in the new language).
+                if (self.theme, self.animations, self.language.clone()) != was {
+                    const SAID: [&str; 3] = [
+                        tr_mark!("Settings saved and written down. All in order!"),
+                        tr_mark!("Noted. Pico won't forget."),
+                        tr_mark!("Roger that! Pico remembered."),
+                    ];
+                    self.status = crate::i18n::tr(SAID[self.settings_saved % SAID.len()]).into();
+                    self.settings_saved += 1;
+                }
                 ui.separator();
                 ui.heading(tr!("Thumbnails"));
                 let dir = config::cache_dir().map(|d| d.join("thumbs"));

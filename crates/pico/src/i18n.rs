@@ -50,12 +50,25 @@ struct Catalog {
 
 static CATALOG: RwLock<Option<&'static Catalog>> = RwLock::new(None);
 
+/// The code of the system's language among [`LANGUAGES`]; English when
+/// Pico does not speak it.
+pub fn system_language() -> &'static str {
+    let base = base_language(&sys_locale::get_locale().unwrap_or_default());
+    LANGUAGES.iter().find(|l| l.0 == base).map_or("en", |l| l.0)
+}
+
+/// `ru` for `ru`, `ru_RU.UTF-8` or `ru-RU`.
+fn base_language(code: &str) -> String {
+    code.split(['_', '-', '.']).next().unwrap_or_default().to_lowercase()
+}
+
 /// Speaks the language `code` (`ru`, `ru_RU.UTF-8`…); `None`, or one Pico
 /// does not know, picks the system's; English when that is unknown too.
 pub fn set_language(code: Option<&str>) {
-    let system = sys_locale::get_locale();
-    let wanted = code.or(system.as_deref()).unwrap_or("en");
-    let base = wanted.split(['_', '-', '.']).next().unwrap_or_default().to_lowercase();
+    let base = match code {
+        Some(code) => base_language(code),
+        None => system_language().to_owned(),
+    };
     let po = LANGUAGES.iter().find(|l| l.0 == base).map_or("", |l| l.2);
     // Each language is read once or so in a run; it stays for the program's life.
     let catalog: &'static Catalog = Box::leak(Box::new(Catalog { code: base, texts: parse_po(po) }));

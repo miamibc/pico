@@ -2382,3 +2382,47 @@ fn speaks_russian() {
     harness.get_by_label("Добавить папку в Pico…");
     screenshot(&mut harness, "russian");
 }
+
+#[test]
+fn options_switch_animations_and_language() {
+    let fixture = Fixture::new("options");
+    struct English;
+    impl Drop for English {
+        fn drop(&mut self) {
+            crate::i18n::set_language(Some("en"));
+        }
+    }
+    let _english = English;
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("Tools").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Options…").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Animations").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Settings saved and written down. All in order!");
+    let ctx = harness.ctx.clone();
+    let settings = harness.state().settings_for_test(&ctx);
+    assert_eq!(settings.get("animations").map(String::as_str), Some("false"));
+    assert_eq!(settings.get("language").map(String::as_str), Some("auto"));
+
+    // Another language speaks at once, and is remembered.
+    harness.get_by_role(egui::accesskit::Role::ComboBox).click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Русский").click();
+    // The window's title is new, so it is a new window: unseen for a frame.
+    for _ in 0..3 {
+        harness.step();
+    }
+    harness.get_by_label("Язык");
+    screenshot(&mut harness, "options-russian");
+    // Each change is kept at once and said in turn three ways.
+    harness.get_by_label("Записал. Pico не забудет.");
+    let settings = harness.state().settings_for_test(&ctx);
+    assert_eq!(settings.get("language").map(String::as_str), Some("ru"));
+}

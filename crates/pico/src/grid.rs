@@ -158,6 +158,8 @@ pub struct GridView<'a> {
     pub home: Option<usize>,
     /// Photos can be dragged into a new order (an album's Custom Order).
     pub reorder: bool,
+    /// The wheel scrolls with weight (`Kinetic`); else as egui scrolls.
+    pub kinetic: bool,
 }
 
 pub struct GridOutput {
@@ -242,9 +244,13 @@ pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> G
     let (last_offset, last_height) = ui.data(|d| d.get_temp::<(f32, f32)>(view_id)).unwrap_or((0.0, 0.0));
 
     // Mouse drags draw the band rather than scrolling; the wheel is
-    // `Kinetic`'s.
-    let mut area =
-        egui::ScrollArea::vertical().auto_shrink(false).scroll_source(egui::scroll_area::ScrollSource::SCROLL_BAR);
+    // `Kinetic`'s, if it is on.
+    let source = if view.kinetic {
+        egui::scroll_area::ScrollSource::SCROLL_BAR
+    } else {
+        egui::scroll_area::ScrollSource::SCROLL_BAR | egui::scroll_area::ScrollSource::MOUSE_WHEEL
+    };
+    let mut area = egui::ScrollArea::vertical().auto_shrink(false).scroll_source(source);
     // Dragging the band past the top or bottom edge scrolls; set last frame.
     let mut offset = ui.data_mut(|d| d.remove_temp::<f32>(band_id.with("scroll")));
     if let Some(section) = view.scroll_to_section.filter(|&s| s < layout.tops.len()) {
@@ -274,7 +280,7 @@ pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> G
     let (time, dt) = ui.input(|i| (i.time, i.stable_dt.min(0.05)));
     let (offset, stretch) = match offset {
         Some(offset) => (Some(kinetic.jump(offset.clamp(0.0, end))), 0.0),
-        None if end.is_finite() => kinetic.step(last_offset, end, wheel, time, dt),
+        None if end.is_finite() && view.kinetic => kinetic.step(last_offset, end, wheel, time, dt),
         None => (None, 0.0),
     };
     if kinetic.moving(end) {
