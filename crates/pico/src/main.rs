@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[macro_use]
+mod i18n;
 mod app;
 mod collage_view;
 mod filmstrip;
@@ -25,6 +27,8 @@ fn main() -> eframe::Result {
 
     // The window comes back at the size it was closed at.
     let settings = pico_core::config::load_settings();
+    // The interface speaks the chosen language, else the system's.
+    i18n::set_language(settings.get("language").map(String::as_str).filter(|l| *l != "auto"));
     let number = |key: &str, default: f32| settings.get(key).and_then(|v| v.parse::<f32>().ok()).unwrap_or(default);
     let size = [number("window_width", 1200.0).max(640.0), number("window_height", 800.0).max(400.0)];
     let options = eframe::NativeOptions {

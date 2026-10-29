@@ -64,8 +64,8 @@ impl FolderManager {
     pub fn show(&mut self, ctx: &egui::Context) -> Option<FolderManagerAction> {
         let mut action = None;
         let mut open = true;
-        crate::app::dialog_window(ctx, "Folder Manager").open(&mut open).resizable(false).show_dialog(ctx, |ui| {
-            ui.label("Pick folders on the left and tell Pico whether to look inside them.");
+        crate::app::dialog_window(ctx, tr!("Folder Manager")).open(&mut open).resizable(false).show_dialog(ctx, |ui| {
+            ui.label(tr!("Pick folders on the left and tell Pico whether to look inside them."));
             ui.separator();
             let size = egui::vec2(720.0, 340.0);
             ui.allocate_ui_with_layout(size, egui::Layout::left_to_right(egui::Align::Min), |ui| {
@@ -98,18 +98,18 @@ impl FolderManager {
                 egui::Layout::left_to_right(egui::Align::Center),
                 |ui| {
                     ui.label(
-                        RichText::new(format!(
-                            "Watching {}, leaving out {}.",
-                            count(self.rules.watched.len()),
-                            count(self.rules.excluded.len())
+                        RichText::new(tr!(
+                            "Watching {watched}, leaving out {excluded}.",
+                            watched = count(self.rules.watched.len()),
+                            excluded = count(self.rules.excluded.len())
                         ))
                         .weak(),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(tr!("Cancel")).clicked() {
                             action = Some(FolderManagerAction::Cancel);
                         }
-                        if ui.button("OK").clicked() {
+                        if ui.button(tr!("OK")).clicked() {
                             let changed = self.rules != self.original;
                             action = Some(FolderManagerAction::Apply(changed.then(|| self.rules.clone())));
                         }
@@ -126,14 +126,14 @@ impl FolderManager {
     /// The right side: what happens to the selected folder. Returns whether
     /// "Browse…" was clicked.
     fn details(&mut self, ui: &mut egui::Ui) -> bool {
-        ui.label("Folder path:");
+        ui.label(tr!("Folder path:"));
         let mut go = false;
         ui.horizontal(|ui| {
             let edit = ui.add(egui::TextEdit::singleline(&mut self.path_text).desired_width(250.0));
             go = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            go |= ui.button("Go").clicked();
+            go |= ui.button(tr!("Go")).clicked();
         });
-        let browse = ui.button("Browse…").on_hover_text("Choose with the system folder dialog").clicked();
+        let browse = ui.button(tr!("Browse…")).on_hover_text(tr!("Choose with the system folder dialog")).clicked();
         if go {
             let path = PathBuf::from(self.path_text.trim());
             if path.is_dir() {
@@ -145,25 +145,25 @@ impl FolderManager {
         ui.add_space(12.0);
 
         let Some(path) = self.selected.clone() else {
-            ui.label(RichText::new("Pick a folder on the left, or type its path.").weak());
+            ui.label(RichText::new(tr!("Pick a folder on the left, or type its path.")).weak());
             return browse;
         };
         ui.strong(display_name(&path));
         let state = self.rules.state(&path);
         let mut in_library = state.in_library();
-        ui.radio_value(&mut in_library, true, "Watch for photos")
-            .on_hover_text("Pico shows this folder and everything inside it, and notices new photos");
-        ui.radio_value(&mut in_library, false, "Leave out of Pico")
-            .on_hover_text("Pico ignores this folder; no files are touched");
+        ui.radio_value(&mut in_library, true, tr!("Watch for photos"))
+            .on_hover_text(tr!("Pico shows this folder and everything inside it, and notices new photos"));
+        ui.radio_value(&mut in_library, false, tr!("Leave out of Pico"))
+            .on_hover_text(tr!("Pico ignores this folder; no files are touched"));
         if in_library != state.in_library() {
             self.rules.set_in_library(&path, in_library);
         }
         let note = match self.rules.state(&path) {
-            FolderState::Watched => "Watched, with everything inside it.",
-            FolderState::InsideWatched => "Inside a watched folder, so it's in.",
-            FolderState::Excluded => "Left out, along with everything inside it.",
-            FolderState::InsideExcluded => "Inside a folder that's left out.",
-            FolderState::Outside => "Not in Pico. Photos here are safe from being admired.",
+            FolderState::Watched => tr!("Watched, with everything inside it."),
+            FolderState::InsideWatched => tr!("Inside a watched folder, so it's in."),
+            FolderState::Excluded => tr!("Left out, along with everything inside it."),
+            FolderState::InsideExcluded => tr!("Inside a folder that's left out."),
+            FolderState::Outside => tr!("Not in Pico. Photos here are safe from being admired."),
         };
         ui.label(RichText::new(note).weak());
         browse
@@ -253,23 +253,23 @@ fn display_name(path: &Path) -> String {
 }
 
 fn count(n: usize) -> String {
-    if n == 1 { "1 folder".into() } else { format!("{n} folders") }
+    trn!("{n} folder", "{n} folders", n)
 }
 
 /// Where the tree starts: the user's folders first, then whole disks.
 fn roots() -> Vec<(String, PathBuf)> {
     let mut roots = Vec::new();
     if let Some(pictures) = config::default_pictures_dir() {
-        roots.push(("Pictures".to_owned(), pictures));
+        roots.push((tr!("Pictures").to_owned(), pictures));
     }
     if let Some(home) = config::home_dir().filter(|h| h.is_dir()) {
-        roots.push(("Home".to_owned(), home));
+        roots.push((tr!("Home").to_owned(), home));
     }
     if cfg!(windows) {
         for letter in 'A'..='Z' {
             let drive = PathBuf::from(format!("{letter}:\\"));
             if drive.is_dir() {
-                roots.push((format!("Drive {letter}:"), drive));
+                roots.push((tr!("Drive {letter}:", letter = letter), drive));
             }
         }
     } else {
@@ -278,9 +278,9 @@ fn roots() -> Vec<(String, PathBuf)> {
             disks.extend([Path::new("/media").join(&user), Path::new("/run/media").join(&user)]);
         }
         for dir in disks.into_iter().filter(|d| d.is_dir()) {
-            roots.push(("Drives".to_owned(), dir));
+            roots.push((tr!("Drives").to_owned(), dir));
         }
-        roots.push(("Computer".to_owned(), PathBuf::from("/")));
+        roots.push((tr!("Computer").to_owned(), PathBuf::from("/")));
     }
     roots
 }

@@ -25,13 +25,13 @@ pub enum ToolAction {
 
 /// Picasa's crop presets; ratios are width / height in landscape.
 const ASPECTS: [(&str, Option<f32>); 7] = [
-    ("Manual", None),
+    (tr_mark!("Manual"), None),
     ("4 x 6", Some(1.5)),
     ("5 x 7", Some(1.4)),
     ("8 x 10", Some(1.25)),
-    ("Square", Some(1.0)),
+    (tr_mark!("Square"), Some(1.0)),
     ("16 x 9", Some(16.0 / 9.0)),
-    ("As shot", Some(0.0)), // resolved to the photo's own ratio
+    (tr_mark!("As shot"), Some(0.0)), // resolved to the photo's own ratio
 ];
 
 #[derive(Default)]
@@ -130,7 +130,7 @@ impl CropTool {
             painter.text(
                 image_rect.center(),
                 egui::Align2::CENTER_CENTER,
-                "Drag over the photo to choose what stays",
+                tr!("Drag over the photo to choose what stays"),
                 egui::FontId::proportional(18.0),
                 Color32::WHITE,
             );
@@ -162,30 +162,33 @@ impl CropTool {
     }
 
     pub fn controls(&mut self, ui: &mut egui::Ui, image_px: Vec2, rotate: u8) -> Option<ToolAction> {
-        ui.heading("Crop");
-        ui.label("Drag over the photo. Everything outside the box goes away (not really: Undo brings it back).");
+        ui.heading(tr!("Crop"));
+        ui.label(tr!("Drag over the photo. Everything outside the box goes away (not really: Undo brings it back)."));
         let before = (self.aspect, self.portrait);
-        egui::ComboBox::from_label("Aspect").selected_text(ASPECTS[self.aspect].0).show_ui(ui, |ui| {
-            for (i, (name, _)) in ASPECTS.iter().enumerate() {
-                ui.selectable_value(&mut self.aspect, i, *name);
-            }
-        });
+        egui::ComboBox::from_label(tr!("Aspect")).selected_text(crate::i18n::tr(ASPECTS[self.aspect].0)).show_ui(
+            ui,
+            |ui| {
+                for (i, (name, _)) in ASPECTS.iter().enumerate() {
+                    ui.selectable_value(&mut self.aspect, i, crate::i18n::tr(name));
+                }
+            },
+        );
         ui.add_enabled(
             ASPECTS[self.aspect].1.is_some_and(|r| r != 1.0),
-            egui::Checkbox::new(&mut self.portrait, "Portrait"),
+            egui::Checkbox::new(&mut self.portrait, tr!("Portrait")),
         );
         if before != (self.aspect, self.portrait) {
             self.refit(image_px);
         }
         let mut action = None;
         ui.horizontal(|ui| {
-            if ui.add_enabled(self.rect.is_some(), egui::Button::new("Apply")).on_hover_text("Enter").clicked() {
+            if ui.add_enabled(self.rect.is_some(), egui::Button::new(tr!("Apply"))).on_hover_text("Enter").clicked() {
                 action = self.apply(rotate);
             }
-            if ui.button("Cancel").on_hover_text("Esc").clicked() {
+            if ui.button(tr!("Cancel")).on_hover_text("Esc").clicked() {
                 action = Some(ToolAction::Cancel);
             }
-            if ui.add_enabled(self.rect.is_some(), egui::Button::new("Reset")).clicked() {
+            if ui.add_enabled(self.rect.is_some(), egui::Button::new(tr!("Reset"))).clicked() {
                 self.rect = None;
             }
         });
@@ -221,18 +224,18 @@ pub fn rotate_point(p: Pos2, rotate: u8) -> Pos2 {
 
 /// Controls for an effect's parameters, built from its spec.
 pub fn effect_controls(ui: &mut egui::Ui, spec: &Spec, params: &mut [ParamValue]) -> Option<ToolAction> {
-    ui.heading(spec.label);
+    ui.heading(crate::i18n::tr(spec.label));
     for (param, value) in spec.params.iter().zip(params.iter_mut()) {
         match (*param, value) {
             (Param::Point, ParamValue::Point(..)) => {
-                ui.label("Click the photo to place the center.");
+                ui.label(tr!("Click the photo to place the center."));
             }
             (Param::Slider { label, min, max, .. }, ParamValue::Number(v)) => {
-                ui.add(egui::Slider::new(v, min..=max).text(label));
+                ui.add(egui::Slider::new(v, min..=max).text(crate::i18n::tr(label)));
             }
             (Param::Check { label, .. }, ParamValue::Number(v)) => {
                 let mut on = *v != 0.0;
-                if ui.checkbox(&mut on, label).changed() {
+                if ui.checkbox(&mut on, crate::i18n::tr(label)).changed() {
                     *v = if on { 1.0 } else { 0.0 };
                 }
             }
@@ -242,13 +245,15 @@ pub fn effect_controls(ui: &mut egui::Ui, spec: &Spec, params: &mut [ParamValue]
                     if ui.color_edit_button_srgb(&mut rgb).changed() {
                         *c = 0xff00_0000 | (rgb[0] as u32) << 16 | (rgb[1] as u32) << 8 | rgb[2] as u32;
                     }
-                    ui.label(label);
+                    ui.label(crate::i18n::tr(label));
                 });
             }
             (Param::Rotation, ParamValue::Rotation(r)) => {
                 ui.horizontal(|ui| {
-                    ui.label("Direction");
-                    for (turns, arrow) in [(0, "From top"), (1, "From right"), (2, "From bottom"), (3, "From left")] {
+                    ui.label(tr!("Direction"));
+                    for (turns, arrow) in
+                        [(0, tr!("From top")), (1, tr!("From right")), (2, tr!("From bottom")), (3, tr!("From left"))]
+                    {
                         ui.selectable_value(r, turns, arrow);
                     }
                 });
@@ -258,13 +263,13 @@ pub fn effect_controls(ui: &mut egui::Ui, spec: &Spec, params: &mut [ParamValue]
     }
     let mut action = None;
     ui.horizontal(|ui| {
-        if ui.button("Apply").on_hover_text("Enter").clicked() {
+        if ui.button(tr!("Apply")).on_hover_text("Enter").clicked() {
             action = Some(ToolAction::Apply(effects::to_filter(spec, params)));
         }
-        if ui.button("Cancel").on_hover_text("Esc").clicked() {
+        if ui.button(tr!("Cancel")).on_hover_text("Esc").clicked() {
             action = Some(ToolAction::Cancel);
         }
-        if ui.button("Defaults").clicked() {
+        if ui.button(tr!("Defaults")).clicked() {
             params.copy_from_slice(&effects::defaults(spec));
         }
     });
@@ -276,17 +281,17 @@ pub fn straighten_filter(amount: f32) -> Filter {
 }
 
 pub fn straighten_controls(ui: &mut egui::Ui, amount: &mut f32) -> Option<ToolAction> {
-    ui.heading("Straighten");
-    ui.label("Line up the horizon with the grid.");
+    ui.heading(tr!("Straighten"));
+    ui.label(tr!("Line up the horizon with the grid."));
     let mut degrees = *amount * MAX_TILT_DEGREES;
-    ui.add(egui::Slider::new(&mut degrees, -MAX_TILT_DEGREES..=MAX_TILT_DEGREES).text("Angle").suffix("°"));
+    ui.add(egui::Slider::new(&mut degrees, -MAX_TILT_DEGREES..=MAX_TILT_DEGREES).text(tr!("Angle")).suffix("°"));
     *amount = degrees / MAX_TILT_DEGREES;
     let mut action = None;
     ui.horizontal(|ui| {
-        if ui.add_enabled(*amount != 0.0, egui::Button::new("Apply")).on_hover_text("Enter").clicked() {
+        if ui.add_enabled(*amount != 0.0, egui::Button::new(tr!("Apply"))).on_hover_text("Enter").clicked() {
             action = Some(ToolAction::Apply(straighten_filter(*amount)));
         }
-        if ui.button("Cancel").on_hover_text("Esc").clicked() {
+        if ui.button(tr!("Cancel")).on_hover_text("Esc").clicked() {
             action = Some(ToolAction::Cancel);
         }
     });

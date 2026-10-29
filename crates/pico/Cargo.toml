@@ -12,6 +12,8 @@ pico-core = { path = "../pico-core" }
 # Puts copied files on the clipboard; eframe already builds it for text.
 arboard = { version = "3.7", default-features = false, features = ["wayland-data-control"] }
 rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal"] }
+# The system language, for translations; already built for eframe.
+sys-locale = "0.3.2"
 
 # Reads the desktop's light or dark preference from the XDG portal; already
 # built for the file dialog, so no new crates.

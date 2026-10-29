@@ -44,10 +44,10 @@ impl CaptionMode {
     }
 
     pub const ALL: [(CaptionMode, &'static str); 4] = [
-        (CaptionMode::None, "None"),
-        (CaptionMode::Filename, "Filename"),
-        (CaptionMode::Caption, "Caption"),
-        (CaptionMode::Tags, "Tags"),
+        (CaptionMode::None, tr_mark!("None")),
+        (CaptionMode::Filename, tr_mark!("Filename")),
+        (CaptionMode::Caption, tr_mark!("Caption")),
+        (CaptionMode::Tags, tr_mark!("Tags")),
     ];
 
     fn text(self, file: &MediaFile) -> Option<String> {
@@ -577,9 +577,12 @@ fn paint_missing(
     let (text, hover) = match &missing.folder {
         Some(folder) => {
             let name = folder.file_name().map_or_else(|| folder.display().to_string(), |n| n.to_string_lossy().into());
-            (format!("Not in Pico:\n{name}"), format!("Its folder is not in Pico:\n{}", folder.display()))
+            (
+                tr!("Not in Pico:\n{name}", name = name),
+                tr!("Its folder is not in Pico:\n{folder}", folder = folder.display()),
+            )
         }
-        None => ("Moved or deleted".to_owned(), "Moved or deleted".to_owned()),
+        None => (tr!("Moved or deleted").to_owned(), tr!("Moved or deleted").to_owned()),
     };
     // Dragged like a photo, to arrange the album.
     let tile = ui.interact(image_area, ui.scope_id().with(("missing", s, missing.at)), egui::Sense::drag());
@@ -599,7 +602,7 @@ fn paint_missing(
         ui.fonts_mut(|f| f.layout_job(job))
     };
     let galleys = [centred(missing.name.clone(), body.clone(), egui::Color32::WHITE), centred(text, body, color)];
-    let button = egui::Button::new("Add Folder");
+    let button = egui::Button::new(tr!("Add Folder"));
     let button_size = egui::vec2(width.min(100.0), 24.0);
     let gap = 4.0;
     let height = galleys.iter().map(|g| g.size().y + gap).sum::<f32>()
@@ -618,7 +621,7 @@ fn paint_missing(
                 egui::Rect::from_center_size(egui::pos2(image_area.center().x, y + button_size.y / 2.0), button_size),
                 button,
             )
-            .on_hover_text("Add this folder to Pico")
+            .on_hover_text(tr!("Add this folder to Pico"))
             .clicked();
     match (add, dragged) {
         (true, _) => MissingTile::AddFolder,
@@ -689,10 +692,10 @@ fn paint_header(ui: &egui::Ui, header: &SectionHeader, rect: egui::Rect) {
 fn badges(file: &MediaFile) -> Vec<(&'static str, &'static str)> {
     let mut badges = Vec::new();
     if !file.meta.filters.0.is_empty() {
-        badges.push(("✏", "Edited"));
+        badges.push(("✏", tr!("Edited")));
     }
     if file.gps.is_some() {
-        badges.push(("📍", "Has a location"));
+        badges.push(("📍", tr!("Has a location")));
     }
     badges
 }

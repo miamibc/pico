@@ -15,7 +15,7 @@ use pico_core::exif;
 use pico_core::filters::{Filter, FilterStack, Value};
 use pico_core::image::DynamicImage;
 use pico_core::image::imageops::FilterType;
-use pico_core::library::{self, MediaFile};
+use pico_core::library::MediaFile;
 use pico_core::media::MediaKind;
 use pico_core::meta::PhotoMeta;
 use pico_core::render::{self, Histogram};
@@ -323,46 +323,47 @@ impl Viewer {
     fn toolbar(&mut self, ui: &mut egui::Ui, file: &MediaFile, position: (usize, usize)) -> Option<ViewerAction> {
         let mut action = None;
         ui.horizontal(|ui| {
-            if ui.button("⬅ Back to Library").on_hover_text("Esc").clicked() {
+            if ui.button(tr!("⬅ Back to Library")).on_hover_text("Esc").clicked() {
                 action = Some(ViewerAction::Close);
             }
             if file.kind != MediaKind::Video {
-                ui.toggle_value(&mut self.show_edit_panel, "Edit").on_hover_text("Show the edit panel");
-                ui.toggle_value(&mut self.show_camera_info, "Info").on_hover_text("Histogram & Camera Information");
+                ui.toggle_value(&mut self.show_edit_panel, tr!("Edit")).on_hover_text(tr!("Show the edit panel"));
+                ui.toggle_value(&mut self.show_camera_info, tr!("Info"))
+                    .on_hover_text(tr!("Histogram & Camera Information"));
             }
-            if ui.button("▶ Slideshow").on_hover_text("Ctrl+4").clicked() {
+            if ui.button(tr!("▶ Slideshow")).on_hover_text("Ctrl+4").clicked() {
                 action = Some(ViewerAction::Slideshow);
             }
-            if ui.button("⛶").on_hover_text("Full screen (F11; Esc to leave)").clicked() {
+            if ui.button("⛶").on_hover_text(tr!("Full screen (F11; Esc to leave)")).clicked() {
                 action = Some(ViewerAction::FullScreen(true));
             }
             ui.separator();
-            if ui.button("◀").on_hover_text("Previous (Left arrow; Home for the first)").clicked() {
+            if ui.button("◀").on_hover_text(tr!("Previous (Left arrow; Home for the first)")).clicked() {
                 action = Some(ViewerAction::Previous);
             }
             ui.label(format!("{} / {}", position.0 + 1, position.1));
-            if ui.button("▶").on_hover_text("Next (Right arrow; End for the last)").clicked() {
+            if ui.button("▶").on_hover_text(tr!("Next (Right arrow; End for the last)")).clicked() {
                 action = Some(ViewerAction::Next);
             }
             ui.separator();
-            let star = if file.meta.star { "★ Starred" } else { "☆ Star" };
+            let star = if file.meta.star { tr!("★ Starred") } else { tr!("☆ Star") };
             let button = ui.button(star).on_hover_text("S");
             self.star_button = Some(button.rect);
             if button.clicked() {
                 action = Some(ViewerAction::ToggleStar);
             }
-            if ui.button("⟲").on_hover_text("Rotate counterclockwise (Ctrl+Shift+R)").clicked() {
+            if ui.button("⟲").on_hover_text(tr!("Rotate counterclockwise (Ctrl+Shift+R)")).clicked() {
                 action = Some(ViewerAction::Rotate(-1));
             }
-            if ui.button("⟳").on_hover_text("Rotate clockwise (Ctrl+R)").clicked() {
+            if ui.button("⟳").on_hover_text(tr!("Rotate clockwise (Ctrl+R)")).clicked() {
                 action = Some(ViewerAction::Rotate(1));
             }
             if file.kind != MediaKind::Video && self.tool.is_none() && self.texture.is_some() {
                 let edited = !file.meta.filters.0.is_empty();
                 let button = ui
-                    .add_enabled(edited, egui::Button::new("Original"))
-                    .on_hover_text("Hold to see the photo without its edits (or hold \\)")
-                    .on_disabled_hover_text("No edits to compare with");
+                    .add_enabled(edited, egui::Button::new(tr!("Original")))
+                    .on_hover_text(tr!("Hold to see the photo without its edits (or hold \\)"))
+                    .on_disabled_hover_text(tr!("No edits to compare with"));
                 let key_held = !ui.ctx().egui_wants_keyboard_input() && ui.input(|i| i.key_down(egui::Key::Backslash));
                 self.show_original = edited && (button.is_pointer_button_down_on() || key_held);
                 ui.separator();
@@ -372,8 +373,8 @@ impl Viewer {
             }
             if file.kind == MediaKind::Video
                 && ui
-                    .button("Save Frame as Photo")
-                    .on_hover_text("Save the frame on screen next to the video")
+                    .button(tr!("Save Frame as Photo"))
+                    .on_hover_text(tr!("Save the frame on screen next to the video"))
                     .clicked()
             {
                 action = self.player.save_frame().map(from_player);
@@ -381,7 +382,7 @@ impl Viewer {
             ui.separator();
             let edit = ui.add(
                 egui::TextEdit::singleline(&mut self.caption)
-                    .hint_text("Add a caption. Future you will thank you.")
+                    .hint_text(tr!("Add a caption. Future you will thank you."))
                     .desired_width(f32::INFINITY),
             );
             let committed = edit.lost_focus() || (edit.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
@@ -398,8 +399,8 @@ impl Viewer {
     fn info_line(&self, ui: &mut egui::Ui, file: &MediaFile) {
         let mut parts = vec![file.name()];
         parts.push(match &file.taken {
-            Some(taken) => library::date_label(taken),
-            None => format!("file date {}", library::date_label(&file.sort_date())),
+            Some(taken) => crate::i18n::date_label(taken),
+            None => tr!("file date {date}", date = crate::i18n::date_label(&file.sort_date())),
         });
         if file.kind == MediaKind::Video {
             if let Some(video) = self.player.info() {
@@ -409,7 +410,9 @@ impl Viewer {
             }
         } else if let Some(((w, h), original)) = self.pixel_size(file) {
             parts.push(match original {
-                Some((ow, oh)) => format!("{w} × {h} (original {ow} × {oh})"),
+                Some((ow, oh)) => {
+                    tr!("{size} (original {original})", size = format!("{w} × {h}"), original = format!("{ow} × {oh}"))
+                }
                 None => format!("{w} × {h}"),
             });
         }
@@ -479,13 +482,13 @@ impl Viewer {
             .filter_map(|label| {
                 value(label).map(|v| match *label {
                     "ISO" => format!("ISO {v}"),
-                    "Focal length" => format!("Focal length: {v}"),
+                    "Focal length" => tr!("Focal length: {length}", length = v),
                     _ => v,
                 })
             })
             .collect();
         if settings.is_empty() && value("Camera").is_none() {
-            ui.label("No camera details. A screenshot, perhaps?");
+            ui.label(tr!("No camera details. A screenshot, perhaps?"));
         }
         for setting in settings {
             ui.label(setting);
@@ -494,13 +497,13 @@ impl Viewer {
 
     fn zoom_controls(&mut self, ui: &mut egui::Ui) {
         let fit = self.fit_zoom.max(0.01);
-        if ui.selectable_label(self.zoom.is_none(), "Fit").on_hover_text("Fit the photo in the window").clicked() {
+        if ui.selectable_label(self.zoom.is_none(), "Fit").on_hover_text(tr!("Fit the photo in the window")).clicked() {
             self.zoom = None;
             self.pan = egui::Vec2::ZERO;
         }
         if ui
             .selectable_label(self.zoom == Some(1.0), "1:1")
-            .on_hover_text("One photo pixel per screen pixel")
+            .on_hover_text(tr!("One photo pixel per screen pixel"))
             .clicked()
         {
             self.set_zoom(1.0);
@@ -512,7 +515,7 @@ impl Viewer {
             .suffix("%")
             .fixed_decimals(0)
             .show_value(true);
-        if ui.add(slider).on_hover_text("Zoom (Ctrl+wheel; drag the photo to look around)").changed() {
+        if ui.add(slider).on_hover_text(tr!("Zoom (Ctrl+wheel; drag the photo to look around)")).changed() {
             self.set_zoom(percent / 100.0);
         }
     }
@@ -577,19 +580,21 @@ impl Viewer {
         let mut stack = self.draft.as_ref().map_or_else(|| committed.clone(), |(_, s)| s.clone());
         let mut commit = false;
 
-        ui.heading("Basic Fixes");
+        ui.heading(tr!("Basic Fixes"));
         ui.horizontal_wrapped(|ui| {
-            if ui.button("Crop").clicked() {
+            if ui.button(tr!("Crop")).clicked() {
                 self.draft = None;
                 self.tool = Some((file.path.clone(), Tool::Crop(CropTool::default())));
             }
-            if ui.button("Straighten").clicked() {
+            if ui.button(tr!("Straighten")).clicked() {
                 self.draft = None;
                 self.tool = Some((file.path.clone(), Tool::Straighten { amount: 0.0 }));
             }
-            for (label, id) in
-                [("I'm Feeling Lucky", "enhance"), ("Auto Contrast", "autolight"), ("Auto Color", "autocolor")]
-            {
+            for (label, id) in [
+                (tr!("I'm Feeling Lucky"), "enhance"),
+                (tr!("Auto Contrast"), "autolight"),
+                (tr!("Auto Color"), "autocolor"),
+            ] {
                 if ui.button(label).clicked() {
                     stack.0.push(Filter::effect(id, []));
                     commit = true;
@@ -598,7 +603,7 @@ impl Viewer {
         });
 
         ui.separator();
-        ui.heading("Tuning");
+        ui.heading(tr!("Tuning"));
         // The sliders edit the newest Tuning edit while it is on top of the
         // stack; after any other edit they start a new one, as Picasa does.
         let on_top = stack.0.last().is_some_and(|f| f.id == "finetune2");
@@ -607,10 +612,10 @@ impl Viewer {
         let neutral = current.and_then(|f| f.color(3)).unwrap_or(0);
         let mut changed = false;
         for (value, (label, range)) in values.iter_mut().zip([
-            ("Fill Light", 0.0..=1.0),
-            ("Highlights", 0.0..=0.48),
-            ("Shadows", 0.0..=0.48),
-            ("Color Temperature", -1.0..=1.0),
+            (tr!("Fill Light"), 0.0..=1.0),
+            (tr!("Highlights"), 0.0..=0.48),
+            (tr!("Shadows"), 0.0..=0.48),
+            (tr!("Color Temperature"), -1.0..=1.0),
         ]) {
             let response = ui.add(egui::Slider::new(value, range).text(label).show_value(false));
             changed |= response.changed();
@@ -636,20 +641,20 @@ impl Viewer {
         }
 
         ui.separator();
-        ui.heading("Effects");
+        ui.heading(tr!("Effects"));
         let mut open_effect = None;
         ui.horizontal_wrapped(|ui| {
             for spec in effects::SPECS.iter().filter(|s| s.group == Group::Picasa) {
-                if ui.button(spec.label).clicked() {
+                if ui.button(crate::i18n::tr(spec.label)).clicked() {
                     open_effect = Some(spec);
                 }
             }
         });
-        egui::CollapsingHeader::new("Creative Kit").default_open(false).show(ui, |ui| {
+        egui::CollapsingHeader::new(tr!("Creative Kit")).default_open(false).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 for spec in effects::SPECS.iter().filter(|s| s.group == Group::Creative && s.id != "ReanimatedEyeColor")
                 {
-                    if ui.button(spec.label).clicked() {
+                    if ui.button(crate::i18n::tr(spec.label)).clicked() {
                         open_effect = Some(spec);
                     }
                 }
@@ -674,26 +679,25 @@ impl Viewer {
             .filter(|f| !adjust::is_supported(&f.id) && !matches!(f.id.as_str(), "moviestart" | "movieend"));
         let hidden = hidden.count();
         ui.label(match count {
-            0 => "No edits yet. The photo is perfect, apparently.".to_owned(),
-            1 => "1 edit".to_owned(),
-            n => format!("{n} edits"),
+            0 => tr!("No edits yet. The photo is perfect, apparently.").to_owned(),
+            n => trn!("{n} edit", "{n} edits", n),
         });
         if hidden > 0 {
-            ui.label(egui::RichText::new(format!("{hidden} not shown yet (kept in the file)")).weak())
-                .on_hover_text("Pico keeps edits it cannot draw yet, so Picasa still sees them.");
+            ui.label(egui::RichText::new(tr!("{n} not shown yet (kept in the file)", n = hidden)).weak())
+                .on_hover_text(tr!("Pico keeps edits it cannot draw yet, so Picasa still sees them."));
         }
         let mut history = None;
         ui.horizontal(|ui| {
-            let undo = ui.add_enabled(!committed.0.is_empty(), egui::Button::new("Undo"));
-            if undo.on_hover_text("Remove the last edit (Ctrl+Z)").clicked() {
+            let undo = ui.add_enabled(!committed.0.is_empty(), egui::Button::new(tr!("Undo")));
+            if undo.on_hover_text(tr!("Remove the last edit (Ctrl+Z)")).clicked() {
                 history = self.undo(file);
             }
-            let redo = ui.add_enabled(!self.redo.is_empty(), egui::Button::new("Redo"));
-            if redo.on_hover_text("Bring the edit back (Ctrl+Y)").clicked() {
+            let redo = ui.add_enabled(!self.redo.is_empty(), egui::Button::new(tr!("Redo")));
+            if redo.on_hover_text(tr!("Bring the edit back (Ctrl+Y)")).clicked() {
                 history = self.redo(file);
             }
         });
-        if ui.add_enabled(count > 0, egui::Button::new("Undo All Edits")).clicked() {
+        if ui.add_enabled(count > 0, egui::Button::new(tr!("Undo All Edits"))).clicked() {
             // Redo brings them back one by one, oldest first.
             self.redo.extend(committed.0.iter().rev().cloned());
             self.draft = None;
@@ -796,7 +800,7 @@ impl Viewer {
                     ui.painter().with_clip_rect(area).image(original.id(), rect, grid::full_uv(), egui::Color32::WHITE);
                     let at = area.left_top() + egui::vec2(12.0, 10.0);
                     let font = egui::FontId::proportional(16.0);
-                    let galley = ui.painter().layout_no_wrap("Original".to_owned(), font, egui::Color32::WHITE);
+                    let galley = ui.painter().layout_no_wrap(tr!("Original").to_owned(), font, egui::Color32::WHITE);
                     ui.painter().rect_filled(
                         egui::Rect::from_min_size(at, galley.size()).expand(6.0),
                         4.0,
@@ -845,7 +849,9 @@ impl Viewer {
                 None => {}
             }
         } else if let Some(error) = &self.error {
-            ui.centered_and_justified(|ui| ui.label(format!("Pico squinted at this file and gave up:\n{error}")));
+            ui.centered_and_justified(|ui| {
+                ui.label(tr!("Pico squinted at this file and gave up:\n{error}", error = error))
+            });
         } else {
             ui.centered_and_justified(|ui| ui.spinner());
         }

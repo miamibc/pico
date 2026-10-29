@@ -2359,3 +2359,26 @@ fn picture_collage_previews_saves_and_files_into_album() {
     harness.step();
     assert!(!harness.state().in_collage());
 }
+
+#[test]
+fn speaks_russian() {
+    let fixture = Fixture::new("russian");
+    // Back to English for the other tests, also when this one fails.
+    struct English;
+    impl Drop for English {
+        fn drop(&mut self) {
+            crate::i18n::set_language(Some("en"));
+        }
+    }
+    let _english = English;
+    crate::i18n::set_language(Some("ru_RU.UTF-8"));
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("Библиотека");
+    harness.get_by_label("Holiday, 3 фотографии  ·  Октябрь 2026");
+    harness.get_by_label("Файл").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Добавить папку в Pico…");
+    screenshot(&mut harness, "russian");
+}

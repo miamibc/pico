@@ -337,7 +337,7 @@ impl PicoApp {
             ctx.request_repaint();
         });
         self.scan = Some(rx);
-        self.status = "Looking for photos… (they're usually hiding in Downloads)".into();
+        self.status = tr!("Looking for photos… (they're usually hiding in Downloads)").into();
     }
 
     /// What Pico remembers between runs.
@@ -497,7 +497,7 @@ impl PicoApp {
             return;
         }
         if let Err(e) = config::save_settings(&settings) {
-            self.status = format!("Could not save the settings: {e}");
+            self.status = tr!("Could not save the settings: {e}", e = e);
         }
         self.saved_settings = settings;
         self.settings_changed = None;
@@ -543,7 +543,7 @@ impl PicoApp {
                 && let Err(e) = config::save_watched_folders(&self.rules.watched)
                     .and_then(|()| config::save_excluded_folders(&self.rules.excluded))
             {
-                self.status = format!("Could not save the folder list: {e}");
+                self.status = tr!("Could not save the folder list: {e}", e = e);
             }
         }
         self.rescan(ctx);
@@ -619,19 +619,19 @@ impl PicoApp {
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.set_width(150.0);
-                ui.strong("Photo Tray");
+                ui.strong(tr!("Photo Tray"));
                 let more = refs.len() - held_refs.len();
                 let note = match (held_refs.len(), more) {
-                    (0, 0) => "Select photos, then Hold".to_owned(),
-                    (0, n) => format!("{} selected", plural(n, "photo")),
-                    (h, 0) => format!("{} held", plural(h, "photo")),
-                    (h, n) => format!("{} held, {n} selected", plural(h, "photo")),
+                    (0, 0) => tr!("Select photos, then Hold").to_owned(),
+                    (0, n) => tr!("{photos} selected", photos = plural(n, "photo")),
+                    (h, 0) => tr!("{photos} held", photos = plural(h, "photo")),
+                    (h, n) => tr!("{photos} held, {n} selected", photos = plural(h, "photo"), n = n),
                 };
                 ui.label(egui::RichText::new(note).weak());
                 ui.horizontal(|ui| {
                     let any = !self.targets().is_empty();
-                    let hold = ui.add_enabled(any, egui::Button::new("Hold"));
-                    if hold.on_hover_text("Keep the selection in the tray (Ctrl+H)").clicked() {
+                    let hold = ui.add_enabled(any, egui::Button::new(tr!("Hold")));
+                    if hold.on_hover_text(tr!("Keep the selection in the tray (Ctrl+H)")).clicked() {
                         self.hold();
                     }
                     // The photo picked in the tray, else the held ones selected.
@@ -641,12 +641,12 @@ impl PicoApp {
                         None => self.selection.iter().filter_map(|&at| path_of(self, at)).collect(),
                     };
                     let any_held = leaving.iter().any(|p| self.tray.contains(p));
-                    let unhold = ui.add_enabled(any_held, egui::Button::new("Unhold"));
-                    if unhold.on_hover_text("Take the picked or selected photos out of the tray").clicked() {
+                    let unhold = ui.add_enabled(any_held, egui::Button::new(tr!("Unhold")));
+                    if unhold.on_hover_text(tr!("Take the picked or selected photos out of the tray")).clicked() {
                         self.tray.retain(|p| !leaving.contains(p));
                     }
-                    let clear = ui.add_enabled(held, egui::Button::new("Clear"));
-                    if clear.on_hover_text("Empty the tray; the photos stay where they are").clicked() {
+                    let clear = ui.add_enabled(held, egui::Button::new(tr!("Clear")));
+                    if clear.on_hover_text(tr!("Empty the tray; the photos stay where they are")).clicked() {
                         self.tray.clear();
                         if self.source == Some(Source::Tray) {
                             self.source = None;
@@ -675,21 +675,21 @@ impl PicoApp {
     /// size; remembers how wide they are.
     fn tray_actions(&mut self, ui: &mut egui::Ui, any: bool, held: bool) {
         let actions = egui::Grid::new("tray actions").num_columns(2).show(ui, |ui| {
-            if ui.add_enabled(any, egui::Button::new("▶ Slideshow")).clicked() && self.take_tray() {
+            if ui.add_enabled(any, egui::Button::new(tr!("▶ Slideshow"))).clicked() && self.take_tray() {
                 self.start_slideshow(ui.ctx());
             }
-            if ui.add_enabled(any, egui::Button::new("Export…")).clicked() && self.take_tray() {
+            if ui.add_enabled(any, egui::Button::new(tr!("Export…"))).clicked() && self.take_tray() {
                 self.open_export();
             }
             ui.end_row();
-            if ui.add_enabled(any, egui::Button::new("Make a Collage…")).clicked() && self.take_tray() {
+            if ui.add_enabled(any, egui::Button::new(tr!("Make a Collage…"))).clicked() && self.take_tray() {
                 self.open_collage(ui.ctx());
             }
-            if ui.add_enabled(any, egui::Button::new("Make a Movie…")).clicked() && self.take_tray() {
+            if ui.add_enabled(any, egui::Button::new(tr!("Make a Movie…"))).clicked() && self.take_tray() {
                 self.open_movie_dialog();
             }
             ui.end_row();
-            if held && ui.button("Show Tray").clicked() {
+            if held && ui.button(tr!("Show Tray")).clicked() {
                 self.select_source(Source::Tray);
             }
             if !held {
@@ -699,7 +699,7 @@ impl PicoApp {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("🗖").weak());
                 let slider = egui::Slider::new(&mut self.thumb_size, MIN_THUMB..=MAX_THUMB).show_value(false);
-                ui.add_sized([110.0, 18.0], slider).on_hover_text("Thumbnail size (Ctrl+wheel over the photos)");
+                ui.add_sized([110.0, 18.0], slider).on_hover_text(tr!("Thumbnail size (Ctrl+wheel over the photos)"));
             });
         });
         let wanted = actions.response.rect.width() + 4.0 * ui.spacing().item_spacing.x;
@@ -723,14 +723,14 @@ impl PicoApp {
             refs.iter().filter_map(|&at| Some((at, self.folders.get(at.0)?.files.get(at.1)?))).collect();
         let mut chosen = None;
         let mut menu = |ui: &mut egui::Ui, at: FileRef| {
-            if ui.button("View").clicked() {
+            if ui.button(tr!("View")).clicked() {
                 chosen = Some(TrayChoice::View(at));
             }
             if held_refs.contains(&at) {
-                if ui.button("Unhold").on_hover_text("Take the photo out of the tray").clicked() {
+                if ui.button(tr!("Unhold")).on_hover_text(tr!("Take the photo out of the tray")).clicked() {
                     chosen = Some(TrayChoice::Unhold(at));
                 }
-            } else if ui.button("Hold").on_hover_text("Keep the photo in the tray").clicked() {
+            } else if ui.button(tr!("Hold")).on_hover_text(tr!("Keep the photo in the tray")).clicked() {
                 chosen = Some(TrayChoice::Hold(at));
             }
         };
@@ -739,7 +739,7 @@ impl PicoApp {
                 egui::vec2(strip_width, filmstrip::CELL),
                 egui::Layout::left_to_right(egui::Align::Center),
                 |ui| {
-                    let label = |name: &str| format!("Tray: {name}");
+                    let label = |name: &str| tr!("Tray: {name}", name = name);
                     filmstrip::show(ui, &items, picked, held_refs, &mut self.thumbs, label, Some(&mut menu))
                 },
             )
@@ -882,7 +882,7 @@ impl PicoApp {
         if self.persist_settings
             && let Err(e) = album_file::save(&album)
         {
-            self.status = format!("Could not save the album: {e}");
+            self.status = tr!("Could not save the album: {e}", e = e);
         }
         self.album_files.borrow_mut().insert(album.token.clone(), album);
     }
@@ -1032,15 +1032,18 @@ impl PicoApp {
         folders.dedup();
         let mut lines = Vec::new();
         if !found.is_empty() {
-            lines.push(format!(
-                "{} of this album {} in folders Pico does not watch; add them with File > Add Folder to Pico: {}",
-                plural(found.len(), "photo"),
-                if found.len() == 1 { "is" } else { "are" },
-                folders.join(", ")
+            lines.push(trn!(
+                "{n} photo of this album is in folders Pico does not watch; add them with File > Add Folder to Pico: {folders}",
+                "{n} photos of this album are in folders Pico does not watch; add them with File > Add Folder to Pico: {folders}",
+                found.len(),
+                folders = folders.join(", ")
             ));
         }
         if !lost.is_empty() {
-            lines.push(format!("{} of this album could not be found: moved or deleted.", plural(lost.len(), "photo")));
+            lines.push(tr!(
+                "{photos} of this album could not be found: moved or deleted.",
+                photos = plural(lost.len(), "photo")
+            ));
         }
         (!lines.is_empty()).then(|| lines.join("\n"))
     }
@@ -1123,20 +1126,20 @@ impl PicoApp {
                             self.thumbs.invalidate(&file.path);
                         }
                     }
-                    self.status = format!("Saved to {}", folder.ini_path.display());
+                    self.status = tr!("Saved to {path}", path = folder.ini_path.display());
                 }
                 Err(e) => {
                     // Keep the screen honest: undo changes that did not reach the disk.
                     for (i, old) in before {
                         folder.files[i].meta = old;
                     }
-                    self.status = format!("Could not write {}: {e}", folder.ini_path.display());
+                    self.status = tr!("Could not write {path}: {e}", path = folder.ini_path.display(), e = e);
                     return;
                 }
             }
         }
         if saved > 1 {
-            self.status = format!("Updated {saved} photos");
+            self.status = tr!("Updated {photos}", photos = plural(saved, "photo"));
         }
     }
 
@@ -1165,9 +1168,8 @@ impl PicoApp {
             return;
         }
         self.status = match self.put_on_clipboard(&paths) {
-            Ok(()) if paths.len() == 1 => "Copied 1 file to the clipboard".to_owned(),
-            Ok(()) => format!("Copied {} files to the clipboard", paths.len()),
-            Err(e) => format!("Could not copy to the clipboard: {e}"),
+            Ok(()) => tr!("Copied {files} to the clipboard", files = plural(paths.len(), "file")),
+            Err(e) => tr!("Could not copy to the clipboard: {e}", e = e),
         };
     }
 
@@ -1189,7 +1191,7 @@ impl PicoApp {
 
     fn copy_effects(&mut self) {
         if let Some(filters) = self.current.and_then(|at| self.file(at)).map(|f| f.meta.filters.clone()) {
-            self.status = format!("Copied {}", plural(filters.0.len(), "effect"));
+            self.status = tr!("Copied {effects}", effects = plural(filters.0.len(), "effect"));
             self.copied_filters = Some(filters);
         }
     }
@@ -1226,8 +1228,8 @@ impl PicoApp {
         };
         self.duplicates = groups.iter().flatten().filter_map(find).collect();
         self.status = match groups.len() {
-            0 => "No duplicates. Every photo is one of a kind.".into(),
-            n => format!("{} of identical files", plural(n, "group")),
+            0 => tr!("No duplicates. Every photo is one of a kind.").into(),
+            n => tr!("{groups} of identical files", groups = plural(n, "group")),
         };
     }
 
@@ -1240,8 +1242,8 @@ impl PicoApp {
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let title = match purpose {
-                FolderPurpose::Watch => "Add a folder to Pico",
-                FolderPurpose::ExportTo => "Export to folder",
+                FolderPurpose::Watch => tr!("Add a folder to Pico"),
+                FolderPurpose::ExportTo => tr!("Export to folder"),
             };
             let _ = tx.send(rfd::FileDialog::new().set_title(title).pick_folder());
             ctx.request_repaint();
@@ -1302,11 +1304,14 @@ impl PicoApp {
             Some(CollageAction::Saved { path, wallpaper }) => {
                 self.add_file(path.clone());
                 self.add_to_collages_album(&path);
-                self.status = format!("Collage saved to {}", path.display());
+                self.status = tr!("Collage saved to {path}", path = path.display());
                 if wallpaper {
                     match pico_core::fileops::set_wallpaper(&path) {
-                        Ok(()) => self.status += " and set as the desktop background",
-                        Err(e) => self.status = format!("Saved, but could not set the wallpaper: {e}"),
+                        Ok(()) => {
+                            self.status =
+                                tr!("Collage saved to {path} and set as the desktop background", path = path.display())
+                        }
+                        Err(e) => self.status = tr!("Saved, but could not set the wallpaper: {e}", e = e),
                     }
                 }
             }
@@ -1373,7 +1378,7 @@ impl PicoApp {
         });
         self.movie_job = Some(rx);
         self.movie_frames = (0, files_count);
-        self.status = "Making a movie… popcorn recommended.".into();
+        self.status = tr!("Making a movie… popcorn recommended.").into();
     }
 
     fn poll_movie(&mut self) {
@@ -1383,7 +1388,7 @@ impl PicoApp {
             match progress {
                 MovieProgress::Frames(done, total) => {
                     self.movie_frames = (done, total);
-                    self.status = format!("Preparing photo {done} of {total}…");
+                    self.status = tr!("Preparing photo {done} of {total}…", done = done, total = total);
                 }
                 MovieProgress::Finished(result) => finished = Some(result),
             }
@@ -1392,10 +1397,10 @@ impl PicoApp {
             self.movie_job = None;
             match result {
                 Ok(path) => {
-                    self.status = format!("Movie saved to {}", path.display());
+                    self.status = tr!("Movie saved to {path}", path = path.display());
                     self.add_file(path);
                 }
-                Err(e) => self.status = format!("Could not make the movie: {e}"),
+                Err(e) => self.status = tr!("Could not make the movie: {e}", e = e),
             }
         }
     }
@@ -1433,7 +1438,7 @@ impl PicoApp {
             if folder.rename_album(token, name)
                 && let Err(e) = folder.ini.save(&folder.ini_path)
             {
-                self.status = format!("Could not write {}: {e}", folder.ini_path.display());
+                self.status = tr!("Could not write {path}: {e}", path = folder.ini_path.display(), e = e);
                 return;
             }
         }
@@ -1444,7 +1449,7 @@ impl PicoApp {
             self.store_album_file(album);
         }
         self.albums_dirty = true;
-        self.status = format!("Renamed the album to \"{name}\"");
+        self.status = tr!("Renamed the album to \"{name}\"", name = name);
     }
 
     /// Deletes the album: its declarations, its photos' membership and its
@@ -1454,21 +1459,21 @@ impl PicoApp {
         for folder in &mut self.folders {
             let (left, changed) = folder.forget_album(token);
             if changed && let Err(e) = folder.save_metas(&left) {
-                self.status = format!("Could not write {}: {e}", folder.ini_path.display());
+                self.status = tr!("Could not write {path}: {e}", path = folder.ini_path.display(), e = e);
                 return;
             }
         }
         if self.persist_settings
             && let Err(e) = album_file::remove(token)
         {
-            self.status = format!("Could not delete the album file: {e}");
+            self.status = tr!("Could not delete the album file: {e}", e = e);
             return;
         }
         self.album_files.borrow_mut().remove(token);
         if self.source == Some(Source::Album(token.to_owned())) {
             self.source = (!self.folders.is_empty()).then_some(Source::Folder(0));
         }
-        self.status = format!("Deleted the album \"{name}\"");
+        self.status = tr!("Deleted the album \"{name}\"", name = name);
     }
 
     /// Delete: in an album the targets leave the album and the files stay;
@@ -1482,7 +1487,11 @@ impl PicoApp {
         self.edit_files(&targets, |meta| meta.albums.retain(|t| t != &token));
         self.selection.clear();
         let name = self.album_name(&token).unwrap_or_default();
-        self.status = format!("Took {} out of \"{name}\"; the files stay", plural(targets.len(), "photo"));
+        self.status = tr!(
+            "Took {photos} out of \"{name}\"; the files stay",
+            photos = plural(targets.len(), "photo"),
+            name = name
+        );
     }
 
     /// Puts the targets into an album, declaring it in each affected folder.
@@ -1498,7 +1507,7 @@ impl PicoApp {
                 meta.albums.push(token.to_owned());
             }
         });
-        self.status = format!("Added {} to \"{name}\"", plural(targets.len(), "photo"));
+        self.status = tr!("Added {photos} to \"{name}\"", photos = plural(targets.len(), "photo"), name = name);
     }
 
     /// Folders (or files, by their folder) dropped from the file manager join
@@ -1523,8 +1532,8 @@ impl PicoApp {
             self.set_rules(ctx, rules);
         }
         self.status = match added {
-            0 => "Those are already in Pico.".to_owned(),
-            n => format!("Added {} to Pico", plural(n, "folder")),
+            0 => tr!("Those are already in Pico.").to_owned(),
+            n => tr!("Added {folders} to Pico", folders = plural(n, "folder")),
         };
     }
 
@@ -1539,15 +1548,15 @@ impl PicoApp {
                 .interactable(false)
                 .show(ctx, |ui| {
                     egui::Frame::popup(ui.style()).show(ui, |ui| {
-                        let arrange = if matches!(self.source, Some(Source::Album(_))) {
-                            ", or between photos to arrange them"
+                        let photos = plural(drag.0.len() + drag.1.len(), "photo");
+                        ui.label(if matches!(self.source, Some(Source::Album(_))) {
+                            tr!(
+                                "{photos}: drop on a folder, an album or the tray, or between photos to arrange them",
+                                photos = photos
+                            )
                         } else {
-                            ""
-                        };
-                        ui.label(format!(
-                            "{}: drop on a folder, an album or the tray{arrange}",
-                            plural(drag.0.len() + drag.1.len(), "photo")
-                        ));
+                            tr!("{photos}: drop on a folder, an album or the tray", photos = photos)
+                        });
                     });
                 });
         }
@@ -1558,7 +1567,7 @@ impl PicoApp {
             painter.text(
                 screen.center(),
                 egui::Align2::CENTER_CENTER,
-                "Drop folders here to add them to Pico",
+                tr!("Drop folders here to add them to Pico"),
                 egui::FontId::proportional(24.0),
                 egui::Color32::WHITE,
             );
@@ -1587,8 +1596,15 @@ impl PicoApp {
         let name = self.folders.get(dest).map(|f| f.name.clone()).unwrap_or_default();
         self.rescan(ctx);
         self.status = match failed.first() {
-            None => format!("Moved {} to \"{name}\"", plural(moved, "file")),
-            Some(first) => format!("Moved {}, {} stayed: {first}", plural(moved, "file"), failed.len()),
+            None => tr!("Moved {files} to \"{name}\"", files = plural(moved, "file"), name = name),
+            Some(first) => {
+                tr!(
+                    "Moved {files}, {stayed} stayed: {first}",
+                    files = plural(moved, "file"),
+                    stayed = failed.len(),
+                    first = first
+                )
+            }
         };
     }
 
@@ -1641,7 +1657,7 @@ impl PicoApp {
         if folder.files.iter().any(|f| f.path == path) {
             return;
         }
-        self.status = format!("Saved {}", path.display());
+        self.status = tr!("Saved {path}", path = path.display());
         folder.files.push(MediaFile::new(path, kind));
         folder.files.sort_by(|a, b| library::natural_cmp(&a.name(), &b.name()));
         // Indices in this folder moved; keep pointing at the same photo.
@@ -1707,107 +1723,112 @@ impl PicoApp {
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button("File", |ui| {
-                if ui.button("Add Folder to Pico…").clicked() {
+            ui.menu_button(tr!("File"), |ui| {
+                if ui.button(tr!("Add Folder to Pico…")).clicked() {
                     self.open_folder_manager();
                 }
-                if ui.button("Rescan Folders").clicked() {
+                if ui.button(tr!("Rescan Folders")).clicked() {
                     self.rescan(ui.ctx());
                 }
                 ui.separator();
                 let any = !self.targets().is_empty();
                 ui.add_enabled_ui(any, |ui| self.file_menu(ui));
                 ui.separator();
-                if ui.button("Exit").clicked() {
+                if ui.button(tr!("Exit")).clicked() {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             });
-            ui.menu_button("Edit", |ui| {
-                if ui.button("Select All").on_hover_text("Ctrl+A").clicked() {
+            ui.menu_button(tr!("Edit"), |ui| {
+                if ui.button(tr!("Select All")).on_hover_text("Ctrl+A").clicked() {
                     self.select_all();
                 }
-                if ui.button("Invert Selection").on_hover_text("Ctrl+I").clicked() {
+                if ui.button(tr!("Invert Selection")).on_hover_text("Ctrl+I").clicked() {
                     self.invert_selection();
                 }
-                if ui.button("Clear Selection").on_hover_text("Ctrl+D").clicked() {
+                if ui.button(tr!("Clear Selection")).on_hover_text("Ctrl+D").clicked() {
                     self.selection.clear();
                 }
                 ui.separator();
-                let copy = ui.add_enabled(!self.targets().is_empty(), egui::Button::new("Copy"));
-                if copy.on_hover_text("Ctrl+C: copy the files, to paste into a chat or a folder").clicked() {
+                let copy = ui.add_enabled(!self.targets().is_empty(), egui::Button::new(tr!("Copy")));
+                if copy.on_hover_text(tr!("Ctrl+C: copy the files, to paste into a chat or a folder")).clicked() {
                     self.copy_files();
                 }
-                if ui.add_enabled(self.current.is_some(), egui::Button::new("Copy All Effects")).clicked() {
+                if ui.add_enabled(self.current.is_some(), egui::Button::new(tr!("Copy All Effects"))).clicked() {
                     self.copy_effects();
                 }
-                if ui.add_enabled(self.copied_filters.is_some(), egui::Button::new("Paste All Effects")).clicked() {
+                if ui.add_enabled(self.copied_filters.is_some(), egui::Button::new(tr!("Paste All Effects"))).clicked()
+                {
                     self.paste_effects();
                 }
             });
-            ui.menu_button("View", |ui| {
-                if ui.button("Slideshow").on_hover_text("Ctrl+4").clicked() {
+            ui.menu_button(tr!("View"), |ui| {
+                if ui.button(tr!("Slideshow")).on_hover_text("Ctrl+4").clicked() {
                     self.start_slideshow(ui.ctx());
                 }
-                ui.add(egui::Slider::new(&mut self.thumb_size, MIN_THUMB..=MAX_THUMB).text("Thumbnail size"));
-                ui.menu_button("Thumbnail Captions", |ui| {
+                ui.add(egui::Slider::new(&mut self.thumb_size, MIN_THUMB..=MAX_THUMB).text(tr!("Thumbnail size")));
+                ui.menu_button(tr!("Thumbnail Captions"), |ui| {
                     for (mode, label) in CaptionMode::ALL {
-                        ui.radio_value(&mut self.captions, mode, label);
+                        ui.radio_value(&mut self.captions, mode, crate::i18n::tr(label));
                     }
                 });
-                ui.menu_button("Sort", |ui| {
-                    ui.radio_value(&mut self.sort_by, SortBy::Name, "By Name");
-                    ui.radio_value(&mut self.sort_by, SortBy::Date, "By Date Taken");
-                    ui.radio_value(&mut self.sort_by, SortBy::Size, "By Size");
+                ui.menu_button(tr!("Sort"), |ui| {
+                    ui.radio_value(&mut self.sort_by, SortBy::Name, tr!("By Name"));
+                    ui.radio_value(&mut self.sort_by, SortBy::Date, tr!("By Date Taken"));
+                    ui.radio_value(&mut self.sort_by, SortBy::Size, tr!("By Size"));
                     let in_album = matches!(self.source, Some(Source::Album(_)));
                     ui.add_enabled_ui(in_album, |ui| {
-                        ui.radio_value(&mut self.sort_by, SortBy::Custom, "Custom Order")
-                            .on_hover_text("The album's own order: drag photos to arrange them")
-                            .on_disabled_hover_text("Albums only");
+                        ui.radio_value(&mut self.sort_by, SortBy::Custom, tr!("Custom Order"))
+                            .on_hover_text(tr!("The album's own order: drag photos to arrange them"))
+                            .on_disabled_hover_text(tr!("Albums only"));
                     });
                     ui.separator();
-                    ui.checkbox(&mut self.reverse, "Reverse Order");
+                    ui.checkbox(&mut self.reverse, tr!("Reverse Order"));
                 });
-                ui.checkbox(&mut self.starred_only, "Only Starred Photos");
-                ui.checkbox(&mut self.videos_only, "Only Videos");
-                ui.checkbox(&mut self.show_info, "Properties and Tags").on_hover_text("Alt+Enter, Ctrl+K");
-                ui.menu_button("Folder List", |ui| self.folder_list_options(ui));
-                ui.checkbox(&mut self.show_filmstrip, "Filmstrip")
-                    .on_hover_text("Neighbouring photos above the open one");
-                ui.checkbox(&mut self.show_hidden, "Hidden Pictures");
+                ui.checkbox(&mut self.starred_only, tr!("Only Starred Photos"));
+                ui.checkbox(&mut self.videos_only, tr!("Only Videos"));
+                ui.checkbox(&mut self.show_info, tr!("Properties and Tags")).on_hover_text("Alt+Enter, Ctrl+K");
+                ui.menu_button(tr!("Folder List"), |ui| self.folder_list_options(ui));
+                ui.checkbox(&mut self.show_filmstrip, tr!("Filmstrip"))
+                    .on_hover_text(tr!("Neighbouring photos above the open one"));
+                ui.checkbox(&mut self.show_hidden, tr!("Hidden Pictures"));
             });
-            ui.menu_button("Picture", |ui| {
+            ui.menu_button(tr!("Picture"), |ui| {
                 let any = !self.targets().is_empty();
                 ui.add_enabled_ui(any, |ui| self.picture_menu(ui));
             });
-            ui.menu_button("Create", |ui| {
+            ui.menu_button(tr!("Create"), |ui| {
                 let photos = self.targets().len();
                 if ui
-                    .add_enabled(photos > 0, egui::Button::new("Movie…"))
-                    .on_hover_text("From the selected photos")
+                    .add_enabled(photos > 0, egui::Button::new(tr!("Movie…")))
+                    .on_hover_text(tr!("From the selected photos"))
                     .clicked()
                 {
                     self.open_movie_dialog();
                 }
-                if ui.button("Picture Collage…").on_hover_text("From the selected photos, or all shown").clicked() {
+                if ui
+                    .button(tr!("Picture Collage…"))
+                    .on_hover_text(tr!("From the selected photos, or all shown"))
+                    .clicked()
+                {
                     self.open_collage(ui.ctx());
                 }
             });
-            ui.menu_button("Tools", |ui| {
-                if ui.button("Show Duplicate Files").clicked() {
+            ui.menu_button(tr!("Tools"), |ui| {
+                if ui.button(tr!("Show Duplicate Files")).clicked() {
                     self.find_duplicates(ui.ctx());
                 }
-                if ui.button("Folder Manager…").clicked() {
+                if ui.button(tr!("Folder Manager…")).clicked() {
                     self.open_folder_manager();
                 }
-                if ui.button("Options…").clicked() {
+                if ui.button(tr!("Options…")).clicked() {
                     self.show_options = true;
                 }
             });
-            ui.menu_button("Help", |ui| {
-                if ui.button("Keyboard Shortcuts").on_hover_text("F1").clicked() {
+            ui.menu_button(tr!("Help"), |ui| {
+                if ui.button(tr!("Keyboard Shortcuts")).on_hover_text("F1").clicked() {
                     self.show_shortcuts = true;
                 }
-                if ui.button("About Pico").clicked() {
+                if ui.button(tr!("About Pico")).clicked() {
                     self.show_about = true;
                 }
             });
@@ -1815,31 +1836,34 @@ impl PicoApp {
     }
 
     fn file_menu(&mut self, ui: &mut egui::Ui) {
-        if ui.button("Export Picture to Folder…").on_hover_text("Ctrl+Shift+S").clicked() {
+        if ui.button(tr!("Export Picture to Folder…")).on_hover_text("Ctrl+Shift+S").clicked() {
             self.open_export();
         }
-        if ui.button("Save").on_hover_text("Write the edits into the file; the original is kept").clicked() {
+        if ui.button(tr!("Save")).on_hover_text(tr!("Write the edits into the file; the original is kept")).clicked() {
             self.save_targets();
         }
-        if ui.button("Save a Copy").clicked() {
+        if ui.button(tr!("Save a Copy")).clicked() {
             self.save_copies();
         }
-        if ui.button("Revert").on_hover_text("Bring back the original saved by Save").clicked() {
+        if ui.button(tr!("Revert")).on_hover_text(tr!("Bring back the original saved by Save")).clicked() {
             self.revert_targets();
         }
         ui.separator();
-        if ui.button("Rename…").on_hover_text("F2").clicked() {
+        if ui.button(tr!("Rename…")).on_hover_text("F2").clicked() {
             self.start_rename();
         }
-        if ui.button("Locate on Disk").on_hover_text("Ctrl+Enter").clicked() {
+        if ui.button(tr!("Locate on Disk")).on_hover_text("Ctrl+Enter").clicked() {
             self.locate_on_disk();
         }
-        if ui.button("Open in Editor").on_hover_text("Ctrl+Shift+O").clicked() {
+        if ui.button(tr!("Open in Editor")).on_hover_text("Ctrl+Shift+O").clicked() {
             self.open_in_editor();
         }
         // In an album, Delete takes photos out of the album; the files stay.
-        let label =
-            if matches!(self.source, Some(Source::Album(_))) { "Remove from Album" } else { "Move to Trash…" };
+        let label = if matches!(self.source, Some(Source::Album(_))) {
+            tr!("Remove from Album")
+        } else {
+            tr!("Move to Trash…")
+        };
         if ui.button(label).on_hover_text("Delete").clicked() {
             self.delete_targets();
         }
@@ -1891,11 +1915,20 @@ impl PicoApp {
                 ExportProgress::Done { done, total, failed, dir } => {
                     self.export_count = (done, total);
                     self.status = if done < total {
-                        format!("Exporting {done} of {total}…")
+                        tr!("Exporting {done} of {total}…", done = done, total = total)
                     } else if failed == 0 {
-                        format!("Exported {} to {}", plural(total, "picture"), dir.display())
+                        tr!(
+                            "Exported {pictures} to {folder}",
+                            pictures = plural(total, "picture"),
+                            folder = dir.display()
+                        )
                     } else {
-                        format!("Exported {} of {total}; {failed} failed", total - failed)
+                        tr!(
+                            "Exported {done} of {total}; {failed} failed",
+                            done = total - failed,
+                            total = total,
+                            failed = failed
+                        )
                     };
                     if done == total {
                         self.export_job = None;
@@ -1906,8 +1939,9 @@ impl PicoApp {
         }
     }
 
-    /// Runs a file operation on every target, reporting the first failure.
-    fn for_each_target(&mut self, what: &str, op: impl Fn(&mut Folder, usize) -> std::io::Result<()>) -> usize {
+    /// Runs a file operation on every target, reporting the first failure
+    /// with `failed`, a text with `{path}` and `{e}` in it.
+    fn for_each_target(&mut self, failed: &str, op: impl Fn(&mut Folder, usize) -> std::io::Result<()>) -> usize {
         let mut done = 0;
         for (fi, i) in self.targets() {
             let Some(folder) = self.folders.get_mut(fi) else { continue };
@@ -1919,7 +1953,7 @@ impl PicoApp {
                     self.thumbs.invalidate(&path);
                 }
                 Err(e) => {
-                    self.status = format!("Could not {what} {}: {e}", path.display());
+                    self.status = crate::i18n::fill(crate::i18n::tr(failed), &[("path", &path.display()), ("e", &e)]);
                     return done;
                 }
             }
@@ -1928,7 +1962,7 @@ impl PicoApp {
     }
 
     fn save_targets(&mut self) {
-        let done = self.for_each_target("save", export::save_in_place);
+        let done = self.for_each_target(tr_mark!("Could not save {path}: {e}"), export::save_in_place);
         if done > 0 {
             self.status = format!(
                 "Saved {}. Originals are in .picasaoriginals; Revert brings them back.",
@@ -1943,7 +1977,7 @@ impl PicoApp {
             let Some(file) = self.file(at) else { continue };
             match export::save_copy(file) {
                 Ok(path) => added.push(path),
-                Err(e) => self.status = format!("Could not save a copy of {}: {e}", file.name()),
+                Err(e) => self.status = tr!("Could not save a copy of {file}: {e}", file = file.name(), e = e),
             }
         }
         for path in added {
@@ -1952,11 +1986,11 @@ impl PicoApp {
     }
 
     fn revert_targets(&mut self) {
-        let done = self.for_each_target("revert", |folder, i| {
+        let done = self.for_each_target(tr_mark!("Could not revert {path}: {e}"), |folder, i| {
             if export::has_backup(folder, i) { export::revert(folder, i) } else { Ok(()) }
         });
         if done > 0 {
-            self.status = "Reverted. The edits are back in the edit stack, where Undo can reach them.".into();
+            self.status = tr!("Reverted. The edits are back in the edit stack, where Undo can reach them.").into();
         }
     }
 
@@ -1972,7 +2006,7 @@ impl PicoApp {
         if let Some(file) = self.current.and_then(|at| self.file(at))
             && let Err(e) = fileops::reveal(&file.path)
         {
-            self.status = format!("Could not open the file manager: {e}");
+            self.status = tr!("Could not open the file manager: {e}", e = e);
         }
     }
 
@@ -1980,7 +2014,7 @@ impl PicoApp {
         if let Some(file) = self.current.and_then(|at| self.file(at))
             && let Err(e) = fileops::open_external(&file.path)
         {
-            self.status = format!("Could not open {}: {e}", file.name());
+            self.status = tr!("Could not open {file}: {e}", file = file.name(), e = e);
         }
     }
 
@@ -1997,7 +2031,7 @@ impl PicoApp {
                     self.albums_dirty = true;
                 }
                 Err(e) => {
-                    self.status = format!("Could not move to the trash: {e}");
+                    self.status = tr!("Could not move to the trash: {e}", e = e);
                     break;
                 }
             }
@@ -2008,58 +2042,61 @@ impl PicoApp {
             self.view = View::Library;
         }
         if moved > 0 {
-            self.status = format!("Moved {} to the trash. It's not gone gone.", plural(moved, "file"));
+            self.status = tr!("Moved {files} to the trash. It's not gone gone.", files = plural(moved, "file"));
         }
     }
 
     /// Right-click on a thumbnail; works on the selection, which holds `at`.
     fn photo_context_menu(&mut self, ui: &mut egui::Ui, at: FileRef) {
         let many = self.selection.len() > 1;
-        if !many && ui.button("View and Edit").clicked() {
+        if !many && ui.button(tr!("View and Edit")).clicked() {
             self.current = Some(at);
             self.view = View::Photo;
         }
         let star = !self.targets().iter().all(|&at| self.file(at).is_some_and(|f| f.meta.star));
-        if ui.button(if star { "Star" } else { "Unstar" }).on_hover_text("S").clicked() {
+        if ui.button(if star { tr!("Star") } else { tr!("Unstar") }).on_hover_text("S").clicked() {
             self.edit_targets(|meta| meta.star = star);
         }
-        if ui.button("Rotate Clockwise").on_hover_text("Ctrl+R").clicked() {
+        if ui.button(tr!("Rotate Clockwise")).on_hover_text("Ctrl+R").clicked() {
             self.rotate_targets(1);
         }
-        if ui.button("Rotate Counterclockwise").on_hover_text("Ctrl+Shift+R").clicked() {
+        if ui.button(tr!("Rotate Counterclockwise")).on_hover_text("Ctrl+Shift+R").clicked() {
             self.rotate_targets(-1);
         }
         self.album_menu(ui);
-        if ui.button("Hold in Tray").on_hover_text("Ctrl+H").clicked() {
+        if ui.button(tr!("Hold in Tray")).on_hover_text("Ctrl+H").clicked() {
             self.hold();
         }
         let hide = !self.targets().iter().all(|&at| self.file(at).is_some_and(|f| f.meta.hidden));
-        if ui.button(if hide { "Hide" } else { "Unhide" }).clicked() {
+        if ui.button(if hide { tr!("Hide") } else { tr!("Unhide") }).clicked() {
             self.edit_targets(|meta| meta.hidden = hide);
         }
         ui.separator();
-        if ui.button("Export to Folder…").on_hover_text("Ctrl+Shift+S").clicked() {
+        if ui.button(tr!("Export to Folder…")).on_hover_text("Ctrl+Shift+S").clicked() {
             self.open_export();
         }
         if !many {
-            if ui.button("Locate on Disk").on_hover_text("Ctrl+Enter").clicked() {
+            if ui.button(tr!("Locate on Disk")).on_hover_text("Ctrl+Enter").clicked() {
                 self.locate_on_disk();
             }
-            if ui.button("Open in Editor").on_hover_text("Ctrl+Shift+O").clicked() {
+            if ui.button(tr!("Open in Editor")).on_hover_text("Ctrl+Shift+O").clicked() {
                 self.open_in_editor();
             }
-            if ui.button("Rename…").on_hover_text("F2").clicked() {
+            if ui.button(tr!("Rename…")).on_hover_text("F2").clicked() {
                 self.start_rename();
             }
-            if ui.button("Copy Full Path").clicked()
+            if ui.button(tr!("Copy Full Path")).clicked()
                 && let Some(file) = self.file(at)
             {
                 ui.ctx().copy_text(file.path.display().to_string());
             }
         }
         // In an album, Delete takes photos out of the album; the files stay.
-        let label =
-            if matches!(self.source, Some(Source::Album(_))) { "Remove from Album" } else { "Move to Trash…" };
+        let label = if matches!(self.source, Some(Source::Album(_))) {
+            tr!("Remove from Album")
+        } else {
+            tr!("Move to Trash…")
+        };
         if ui.button(label).on_hover_text("Delete").clicked() {
             self.delete_targets();
         }
@@ -2068,103 +2105,112 @@ impl PicoApp {
     /// Right-click on a folder in the list.
     fn folder_context_menu(&mut self, ui: &mut egui::Ui, index: usize) {
         let Some(path) = self.folders.get(index).map(|f| f.path.clone()) else { return };
-        if ui.button("View Slideshow").clicked() {
+        if ui.button(tr!("View Slideshow")).clicked() {
             self.select_source(Source::Folder(index));
             self.start_slideshow(ui.ctx());
         }
-        if ui.button("Locate on Disk").clicked()
+        if ui.button(tr!("Locate on Disk")).clicked()
             && let Err(e) = fileops::open_external(&path)
         {
-            self.status = format!("Could not open the file manager: {e}");
+            self.status = tr!("Could not open the file manager: {e}", e = e);
         }
-        if ui.button("Copy Full Path").clicked() {
+        if ui.button(tr!("Copy Full Path")).clicked() {
             ui.ctx().copy_text(path.display().to_string());
         }
         ui.separator();
-        if ui.button("Rescan Folders").clicked() {
+        if ui.button(tr!("Rescan Folders")).clicked() {
             self.rescan(ui.ctx());
         }
-        if ui.button("Remove from Pico").on_hover_text("Leave this folder out; no files are touched").clicked() {
+        if ui
+            .button(tr!("Remove from Pico"))
+            .on_hover_text(tr!("Leave this folder out; no files are touched"))
+            .clicked()
+        {
             let mut rules = self.rules.clone();
             rules.set_in_library(&path, false);
             let name = Folder::file_name(&path);
             self.set_rules(ui.ctx(), rules);
-            self.status = format!("Left out {name}. Tools > Folder Manager brings it back.");
+            self.status = tr!("Left out {name}. Tools > Folder Manager brings it back.", name = name);
         }
     }
 
     fn album_menu(&mut self, ui: &mut egui::Ui) {
-        ui.menu_button("Add to Album", |ui| {
+        ui.menu_button(tr!("Add to Album"), |ui| {
             for (token, name, _) in self.album_list() {
                 if ui.button(&name).clicked() {
                     self.add_to_album(&token, &name);
                 }
             }
-            if ui.button("New Album…").on_hover_text("Ctrl+N").clicked() {
+            if ui.button(tr!("New Album…")).on_hover_text("Ctrl+N").clicked() {
                 self.new_album = Some(String::new());
             }
         });
     }
 
     fn picture_menu(&mut self, ui: &mut egui::Ui) {
-        if ui.button("Star / Unstar").on_hover_text("S").clicked() {
+        if ui.button(tr!("Star / Unstar")).on_hover_text("S").clicked() {
             let star = !self.targets().iter().all(|&at| self.file(at).is_some_and(|f| f.meta.star));
             self.edit_targets(|meta| meta.star = star);
         }
-        if ui.button("Rotate Clockwise").on_hover_text("Ctrl+R").clicked() {
+        if ui.button(tr!("Rotate Clockwise")).on_hover_text("Ctrl+R").clicked() {
             self.rotate_targets(1);
         }
-        if ui.button("Rotate Counterclockwise").on_hover_text("Ctrl+Shift+R").clicked() {
+        if ui.button(tr!("Rotate Counterclockwise")).on_hover_text("Ctrl+Shift+R").clicked() {
             self.rotate_targets(-1);
         }
         ui.separator();
         for (label, id, keys) in [
-            ("I'm Feeling Lucky", "enhance", "Ctrl+Shift+E"),
-            ("Auto Contrast", "autolight", ""),
-            ("Auto Color", "autocolor", ""),
-            ("Black-and-White", "bw", "Ctrl+Shift+B"),
-            ("Warmify", "warm", ""),
-            ("Film Grain", "grain2", ""),
-            ("Sharpen", "unsharp2", ""),
+            (tr!("I'm Feeling Lucky"), "enhance", "Ctrl+Shift+E"),
+            (tr!("Auto Contrast"), "autolight", ""),
+            (tr!("Auto Color"), "autocolor", ""),
+            (tr!("Black-and-White"), "bw", "Ctrl+Shift+B"),
+            (tr!("Warmify"), "warm", ""),
+            (tr!("Film Grain"), "grain2", ""),
+            (tr!("Sharpen"), "unsharp2", ""),
         ] {
             if ui.button(label).on_hover_text(keys).clicked() {
                 self.add_effect(id);
             }
         }
         ui.separator();
-        if ui.button("Hold in Tray").on_hover_text("Ctrl+H").clicked() {
+        if ui.button(tr!("Hold in Tray")).on_hover_text("Ctrl+H").clicked() {
             self.hold();
         }
         self.album_menu(ui);
         if matches!(self.source, Some(Source::Album(_)))
-            && ui.button("Remove from Album").on_hover_text("Delete").clicked()
+            && ui.button(tr!("Remove from Album")).on_hover_text("Delete").clicked()
         {
             self.delete_targets();
         }
         ui.separator();
-        if ui.button("Undo All Edits").clicked() {
+        if ui.button(tr!("Undo All Edits")).clicked() {
             self.edit_targets(|meta| {
                 meta.filters = FilterStack::default();
                 meta.rotate = 0;
             });
         }
         let hide = !self.targets().iter().all(|&at| self.file(at).is_some_and(|f| f.meta.hidden));
-        if ui.button(if hide { "Hide" } else { "Unhide" }).clicked() {
+        if ui.button(if hide { tr!("Hide") } else { tr!("Unhide") }).clicked() {
             self.edit_targets(|meta| meta.hidden = hide);
         }
     }
 
     fn folder_list(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Library");
+        ui.heading(tr!("Library"));
         ui.separator();
         let starred = self.folders.iter().flat_map(|f| &f.files).filter(|f| f.meta.star).count();
-        if ui.selectable_label(self.source == Some(Source::Starred), format!("★ Starred Photos  ({starred})")).clicked()
+        if ui
+            .selectable_label(self.source == Some(Source::Starred), format!("★ {}  ({starred})", tr!("Starred Photos")))
+            .clicked()
         {
             self.select_source(Source::Starred);
         }
         if !self.tray.is_empty()
             && ui
-                .selectable_label(self.source == Some(Source::Tray), format!("Photo Tray  ({})", self.tray.len()))
+                .selectable_label(
+                    self.source == Some(Source::Tray),
+                    format!("{}  ({})", tr!("Photo Tray"), self.tray.len()),
+                )
                 .clicked()
         {
             self.select_source(Source::Tray);
@@ -2173,7 +2219,7 @@ impl PicoApp {
         let mut picked_album = None;
         if !albums.is_empty() {
             let open = self.section_open("albums", true);
-            let section = egui::CollapsingHeader::new(egui::RichText::new("Albums").strong())
+            let section = egui::CollapsingHeader::new(egui::RichText::new(tr!("Albums")).strong())
                 .id_salt("albums")
                 .open(Some(open))
                 .show(ui, |ui| {
@@ -2188,10 +2234,10 @@ impl PicoApp {
                             self.add_to_album(token, name);
                         }
                         response.context_menu(|ui| {
-                            if ui.button("Rename Album…").clicked() {
+                            if ui.button(tr!("Rename Album…")).clicked() {
                                 self.album_rename = Some((token.clone(), name.clone()));
                             }
-                            if ui.button("Delete Album…").clicked() {
+                            if ui.button(tr!("Delete Album…")).clicked() {
                                 self.confirm_album_delete = Some(token.clone());
                             }
                         });
@@ -2206,46 +2252,48 @@ impl PicoApp {
         let months = library::months(&self.folders);
         if !months.is_empty() {
             let open = self.section_open("timeline", false);
-            let section = egui::CollapsingHeader::new("Timeline").id_salt("timeline").open(Some(open)).show(ui, |ui| {
-                let mut years: Vec<(&str, Vec<&(String, usize)>)> = Vec::new();
-                for entry in &months {
-                    match years.last_mut() {
-                        Some((year, list)) if *year == &entry.0[..4] => list.push(entry),
-                        _ => years.push((&entry.0[..4], vec![entry])),
-                    }
-                }
-                for (year, list) in years {
-                    let total: usize = list.iter().map(|(_, n)| n).sum();
-                    let key = format!("timeline/{year}");
-                    let year_open = self.section_open(&key, false);
-                    let header = egui::CollapsingHeader::new(format!("{year}  ({total})")).id_salt(year);
-                    let year_section = header.open(Some(year_open)).show(ui, |ui| {
-                        for (key, count) in list {
-                            let open = self.source == Some(Source::Month(key.clone()));
-                            let label = format!("{}  ({count})", library::month_label(key));
-                            if ui.selectable_label(open, label).clicked() {
-                                picked_source = Some(Source::Month(key.clone()));
-                            }
+            let section =
+                egui::CollapsingHeader::new(tr!("Timeline")).id_salt("timeline").open(Some(open)).show(ui, |ui| {
+                    let mut years: Vec<(&str, Vec<&(String, usize)>)> = Vec::new();
+                    for entry in &months {
+                        match years.last_mut() {
+                            Some((year, list)) if *year == &entry.0[..4] => list.push(entry),
+                            _ => years.push((&entry.0[..4], vec![entry])),
                         }
-                    });
-                    self.section_clicked(&year_section.header_response, &key, year_open);
-                }
-            });
+                    }
+                    for (year, list) in years {
+                        let total: usize = list.iter().map(|(_, n)| n).sum();
+                        let key = format!("timeline/{year}");
+                        let year_open = self.section_open(&key, false);
+                        let header = egui::CollapsingHeader::new(format!("{year}  ({total})")).id_salt(year);
+                        let year_section = header.open(Some(year_open)).show(ui, |ui| {
+                            for (key, count) in list {
+                                let open = self.source == Some(Source::Month(key.clone()));
+                                let label = format!("{}  ({count})", crate::i18n::month_label(key));
+                                if ui.selectable_label(open, label).clicked() {
+                                    picked_source = Some(Source::Month(key.clone()));
+                                }
+                            }
+                        });
+                        self.section_clicked(&year_section.header_response, &key, year_open);
+                    }
+                });
             self.section_clicked(&section.header_response, "timeline", open);
         }
         let places = library::places(&self.folders);
         if !places.is_empty() {
             let open = self.section_open("places", false);
-            let section = egui::CollapsingHeader::new("Places").id_salt("places").open(Some(open)).show(ui, |ui| {
-                for place in &places {
-                    let open = self.source == Some(Source::Place(place.key.clone()));
-                    let label = format!("{}  ({})", place.label(), place.members.len());
-                    let response = ui.selectable_label(open, label);
-                    if response.on_hover_text(library::place_coordinates(place.center)).clicked() {
-                        picked_source = Some(Source::Place(place.key.clone()));
+            let section =
+                egui::CollapsingHeader::new(tr!("Places")).id_salt("places").open(Some(open)).show(ui, |ui| {
+                    for place in &places {
+                        let open = self.source == Some(Source::Place(place.key.clone()));
+                        let label = format!("{}  ({})", place.label(), place.members.len());
+                        let response = ui.selectable_label(open, label);
+                        if response.on_hover_text(library::place_coordinates(place.center)).clicked() {
+                            picked_source = Some(Source::Place(place.key.clone()));
+                        }
                     }
-                }
-            });
+                });
             self.section_clicked(&section.header_response, "places", open);
         }
         if let Some(source) = picked_source {
@@ -2256,10 +2304,10 @@ impl PicoApp {
         self.restore_state(ui.ctx(), id, "folders");
         egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
             .show_header(ui, |ui| {
-                ui.strong("Folders");
+                ui.strong(tr!("Folders"));
                 ui.menu_button("…", |ui| self.folder_list_options(ui))
                     .response
-                    .on_hover_text("Tree or list, and order");
+                    .on_hover_text(tr!("Tree or list, and order"));
             })
             .body(|ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
@@ -2388,15 +2436,15 @@ impl PicoApp {
     }
 
     fn folder_list_options(&mut self, ui: &mut egui::Ui) {
-        ui.radio_value(&mut self.folder_tree, false, "Flat List");
-        ui.radio_value(&mut self.folder_tree, true, "Tree").on_hover_text("Folders where they are on disk");
+        ui.radio_value(&mut self.folder_tree, false, tr!("Flat List"));
+        ui.radio_value(&mut self.folder_tree, true, tr!("Tree")).on_hover_text(tr!("Folders where they are on disk"));
         ui.separator();
         ui.add_enabled_ui(!self.folder_tree, |ui| {
-            ui.radio_value(&mut self.folder_sort, FolderSort::Name, "Sort by Name");
-            ui.radio_value(&mut self.folder_sort, FolderSort::Date, "Sort by Date")
-                .on_hover_text("Newest first, by year");
-            ui.radio_value(&mut self.folder_sort, FolderSort::Recent, "Sort by Recent Changes");
-            ui.radio_value(&mut self.folder_sort, FolderSort::Size, "Sort by Size");
+            ui.radio_value(&mut self.folder_sort, FolderSort::Name, tr!("Sort by Name"));
+            ui.radio_value(&mut self.folder_sort, FolderSort::Date, tr!("Sort by Date"))
+                .on_hover_text(tr!("Newest first, by year"));
+            ui.radio_value(&mut self.folder_sort, FolderSort::Recent, tr!("Sort by Recent Changes"));
+            ui.radio_value(&mut self.folder_sort, FolderSort::Size, tr!("Sort by Size"));
         });
     }
 
@@ -2458,7 +2506,7 @@ impl PicoApp {
                 months
                     .iter()
                     .zip(refs)
-                    .map(|((key, _), refs)| (Source::Month(key.clone()), library::month_label(key), refs))
+                    .map(|((key, _), refs)| (Source::Month(key.clone()), crate::i18n::month_label(key), refs))
                     .collect()
             }
             Source::Place(_) => {
@@ -2542,9 +2590,9 @@ impl PicoApp {
             if self.folders.is_empty() {
                 ui.centered_and_justified(|ui| {
                     ui.label(if self.scan.is_some() {
-                        "Counting pixels…"
+                        tr!("Counting pixels…")
                     } else {
-                        "No photos yet. Add a folder from the File menu — Pico promises not to upload anything."
+                        tr!("No photos yet. Add a folder from the File menu — Pico promises not to upload anything.")
                     });
                 });
                 return;
@@ -2574,9 +2622,9 @@ impl PicoApp {
             if parts.iter().all(|(_, refs, missing)| refs.is_empty() && missing.is_empty()) {
                 ui.centered_and_justified(|ui| {
                     ui.label(if self.search.trim().is_empty() {
-                        "Nothing to show here."
+                        tr!("Nothing to show here.")
                     } else {
-                        "No matches. Maybe it was a dream?"
+                        tr!("No matches. Maybe it was a dream?")
                     })
                 });
                 return;
@@ -2622,7 +2670,7 @@ impl PicoApp {
             let output = grid::show(ui, view, &mut self.thumbs);
             self.hovered = output.hovered;
             if let Some(folder) = output.add_folder {
-                self.status = format!("Adding {}", folder.display());
+                self.status = tr!("Adding {folder}", folder = folder.display());
                 self.watch_folder(ui.ctx(), folder);
             }
             // Scrolling by hand moves the highlight in the list along. A scroll the
@@ -2693,36 +2741,36 @@ impl PicoApp {
             let searching = !self.search.trim().is_empty();
             match &self.source {
                 _ if searching => {
-                    ui.heading("Search results");
+                    ui.heading(tr!("Search results"));
                 }
                 Some(Source::Starred) => {
-                    ui.heading("Starred Photos");
+                    ui.heading(tr!("Starred Photos"));
                 }
                 Some(Source::Tray) => {
-                    ui.heading("Photo Tray");
-                    ui.label(egui::RichText::new("Held photos from any folder").weak());
+                    ui.heading(tr!("Photo Tray"));
+                    ui.label(egui::RichText::new(tr!("Held photos from any folder")).weak());
                 }
                 Some(Source::Album(token)) => {
                     ui.heading(self.album_name(token).unwrap_or_default());
-                    ui.label(egui::RichText::new("Album").weak());
+                    ui.label(egui::RichText::new(tr!("Album")).weak());
                     album_note = self.album_missing_note(token);
                 }
                 Some(Source::Month(key)) => {
-                    ui.heading(library::month_label(key));
-                    ui.label(egui::RichText::new("Timeline").weak());
+                    ui.heading(crate::i18n::month_label(key));
+                    ui.label(egui::RichText::new(tr!("Timeline")).weak());
                 }
                 Some(Source::Place(key)) => {
                     let place = library::places(&self.folders).into_iter().find(|p| &p.key == key);
                     ui.heading(place.as_ref().map_or_else(|| key.clone(), library::Place::label));
                     let at = place.map(|p| format!(" · {}", library::place_coordinates(p.center)));
-                    ui.label(egui::RichText::new(format!("Place{}", at.unwrap_or_default())).weak());
+                    ui.label(egui::RichText::new(format!("{}{}", tr!("Place"), at.unwrap_or_default())).weak());
                 }
                 Some(Source::Duplicates) => {
-                    ui.heading("Duplicate Files");
+                    ui.heading(tr!("Duplicate Files"));
                     let text = if self.duplicate_job.is_some() {
-                        "Comparing files…"
+                        tr!("Comparing files…")
                     } else {
-                        "Identical files, side by side"
+                        tr!("Identical files, side by side")
                     };
                     ui.label(egui::RichText::new(text).weak());
                 }
@@ -2738,7 +2786,7 @@ impl PicoApp {
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let search = ui.add(
-                    egui::TextEdit::singleline(&mut self.search).hint_text("Search (Ctrl+F)").desired_width(220.0),
+                    egui::TextEdit::singleline(&mut self.search).hint_text(tr!("Search (Ctrl+F)")).desired_width(220.0),
                 );
                 if self.focus_search {
                     search.request_focus();
@@ -2752,11 +2800,11 @@ impl PicoApp {
                     self.selection.clear();
                     self.current = None;
                 }
-                ui.toggle_value(&mut self.videos_only, "▶").on_hover_text("Only videos");
-                ui.toggle_value(&mut self.starred_only, "★").on_hover_text("Only starred photos");
+                ui.toggle_value(&mut self.videos_only, "▶").on_hover_text(tr!("Only videos"));
+                ui.toggle_value(&mut self.starred_only, "★").on_hover_text(tr!("Only starred photos"));
                 let count = self.selection.len();
                 if count > 1 {
-                    ui.label(format!("{count} selected"));
+                    ui.label(tr!("{n} selected", n = count));
                 }
             });
         });
@@ -2948,7 +2996,7 @@ impl PicoApp {
             if self.scan.is_some() {
                 ui.spinner();
                 let found = self.scan_found.load(std::sync::atomic::Ordering::Relaxed);
-                ui.label(format!("{}  ({} found so far)", self.status, found));
+                ui.label(tr!("{status}  ({n} found so far)", status = self.status, n = found));
                 // The count changes on its own; keep it fresh.
                 ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
             } else {
@@ -2956,7 +3004,7 @@ impl PicoApp {
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if video::ffmpeg().is_none() {
-                    ui.label(egui::RichText::new("ffmpeg not found: videos will stay mysterious").weak());
+                    ui.label(egui::RichText::new(tr!("ffmpeg not found: videos will stay mysterious")).weak());
                     ui.separator();
                 }
                 if self.view == View::Library {
@@ -2969,7 +3017,7 @@ impl PicoApp {
     /// The photo under the pointer, else the selection: name, date and size.
     fn status_details(&self) -> String {
         let describe = |file: &MediaFile| {
-            let date = file.taken.as_deref().map(library::date_label);
+            let date = file.taken.as_deref().map(crate::i18n::date_label);
             let mut parts = vec![file.name()];
             parts.extend(date);
             parts.push(crate::info::human_size(file.size));
@@ -2983,7 +3031,7 @@ impl PicoApp {
             1 => self.selection.first().and_then(|&at| self.file(at)).map(describe).unwrap_or_default(),
             n => {
                 let bytes: u64 = self.selection.iter().filter_map(|&at| self.file(at)).map(|f| f.size).sum();
-                format!("{n} selected  ·  {}", crate::info::human_size(bytes))
+                format!("{}  ·  {}", tr!("{n} selected", n = n), crate::info::human_size(bytes))
             }
         }
     }
@@ -2992,41 +3040,46 @@ impl PicoApp {
         if self.export_job.is_some() {
             let (done, total) = self.export_count;
             let fraction = (total > 0).then(|| done as f32 / total as f32);
-            progress_window(ctx, "Exporting", &format!("Exporting {done} of {total}…"), fraction);
+            progress_window(
+                ctx,
+                tr!("Exporting"),
+                &tr!("Exporting {done} of {total}…", done = done, total = total),
+                fraction,
+            );
         }
         if self.movie_job.is_some() {
             let (done, total) = self.movie_frames;
             if done < total {
-                let text = format!("Preparing photo {} of {total}…", done + 1);
-                progress_window(ctx, "Making the Movie", &text, Some(done as f32 / total as f32));
+                let text = tr!("Preparing photo {done} of {total}…", done = done + 1, total = total);
+                progress_window(ctx, tr!("Making the Movie"), &text, Some(done as f32 / total as f32));
             } else {
-                progress_window(ctx, "Making the Movie", "Encoding the movie…", None);
+                progress_window(ctx, tr!("Making the Movie"), tr!("Encoding the movie…"), None);
             }
         }
         if self.duplicate_job.is_some() {
-            progress_window(ctx, "Finding Duplicates", "Comparing files…", None);
+            progress_window(ctx, tr!("Finding Duplicates"), tr!("Comparing files…"), None);
         }
         if let Some(mut dialog) = self.export.take() {
             let mut open = true;
             let mut go = false;
             let mut browse = false;
             let count = self.targets().len();
-            dialog_window(ctx, "Export to Folder").open(&mut open).show_dialog(ctx, |ui| {
-                ui.label("Folder:");
+            dialog_window(ctx, tr!("Export to Folder")).open(&mut open).show_dialog(ctx, |ui| {
+                ui.label(tr!("Folder:"));
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut dialog.dir).desired_width(300.0));
-                    browse = ui.button("Browse…").clicked();
+                    browse = ui.button(tr!("Browse…")).clicked();
                 });
-                ui.label("Image size:");
+                ui.label(tr!("Image size:"));
                 for (i, (label, _)) in EXPORT_SIZES.iter().enumerate() {
-                    ui.radio_value(&mut dialog.size, i, *label);
+                    ui.radio_value(&mut dialog.size, i, crate::i18n::tr(label));
                 }
                 if EXPORT_SIZES[dialog.size].1 == Some(0) {
-                    ui.add(egui::Slider::new(&mut dialog.custom, 100..=6000).text("longest side, px"));
+                    ui.add(egui::Slider::new(&mut dialog.custom, 100..=6000).text(tr!("longest side, px")));
                 }
-                ui.add(egui::Slider::new(&mut dialog.quality, 40..=100).text("JPEG quality"));
-                ui.label(egui::RichText::new("Edits are applied; the originals stay untouched.").weak());
-                go = ui.button(format!("Export {}", plural(count, "picture"))).clicked();
+                ui.add(egui::Slider::new(&mut dialog.quality, 40..=100).text(tr!("JPEG quality")));
+                ui.label(egui::RichText::new(tr!("Edits are applied; the originals stay untouched.")).weak());
+                go = ui.button(tr!("Export {pictures}", pictures = plural(count, "picture"))).clicked();
             });
             if let Some(dir) = self.picked_export_dir.take() {
                 dialog.dir = dir.display().to_string();
@@ -3044,18 +3097,18 @@ impl PicoApp {
         if let Some((at, mut name)) = self.rename.take() {
             let mut open = true;
             let mut submit = false;
-            dialog_window(ctx, "Rename").open(&mut open).show_dialog(ctx, |ui| {
+            dialog_window(ctx, tr!("Rename")).open(&mut open).show_dialog(ctx, |ui| {
                 let edit = ui.text_edit_singleline(&mut name);
                 edit.request_focus();
-                submit = ui.input(|i| i.key_pressed(egui::Key::Enter)) || ui.button("Rename").clicked();
+                submit = ui.input(|i| i.key_pressed(egui::Key::Enter)) || ui.button(tr!("Rename")).clicked();
             });
             if submit {
                 match self.folders.get_mut(at.0).map(|f| fileops::rename(f, at.1, &name)) {
                     Some(Ok(())) => {
-                        self.status = format!("Renamed to {name}");
+                        self.status = tr!("Renamed to {name}", name = name);
                         self.albums_dirty = true;
                     }
-                    Some(Err(e)) => self.status = format!("Could not rename: {e}"),
+                    Some(Err(e)) => self.status = tr!("Could not rename: {e}", e = e),
                     None => {}
                 }
             } else if open && !ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -3066,11 +3119,11 @@ impl PicoApp {
         if let Some(mut name) = self.new_album.take() {
             let mut open = true;
             let mut create = false;
-            dialog_window(ctx, "New Album").open(&mut open).show_dialog(ctx, |ui| {
-                let field = ui.add(egui::TextEdit::singleline(&mut name).hint_text("Album name"));
+            dialog_window(ctx, tr!("New Album")).open(&mut open).show_dialog(ctx, |ui| {
+                let field = ui.add(egui::TextEdit::singleline(&mut name).hint_text(tr!("Album name")));
                 field.request_focus();
                 create = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter))
-                    || ui.button("Create").clicked();
+                    || ui.button(tr!("Create")).clicked();
             });
             if create && !name.trim().is_empty() {
                 let token = library::new_album_token();
@@ -3083,11 +3136,11 @@ impl PicoApp {
         if let Some((token, mut name)) = self.album_rename.take() {
             let mut open = true;
             let mut rename = false;
-            dialog_window(ctx, "Rename Album").open(&mut open).show_dialog(ctx, |ui| {
-                let field = ui.add(egui::TextEdit::singleline(&mut name).hint_text("Album name"));
+            dialog_window(ctx, tr!("Rename Album")).open(&mut open).show_dialog(ctx, |ui| {
+                let field = ui.add(egui::TextEdit::singleline(&mut name).hint_text(tr!("Album name")));
                 field.request_focus();
                 rename = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter))
-                    || ui.button("Rename").clicked();
+                    || ui.button(tr!("Rename")).clicked();
             });
             if rename && !name.trim().is_empty() {
                 self.rename_album(&token, name.trim());
@@ -3101,12 +3154,12 @@ impl PicoApp {
             let mut confirmed = false;
             let mut keep = false;
             let name = self.album_name(&token).unwrap_or_default();
-            dialog_window(ctx, "Delete Album").open(&mut open).show_dialog(ctx, |ui| {
-                ui.label(format!("Delete the album \"{name}\"?"));
-                ui.label(egui::RichText::new("The photos stay where they are.").weak());
+            dialog_window(ctx, tr!("Delete Album")).open(&mut open).show_dialog(ctx, |ui| {
+                ui.label(tr!("Delete the album \"{name}\"?", name = name));
+                ui.label(egui::RichText::new(tr!("The photos stay where they are.")).weak());
                 ui.horizontal(|ui| {
-                    confirmed = ui.button("Delete Album").clicked();
-                    keep = ui.button("Keep").clicked();
+                    confirmed = ui.button(tr!("Delete Album")).clicked();
+                    keep = ui.button(tr!("Keep")).clicked();
                 });
             });
             if confirmed {
@@ -3120,11 +3173,11 @@ impl PicoApp {
             let mut open = true;
             let mut confirmed = false;
             let mut keep = false;
-            dialog_window(ctx, "Move to Trash").open(&mut open).show_dialog(ctx, |ui| {
-                ui.label(format!("Move {} to the trash?", plural(files.len(), "file")));
+            dialog_window(ctx, tr!("Move to Trash")).open(&mut open).show_dialog(ctx, |ui| {
+                ui.label(tr!("Move {files} to the trash?", files = plural(files.len(), "file")));
                 ui.horizontal(|ui| {
-                    confirmed = ui.button("Move to Trash").clicked();
-                    keep = ui.button("Keep").clicked();
+                    confirmed = ui.button(tr!("Move to Trash")).clicked();
+                    keep = ui.button(tr!("Keep")).clicked();
                 });
             });
             if confirmed {
@@ -3139,12 +3192,12 @@ impl PicoApp {
             let mut confirmed = false;
             let mut keep = false;
             let name = self.folders.get(dest).map(|f| f.name.clone()).unwrap_or_default();
-            dialog_window(ctx, "Move Photos").open(&mut open).show_dialog(ctx, |ui| {
-                ui.label(format!("Move {} to \"{name}\"?", plural(files.len(), "file")));
-                ui.label(egui::RichText::new("Captions, stars and edits go along.").weak());
+            dialog_window(ctx, tr!("Move Photos")).open(&mut open).show_dialog(ctx, |ui| {
+                ui.label(tr!("Move {files} to \"{name}\"?", files = plural(files.len(), "file"), name = name));
+                ui.label(egui::RichText::new(tr!("Captions, stars and edits go along.")).weak());
                 ui.horizontal(|ui| {
-                    confirmed = ui.button("Move").clicked();
-                    keep = ui.button("Cancel").clicked();
+                    confirmed = ui.button(tr!("Move")).clicked();
+                    keep = ui.button(tr!("Cancel")).clicked();
                 });
             });
             if confirmed {
@@ -3162,31 +3215,31 @@ impl PicoApp {
                 .iter()
                 .filter(|&&at| self.file(at).is_some_and(|f| f.kind != pico_core::media::MediaKind::Video))
                 .count();
-            dialog_window(ctx, "Create Movie").open(&mut open).show_dialog(ctx, |ui| {
-                ui.label(format!("{} in the order shown.", plural(count, "photo")));
+            dialog_window(ctx, tr!("Create Movie")).open(&mut open).show_dialog(ctx, |ui| {
+                ui.label(tr!("{photos} in the order shown.", photos = plural(count, "photo")));
                 ui.horizontal(|ui| {
                     ui.radio_value(&mut dialog.full_hd, false, "1280 × 720");
                     ui.radio_value(&mut dialog.full_hd, true, "1920 × 1080");
                 });
-                ui.add(egui::Slider::new(&mut dialog.seconds, 1.0..=15.0).text("seconds per photo"));
-                ui.add(egui::Slider::new(&mut dialog.fade, 0.0..=3.0).text("crossfade, seconds"));
-                ui.label("Music (optional):");
+                ui.add(egui::Slider::new(&mut dialog.seconds, 1.0..=15.0).text(tr!("seconds per photo")));
+                ui.add(egui::Slider::new(&mut dialog.fade, 0.0..=3.0).text(tr!("crossfade, seconds")));
+                ui.label(tr!("Music (optional):"));
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut dialog.audio).desired_width(260.0));
-                    if ui.button("Browse…").clicked() && dialog.pick_audio.is_none() {
+                    if ui.button(tr!("Browse…")).clicked() && dialog.pick_audio.is_none() {
                         let (tx, rx) = channel();
                         let ctx = ui.ctx().clone();
                         std::thread::spawn(move || {
-                            let _ = tx.send(rfd::FileDialog::new().set_title("Music for the movie").pick_file());
+                            let _ = tx.send(rfd::FileDialog::new().set_title(tr!("Music for the movie")).pick_file());
                             ctx.request_repaint();
                         });
                         dialog.pick_audio = Some(rx);
                     }
                 });
-                ui.label("Save as:");
+                ui.label(tr!("Save as:"));
                 ui.add(egui::TextEdit::singleline(&mut dialog.out).desired_width(330.0));
                 let busy = self.movie_job.is_some();
-                create = ui.add_enabled(count > 0 && !busy, egui::Button::new("Make the Movie")).clicked();
+                create = ui.add_enabled(count > 0 && !busy, egui::Button::new(tr!("Make the Movie"))).clicked();
             });
             if let Some(rx) = &dialog.pick_audio
                 && let Ok(answer) = rx.try_recv()
@@ -3219,37 +3272,39 @@ impl PicoApp {
 
         if self.show_options {
             let mut open = true;
-            dialog_window(ctx, "Options").open(&mut open).show_dialog(ctx, |ui| {
-                ui.heading("Look");
+            dialog_window(ctx, tr!("Options")).open(&mut open).show_dialog(ctx, |ui| {
+                ui.heading(tr!("Look"));
                 ui.horizontal(|ui| {
                     let before = self.theme;
-                    ui.radio_value(&mut self.theme, egui::ThemePreference::System, "As the system");
-                    ui.radio_value(&mut self.theme, egui::ThemePreference::Dark, "Dark");
-                    ui.radio_value(&mut self.theme, egui::ThemePreference::Light, "Light");
+                    ui.radio_value(&mut self.theme, egui::ThemePreference::System, tr!("As the system"));
+                    ui.radio_value(&mut self.theme, egui::ThemePreference::Dark, tr!("Dark"));
+                    ui.radio_value(&mut self.theme, egui::ThemePreference::Light, tr!("Light"));
                     if self.theme != before {
                         self.apply_theme(ctx);
                     }
                 });
-                ui.label(egui::RichText::new("Photos keep their dark backdrop either way.").weak());
+                ui.label(egui::RichText::new(tr!("Photos keep their dark backdrop either way.")).weak());
                 ui.separator();
-                ui.heading("Thumbnails");
+                ui.heading(tr!("Thumbnails"));
                 let dir = config::cache_dir().map(|d| d.join("thumbs"));
                 let size = dir.as_deref().map_or(0, dir_size);
-                ui.label(format!("Cache: {:.1} MB", size as f64 / (1u64 << 20) as f64));
+                ui.label(tr!("Cache: {size} MB", size = format!("{:.1}", size as f64 / (1u64 << 20) as f64)));
                 if let Some(dir) = &dir
-                    && ui.button("Clear Thumbnail Cache").clicked()
+                    && ui.button(tr!("Clear Thumbnail Cache")).clicked()
                 {
                     let _ = std::fs::remove_dir_all(dir);
-                    self.status = "Thumbnail cache cleared; thumbnails will be redrawn as needed.".into();
+                    self.status = tr!("Thumbnail cache cleared; thumbnails will be redrawn as needed.").into();
                 }
                 ui.separator();
-                ui.heading("Video tools");
-                for (name, found) in
-                    [("ffmpeg", video::ffmpeg()), ("ffprobe", video::ffprobe()), ("ffplay (sound)", video::ffplay())]
-                {
+                ui.heading(tr!("Video tools"));
+                for (name, found) in [
+                    ("ffmpeg", video::ffmpeg()),
+                    ("ffprobe", video::ffprobe()),
+                    (tr!("ffplay (sound)"), video::ffplay()),
+                ] {
                     let text = match found {
                         Some(path) => format!("{name}: {}", path.display()),
-                        None => format!("{name}: not found"),
+                        None => tr!("{name}: not found", name = name),
                     };
                     ui.label(text);
                 }
@@ -3262,15 +3317,15 @@ impl PicoApp {
         }
         if self.show_shortcuts {
             let mut open = true;
-            dialog_window(ctx, "Keyboard Shortcuts").open(&mut open).show_dialog(ctx, |ui| {
+            dialog_window(ctx, tr!("Keyboard Shortcuts")).open(&mut open).show_dialog(ctx, |ui| {
                 egui::ScrollArea::vertical().max_height(480.0).show(ui, |ui| {
                     ui.set_min_width(460.0);
                     for (group, keys) in SHORTCUTS {
-                        ui.heading(*group);
+                        ui.heading(crate::i18n::tr(group));
                         egui::Grid::new(*group).num_columns(2).striped(true).show(ui, |ui| {
                             for (key, what) in *keys {
-                                ui.strong(*key);
-                                ui.label(*what);
+                                ui.strong(crate::i18n::tr(key));
+                                ui.label(crate::i18n::tr(what));
                                 ui.end_row();
                             }
                         });
@@ -3287,7 +3342,7 @@ impl PicoApp {
             let logo = logo.id();
             // The logo band reaches past the window's margin to its edges.
             let margin = ctx.global_style().spacing.window_margin;
-            dialog_window(ctx, "About Pico").open(&mut self.show_about).resizable(false).show_dialog(ctx, |ui| {
+            dialog_window(ctx, tr!("About Pico")).open(&mut self.show_about).resizable(false).show_dialog(ctx, |ui| {
                 let width = 560.0;
                 ui.set_width(width);
                 // Off-white, a touch darker than paper, in light and dark themes alike.
@@ -3306,12 +3361,12 @@ impl PicoApp {
                 });
                 egui::Frame::new().inner_margin(egui::Margin::symmetric(6, 10)).show(ui, |ui| {
                     ui.vertical_centered(|ui| {
-                        ui.strong(format!("Version {}", env!("PICO_VERSION")));
-                        ui.label("No cloud. No uploads. Your photos stay exactly where you left them.");
+                        ui.strong(tr!("Version {version}", version = env!("PICO_VERSION")));
+                        ui.label(tr!("No cloud. No uploads. Your photos stay exactly where you left them."));
                         ui.label(egui::RichText::new(pico_core::geo::CREDITS).weak());
                     });
                 });
-                egui::CollapsingHeader::new("Open-source licenses").id_salt("licenses").show(ui, |ui| {
+                egui::CollapsingHeader::new(tr!("Open-source licenses")).id_salt("licenses").show(ui, |ui| {
                     crate::logo::licenses(ui);
                 });
             });
@@ -3456,12 +3511,12 @@ struct ExportDialog {
 }
 
 const EXPORT_SIZES: [(&str, Option<u32>); 6] = [
-    ("Original size", None),
-    ("800 pixels", Some(800)),
-    ("1024 pixels", Some(1024)),
-    ("1600 pixels", Some(1600)),
-    ("2048 pixels", Some(2048)),
-    ("Custom", Some(0)),
+    (tr_mark!("Original size"), None),
+    (tr_mark!("800 pixels"), Some(800)),
+    (tr_mark!("1024 pixels"), Some(1024)),
+    (tr_mark!("1600 pixels"), Some(1600)),
+    (tr_mark!("2048 pixels"), Some(2048)),
+    (tr_mark!("Custom"), Some(0)),
 ];
 
 impl ExportDialog {
@@ -3805,9 +3860,9 @@ fn section_header(
     let months: BTreeSet<String> = items.iter().map(|(_, f)| f.sort_date()[..7].to_owned()).collect();
     let span = match (months.first(), months.last()) {
         (Some(first), Some(last)) if first != last => {
-            format!("{} to {}", library::month_label(first), library::month_label(last))
+            tr!("{first} to {last}", first = crate::i18n::month_label(first), last = crate::i18n::month_label(last))
         }
-        (Some(only), _) => library::month_label(only),
+        (Some(only), _) => crate::i18n::month_label(only),
         _ => String::new(),
     };
     let videos = items.iter().filter(|(_, f)| f.kind == pico_core::media::MediaKind::Video).count();
@@ -3818,7 +3873,7 @@ fn section_header(
         _ => format!("{}, {}", plural(photos, "photo"), plural(videos, "video")),
     };
     if missing > 0 {
-        count = format!("{count}, {missing} not in Pico");
+        count = tr!("{count}, {missing} not in Pico", count = count, missing = missing);
     }
     // A month's own name is the span already.
     let detail = if span.is_empty() || span == title { count } else { format!("{count}  ·  {span}") };
@@ -3848,52 +3903,62 @@ fn drop_target(ui: &egui::Ui, response: &egui::Response) -> Option<std::sync::Ar
 /// The Help > Keyboard Shortcuts list, by where the keys work.
 const SHORTCUTS: &[(&str, &[(&str, &str)])] = &[
     (
-        "Library",
+        tr_mark!("Library"),
         &[
-            ("Arrows", "Move between photos"),
-            ("Home / End", "First / last photo"),
-            ("Page Up / Page Down", "A screenful up / down"),
-            ("Enter, Ctrl+3", "Open the photo"),
-            ("Ctrl+A / Ctrl+I / Ctrl+D", "Select all / invert / clear"),
-            ("Ctrl+H", "Hold in the Photo Tray"),
-            ("S", "Star or unstar"),
-            ("Ctrl+N", "New album from the selection"),
-            ("F2", "Rename"),
-            ("Delete", "Move to the trash"),
-            ("Ctrl+Enter", "Locate on disk"),
-            ("Ctrl+Shift+O", "Open in another program"),
-            ("Ctrl+Shift+S", "Export to a folder"),
-            ("Ctrl+1 / Ctrl+2, Ctrl+wheel", "Thumbnail size"),
-            ("Ctrl+F", "Search"),
+            (tr_mark!("Arrows"), tr_mark!("Move between photos")),
+            ("Home / End", tr_mark!("First / last photo")),
+            ("Page Up / Page Down", tr_mark!("A screenful up / down")),
+            ("Enter, Ctrl+3", tr_mark!("Open the photo")),
+            ("Ctrl+A / Ctrl+I / Ctrl+D", tr_mark!("Select all / invert / clear")),
+            ("Ctrl+H", tr_mark!("Hold in the Photo Tray")),
+            ("S", tr_mark!("Star or unstar")),
+            ("Ctrl+N", tr_mark!("New album from the selection")),
+            ("F2", tr_mark!("Rename")),
+            ("Delete", tr_mark!("Move to the trash")),
+            ("Ctrl+Enter", tr_mark!("Locate on disk")),
+            ("Ctrl+Shift+O", tr_mark!("Open in another program")),
+            ("Ctrl+Shift+S", tr_mark!("Export to a folder")),
+            (tr_mark!("Ctrl+1 / Ctrl+2, Ctrl+wheel"), tr_mark!("Thumbnail size")),
+            ("Ctrl+F", tr_mark!("Search")),
         ],
     ),
     (
-        "Photo",
+        tr_mark!("Photo"),
         &[
-            ("Left / Right, wheel", "Previous / next photo"),
-            ("Home / End", "First / last photo"),
-            ("Ctrl+wheel, pinch", "Zoom"),
-            ("Double-click, Esc", "Back to the library"),
-            ("F11", "Full screen"),
-            ("Ctrl+Z / Ctrl+Y", "Undo / redo an edit"),
-            ("\\ (hold)", "Show the original"),
+            (tr_mark!("Left / Right, wheel"), tr_mark!("Previous / next photo")),
+            ("Home / End", tr_mark!("First / last photo")),
+            (tr_mark!("Ctrl+wheel, pinch"), tr_mark!("Zoom")),
+            (tr_mark!("Double-click, Esc"), tr_mark!("Back to the library")),
+            ("F11", tr_mark!("Full screen")),
+            ("Ctrl+Z / Ctrl+Y", tr_mark!("Undo / redo an edit")),
+            (tr_mark!("\\ (hold)"), tr_mark!("Show the original")),
         ],
     ),
     (
-        "Everywhere",
+        tr_mark!("Everywhere"),
         &[
-            ("Ctrl+R / Ctrl+Shift+R", "Rotate clockwise / counterclockwise"),
-            ("Ctrl+Shift+E / Ctrl+Shift+B", "I'm Feeling Lucky / black and white"),
-            ("Ctrl+C", "Copy the files, to paste into a chat or a folder"),
-            ("Alt+Enter / Ctrl+K", "Properties and tags / add a tag"),
-            ("Ctrl+4", "Slideshow (arrows, Space, -/+ and Esc in it)"),
-            ("F1", "This list"),
+            ("Ctrl+R / Ctrl+Shift+R", tr_mark!("Rotate clockwise / counterclockwise")),
+            ("Ctrl+Shift+E / Ctrl+Shift+B", tr_mark!("I'm Feeling Lucky / black and white")),
+            ("Ctrl+C", tr_mark!("Copy the files, to paste into a chat or a folder")),
+            ("Alt+Enter / Ctrl+K", tr_mark!("Properties and tags / add a tag")),
+            ("Ctrl+4", tr_mark!("Slideshow (arrows, Space, -/+ and Esc in it)")),
+            ("F1", tr_mark!("This list")),
         ],
     ),
 ];
 
+/// "1 photo", "5 photos" in the language in use.
 fn plural(count: usize, noun: &str) -> String {
-    if count == 1 { format!("1 {noun}") } else { format!("{count} {noun}s") }
+    match noun {
+        "photo" => trn!("{n} photo", "{n} photos", count),
+        "video" => trn!("{n} video", "{n} videos", count),
+        "picture" => trn!("{n} picture", "{n} pictures", count),
+        "file" => trn!("{n} file", "{n} files", count),
+        "folder" => trn!("{n} folder", "{n} folders", count),
+        "effect" => trn!("{n} effect", "{n} effects", count),
+        "group" => trn!("{n} group", "{n} groups", count),
+        _ => format!("{count} {noun}"),
+    }
 }
 
 impl eframe::App for PicoApp {

@@ -3,7 +3,7 @@
 
 PICTURES ?= $(HOME)/Pictures
 
-.PHONY: all build release windows run test lint fmt check testdata tour logo licenses places exif-tags install clean
+.PHONY: all build release windows run test lint fmt check testdata tour logo licenses po places exif-tags install clean
 
 all: release
 
@@ -63,6 +63,11 @@ logo:
 # after changing dependencies.
 licenses:
 	python3 -I crates/pico/assets/make_licenses.py
+
+# Collects the interface texts into crates/pico/po/pico.pot and brings the
+# translations (*.po) up to date; run after changing texts in the code.
+po:
+	python3 -I crates/pico/po/update.py
 
 # Rarely changing data, refreshed from the internet (see docs/data-updates.md).
 # Downloads go to target/data-download.

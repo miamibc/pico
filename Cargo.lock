@@ -2878,6 +2878,7 @@ dependencies = [
  "egui_kittest",
  "pico-core",
  "rfd",
+ "sys-locale",
  "zbus",
 ]
 

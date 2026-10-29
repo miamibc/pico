@@ -41,7 +41,7 @@ impl InfoPanel {
         let mut action = None;
         // The heading and Copy stay put above the scrolling list.
         ui.horizontal(|ui| {
-            ui.heading("Properties");
+            ui.heading(tr!("Properties"));
             if current.is_some() {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     // A plain icon that lights up as a button under the pointer.
@@ -49,7 +49,7 @@ impl InfoPanel {
                         .add(egui::Button::new("📋").frame_when_inactive(false))
                         .on_hover_cursor(egui::CursorIcon::PointingHand);
                     button.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Copy"));
-                    let hint = "Copy: all the metadata as tab-separated values, to paste into a spreadsheet";
+                    let hint = tr!("Copy: all the metadata as tab-separated values, to paste into a spreadsheet");
                     self.copy = button.on_hover_text(hint).clicked();
                 });
             }
@@ -58,11 +58,11 @@ impl InfoPanel {
             match current {
                 Some(file) => self.properties(ui, file),
                 None => {
-                    ui.label(egui::RichText::new("Pick a photo to see its secrets.").weak());
+                    ui.label(egui::RichText::new(tr!("Pick a photo to see its secrets.")).weak());
                 }
             }
             ui.separator();
-            ui.heading("Tags");
+            ui.heading(tr!("Tags"));
             action = self.tags(ui, targets);
         });
         action
@@ -75,18 +75,18 @@ impl InfoPanel {
                 if file.kind == MediaKind::Photo { pico_core::image::image_dimensions(&file.path).ok() } else { None };
             (exif, dimensions, pico_core::xmp::read(&file.path), metadata::read(&file.path, file.kind))
         });
-        let mut summary = vec![("Name".to_owned(), file.name())];
+        let mut summary = vec![(tr_mark!("Name").to_owned(), file.name())];
         if let Some(folder) = file.path.parent() {
-            summary.push(("Folder".into(), folder.display().to_string()));
+            summary.push((tr_mark!("Folder").into(), folder.display().to_string()));
         }
-        summary.push(("File size".into(), human_size(file.size)));
+        summary.push((tr_mark!("File size").into(), human_size(file.size)));
         if let Some((w, h)) = dimensions {
-            summary.push(("Dimensions".into(), format!("{w} × {h}")));
+            summary.push((tr_mark!("Dimensions").into(), format!("{w} × {h}")));
         }
         if let Some(created) = file.created_text() {
-            summary.push(("Created".into(), created));
+            summary.push((tr_mark!("Created").into(), created));
         }
-        summary.push(("Modified".into(), file.sort_date_if_modified()));
+        summary.push((tr_mark!("Modified").into(), file.sort_date_if_modified()));
         summary.extend(
             exif.iter().flat_map(|e| &e.fields).filter(|(l, _)| *l != "GPS").map(|(l, v)| (l.to_string(), v.clone())),
         );
@@ -113,7 +113,7 @@ impl InfoPanel {
         let where_from = disagree.then(|| {
             let each: Vec<String> =
                 positions.iter().map(|(from, (lat, lon), _)| format!("{from}: {lat:.6}, {lon:.6}")).collect();
-            format!("The positions differ:\n{}", each.join("\n"))
+            tr!("The positions differ:\n{positions}", positions = each.join("\n"))
         });
         if let Some((lat, lon)) = first {
             summary.push(("GPS".into(), format!("{lat:.6}, {lon:.6}")));
@@ -166,13 +166,13 @@ impl InfoPanel {
             ui.ctx().copy_text(tsv(&all));
         }
         if exif.is_none() && file.kind == MediaKind::Photo {
-            ui.label(egui::RichText::new("No camera details in this file.").weak());
+            ui.label(egui::RichText::new(tr!("No camera details in this file.")).weak());
         }
     }
 
     fn tags(&mut self, ui: &mut egui::Ui, targets: &[&MediaFile]) -> Option<TagAction> {
         if targets.is_empty() {
-            ui.label(egui::RichText::new("Select photos to tag them.").weak());
+            ui.label(egui::RichText::new(tr!("Select photos to tag them.")).weak());
             return None;
         }
         let mut counts: BTreeMap<String, usize> = BTreeMap::new();
@@ -185,7 +185,7 @@ impl InfoPanel {
         ui.horizontal(|ui| {
             let field = ui.add(
                 egui::TextEdit::singleline(&mut self.new_tag)
-                    .hint_text(if targets.len() > 1 { "Tag all selected…" } else { "Add a tag…" })
+                    .hint_text(if targets.len() > 1 { tr!("Tag all selected…") } else { tr!("Add a tag…") })
                     .desired_width(160.0),
             );
             if self.focus_tag_field {
@@ -194,14 +194,14 @@ impl InfoPanel {
             }
             // Take the Enter so it does not also open the photo behind the panel.
             let enter = field.lost_focus() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
-            if (ui.button("Add").clicked() || enter) && !self.new_tag.trim().is_empty() {
+            if (ui.button(tr!("Add")).clicked() || enter) && !self.new_tag.trim().is_empty() {
                 // Picasa stores keywords comma-separated, so commas cannot be part of one.
                 action = Some(TagAction::Add(self.new_tag.trim().replace(',', " ")));
                 self.new_tag.clear();
             }
         });
         if counts.is_empty() {
-            ui.label(egui::RichText::new("No tags yet.").weak());
+            ui.label(egui::RichText::new(tr!("No tags yet.")).weak());
         }
         ui.horizontal_wrapped(|ui| {
             for (tag, count) in &counts {
@@ -210,7 +210,7 @@ impl InfoPanel {
                 } else {
                     format!("{tag} ×")
                 };
-                if ui.button(label).on_hover_text("Remove this tag").clicked() {
+                if ui.button(label).on_hover_text(tr!("Remove this tag")).clicked() {
                     action = Some(TagAction::Remove(tag.clone()));
                 }
             }
@@ -241,7 +241,7 @@ fn table(ui: &mut egui::Ui, id: &str, rows: &[(String, String)], extra: impl Fn(
         .max_col_width((width - label_width - spacing).max(label_width))
         .show(ui, |ui| {
             for (label, value) in rows {
-                ui.add(egui::Label::new(egui::RichText::new(label).weak()).wrap());
+                ui.add(egui::Label::new(egui::RichText::new(crate::i18n::tr(label)).weak()).wrap());
                 let Extra { warning, link } = extra(label);
                 ui.horizontal_top(|ui| {
                     if let Some(note) = warning {
@@ -254,7 +254,7 @@ fn table(ui: &mut egui::Ui, id: &str, rows: &[(String, String)], extra: impl Fn(
                             let link = ui.add(egui::Label::new(text).wrap().sense(egui::Sense::click()));
                             link.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Link, true, value));
                             let link = link.on_hover_cursor(egui::CursorIcon::PointingHand);
-                            if link.on_hover_text("Show on OpenStreetMap").clicked() {
+                            if link.on_hover_text(tr!("Show on OpenStreetMap")).clicked() {
                                 ui.ctx().open_url(egui::OpenUrl::new_tab(url));
                             }
                         }
@@ -304,7 +304,7 @@ pub fn human_size(bytes: u64) -> String {
         b if b >= 1 << 30 => format!("{:.1} GB", b as f64 / (1u64 << 30) as f64),
         b if b >= 1 << 20 => format!("{:.1} MB", b as f64 / (1u64 << 20) as f64),
         b if b >= 1 << 10 => format!("{:.0} KB", b as f64 / 1024.0),
-        b => format!("{b} bytes"),
+        b => tr!("{n} bytes", n = b),
     }
 }
 
