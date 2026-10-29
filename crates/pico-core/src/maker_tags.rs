@@ -1,5 +1,6 @@
 //! The camera makers' notes: names and value meanings, from ExifRead's
-//! tag tables (BSD-3-Clause, (c) Gene Cash, Ianaré Sévi and contributors).
+//! tag tables (BSD-3-Clause, (c) Gene Cash, Ianaré Sévi and contributors;
+//! the license is in `crates/pico-core/data/LICENSE-ExifRead`).
 //! Made by `crates/pico-core/data/make_maker_tags.py` (`make maker-tags`);
 //! do not edit.
 

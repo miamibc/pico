@@ -326,10 +326,11 @@ language is in `crates/pico/po/README.md`.
   (`i18n`, the texts in `po/`), windowless UI tests (`tests`, screenshots in
   `target/ui-shots/`).
 - `docs/` — project notes, release notes
-  (`releases/`), an analysis of the Picasa 3 formats, and how to update rarely
+  (`releases/`), and how to update rarely
   changing data — places, EXIF tags, makers' notes, licenses — and which metadata fields must
   agree (`data-updates.md`).
-- `research/` — reverse-engineering material (not in git).
+- `research/`, `docs/research/picasa3/` — reverse-engineering material and the
+  analysis of the Picasa 3 formats (not in git).
 
 Creative Kit effects follow Picnik's recipes (Google, Apache License 2.0).
 Place names come from [GeoNames](https://www.geonames.org/) (`cities1000`,
@@ -370,3 +371,7 @@ specifications:
 All third-party packages and the texts of their licenses are shown in
 **Help → About**; the list lives in `crates/pico/assets/licenses.txt` and is
 updated with `make licenses` after the dependencies change.
+
+## License
+
+Pico is licensed under the [Apache License 2.0](LICENSE).

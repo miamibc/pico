@@ -2,7 +2,7 @@
 //!
 //! Format: `id=<params>;id=<params>;...`. Most edits start their parameters
 //! with an enabled flag (`1`), followed by comma-separated values whose order is
-//! defined per filter (see `docs/research/picasa-filter-layout.tsv`). Video trim
+//! defined per filter (see `docs/research/picasa3/picasa-filter-layout.tsv`). Video trim
 //! points are the exception: `moviestart=<hex>` holds only a time.
 //!
 //! Parameters are kept as text so that stacks round-trip exactly, including

@@ -5,7 +5,6 @@
 /research/picasa3/decomp/
 /research/picasa3/*.snapshot
 /research/picasa3/resources/
-/docs/research/picasa-strings-en.tsv
 /research/picasa3/exe_strings.txt
 /research/picasa3/runtime/
 /research/picnik-src/
@@ -16,3 +15,12 @@
 # Local instructions for Claude Code and the local task list
 /CLAUDE.md
 /TASKS.md
+
+# Notes from the Picasa 3 analysis: strings, menus and data of Google's program (local reference only)
+/docs/research/picasa3/
+
+# Old task list, kept locally
+/docs/tasks.md
+
+# Python bytecode
+__pycache__/

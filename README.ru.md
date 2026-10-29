@@ -307,10 +307,11 @@ XDG: GNOME, KDE и другие) и меняется сразу, без пере
   теги (`info`), просмотр и правка (`viewer`, `tools`), видео (`player`), слайд-шоу (`slideshow`),
   переводы (`i18n`, тексты в `po/`), UI-тесты без окна (`tests`, скриншоты в `target/ui-shots/`).
 - `docs/` — заметки проекта, описания релизов
-  (`releases/`), разбор форматов Picasa 3 и как обновлять редко меняющиеся
+  (`releases/`) и как обновлять редко меняющиеся
   данные — места, теги EXIF, заметки производителей, лицензии — и какие поля метаданных должны
   совпадать (`data-updates.md`).
-- `research/` — материалы реверс-инжиниринга (не в git).
+- `research/`, `docs/research/picasa3/` — материалы реверс-инжиниринга и
+  разбор форматов Picasa 3 (не в git).
 
 Эффекты Creative Kit следуют рецептам Picnik (Google, Apache License 2.0).
 Названия мест — из [GeoNames](https://www.geonames.org/) (`cities1000`,
@@ -348,3 +349,7 @@ CC BY 4.0) и [Natural Earth](https://www.naturalearthdata.com/) (страны, 
 Все сторонние пакеты и тексты их лицензий видны в **Help → About**; список
 лежит в `crates/pico/assets/licenses.txt` и обновляется командой
 `make licenses` после смены зависимостей.
+
+## Лицензия
+
+Pico распространяется по [лицензии Apache 2.0](LICENSE).
