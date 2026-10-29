@@ -74,9 +74,11 @@ pub enum GridAction {
         toggle: bool,
         done: bool,
     },
-    /// Photos and missing photos' tiles dragged within the grid were let go
-    /// before tile `to` (or after the last); only with `GridView::reorder`.
+    /// Photos and missing photos' tiles dragged within section `section` were
+    /// let go before its tile `to` (or after the last); only with
+    /// `GridView::reorder`.
     Reorder {
+        section: usize,
         photos: Vec<FileRef>,
         missing: Vec<usize>,
         to: usize,
@@ -87,8 +89,8 @@ pub enum GridAction {
 #[derive(Clone)]
 pub struct PhotoDrag(pub Vec<FileRef>, pub Vec<usize>);
 
-/// A run of photos in the grid, under an optional header (a folder in the
-/// ribbon of all folders).
+/// A run of photos in the grid, under an optional header (a folder, album,
+/// month or place in the ribbon of them all).
 pub struct GridSection<'a> {
     pub header: Option<SectionHeader>,
     pub items: Vec<(FileRef, &'a MediaFile)>,
@@ -151,12 +153,17 @@ pub struct GridView<'a> {
     pub scroll_to_section: Option<usize>,
     /// Scroll just enough to show this photo.
     pub reveal: Option<FileRef>,
+    /// The section the photo to reveal is looked for first; a photo can be
+    /// in several (albums).
+    pub home: Option<usize>,
     /// Photos can be dragged into a new order (an album's Custom Order).
     pub reorder: bool,
 }
 
 pub struct GridOutput {
     pub action: Option<GridAction>,
+    /// The section of the photo clicked or opened.
+    pub action_section: Option<usize>,
     /// The visible cells' responses, for context menus.
     pub cells: Vec<(FileRef, egui::Response)>,
     /// The section at the top of the view, and the scroll offset.
@@ -207,6 +214,11 @@ impl Layout {
         Self { columns, cell, step, tops, height: y }
     }
 
+    /// The section at height `y`.
+    fn section_at(&self, y: f32) -> Option<usize> {
+        self.tops.iter().rposition(|(top, _)| *top <= y)
+    }
+
     fn cell_rect(&self, section: usize, index: usize) -> egui::Rect {
         let at = egui::pos2(
             (index % self.columns) as f32 * self.step.x,
@@ -220,6 +232,7 @@ impl Layout {
 pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> GridOutput {
     let layout = Layout::new(&view, ui.available_width(), ui.spacing().item_spacing);
     let mut action = None;
+    let mut action_section = None;
     let mut cells = Vec::new();
     let mut hovered = None;
     let mut add_folder = None;
@@ -237,8 +250,10 @@ pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> G
     if let Some(section) = view.scroll_to_section.filter(|&s| s < layout.tops.len()) {
         offset = Some(layout.tops[section].0);
     }
+    let home = view.home.filter(|&s| s < view.sections.len());
     if let Some(at) = view.reveal
-        && let Some(rect) = view.sections.iter().enumerate().find_map(|(s, section)| {
+        && let Some(rect) = home.into_iter().chain(0..view.sections.len()).find_map(|s| {
+            let section = &view.sections[s];
             section.items.iter().position(|(r, _)| *r == at).map(|i| layout.cell_rect(s, section.slot_of(i)))
         })
         && last_height > 0.0
@@ -259,6 +274,8 @@ pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> G
 
     // Under the thumbnails, so clicks reach them and drags reach the band.
     let band = ui.interact(ui.available_rect_before_wrap(), band_id, egui::Sense::drag());
+    // The section a reorder drag started in: tiles only move within it.
+    let drag_section_id = band_id.with("drag section");
     let output = area.show_viewport(ui, |ui, viewport| {
         let (content, _) =
             ui.allocate_exact_size(egui::vec2(ui.available_width(), layout.height), egui::Sense::hover());
@@ -281,14 +298,18 @@ pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> G
                 let i = match section.slot(slot) {
                     Ok(i) => i,
                     Err(missing) => {
-                        if paint_missing(ui, rect, view.thumb_size, missing) {
-                            add_folder = missing.folder.clone();
+                        match paint_missing(ui, rect, view.thumb_size, (s, missing)) {
+                            MissingTile::AddFolder => add_folder = missing.folder.clone(),
+                            MissingTile::Dragged => ui.data_mut(|d| {
+                                d.insert_temp(drag_section_id, s);
+                            }),
+                            MissingTile::Idle => {}
                         }
                         continue;
                     }
                 };
                 let (at, file) = section.items[i];
-                let response = ui.interact(rect, ui.scope_id().with(("cell", at)), egui::Sense::click_and_drag());
+                let response = ui.interact(rect, ui.scope_id().with(("cell", s, at)), egui::Sense::click_and_drag());
                 paint_cell(ui, &view, thumbs, rect, at, file);
                 let name = file.name();
                 let selected = view.selection.contains(&at);
@@ -307,11 +328,14 @@ pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> G
                 }
                 if response.double_clicked() {
                     action = Some(GridAction::Open(at));
+                    action_section = Some(s);
                 } else if response.clicked() {
                     let modifiers = ui.input(|i| i.modifiers);
                     action = Some(GridAction::Click { at, toggle: modifiers.command, range: modifiers.shift });
+                    action_section = Some(s);
                 }
                 if response.drag_started() {
+                    ui.data_mut(|d| d.insert_temp(drag_section_id, s));
                     // A selected photo drags the whole selection along.
                     let photos = if selected { view.selection.iter().copied().collect() } else { vec![at] };
                     response.dnd_set_drag_payload(PhotoDrag(photos, Vec::new()));
@@ -320,23 +344,26 @@ pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> G
             }
         }
         if view.reorder
-            && let Some(section) = view.sections.first()
             && let Some(drag) = egui::DragAndDrop::payload::<PhotoDrag>(ui.ctx())
             && let Some(pos) = ui.ctx().pointer_latest_pos().filter(|&p| ui.clip_rect().contains(p))
+            && let Some(s) = layout.section_at((pos - origin).y)
+            && ui.data(|d| d.get_temp::<usize>(drag_section_id)) == Some(s)
         {
-            let gap = drop_index(&layout, section.len(), pos - origin);
-            if section.len() > 0 {
-                paint_insertion(ui, &layout, gap, origin);
+            let len = view.sections[s].len();
+            let gap = drop_index(&layout, s, len, pos - origin);
+            if len > 0 {
+                paint_insertion(ui, &layout, s, gap, origin);
             }
             if ui.input(|i| i.pointer.any_released()) {
                 egui::DragAndDrop::clear_payload(ui.ctx());
-                action = Some(GridAction::Reorder { photos: drag.0.clone(), missing: drag.1.clone(), to: gap.0 });
+                let (photos, missing) = (drag.0.clone(), drag.1.clone());
+                action = Some(GridAction::Reorder { section: s, photos, missing, to: gap.0 });
             }
         }
     });
     let offset = output.state.clamped_offset().y;
     ui.data_mut(|d| d.insert_temp(view_id, (offset, output.inner_rect.height())));
-    let top_section = layout.tops.iter().rposition(|(top, _)| *top <= offset + 1.0);
+    let top_section = layout.section_at(offset + 1.0);
 
     // The band lives in content coordinates, so it keeps photos that scrolled away.
     let viewport = output.inner_rect;
@@ -397,12 +424,26 @@ pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> G
             }
         }
     }
-    GridOutput { action, cells, top_section, offset, programmatic, hovered, add_folder }
+    GridOutput { action, action_section, cells, top_section, offset, programmatic, hovered, add_folder }
 }
 
-/// A black tile for an album photo Pico cannot show: which file, and the
-/// folder to add; true when its "Add Folder" button was clicked.
-fn paint_missing(ui: &mut egui::Ui, rect: egui::Rect, thumb_size: f32, missing: &MissingPhoto) -> bool {
+/// What happened to a missing photo's tile this frame.
+enum MissingTile {
+    Idle,
+    /// Its "Add Folder" button was clicked.
+    AddFolder,
+    /// It started being dragged.
+    Dragged,
+}
+
+/// A black tile for an album photo Pico cannot show (in section `s`): which
+/// file, and the folder to add.
+fn paint_missing(
+    ui: &mut egui::Ui,
+    rect: egui::Rect,
+    thumb_size: f32,
+    (s, missing): (usize, &MissingPhoto),
+) -> MissingTile {
     let image_area = egui::Rect::from_min_size(rect.min, egui::vec2(thumb_size + 8.0, thumb_size + 8.0)).shrink(4.0);
     ui.painter().rect_filled(image_area, 2.0, egui::Color32::BLACK);
     // Short on the tile: the folder's own name; its whole path on hover.
@@ -414,9 +455,10 @@ fn paint_missing(ui: &mut egui::Ui, rect: egui::Rect, thumb_size: f32, missing: 
         None => ("Moved or deleted".to_owned(), "Moved or deleted".to_owned()),
     };
     // Dragged like a photo, to arrange the album.
-    let tile = ui.interact(image_area, ui.scope_id().with(("missing", missing.at)), egui::Sense::drag());
+    let tile = ui.interact(image_area, ui.scope_id().with(("missing", s, missing.at)), egui::Sense::drag());
     tile.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, &missing.name));
-    if tile.drag_started() {
+    let dragged = tile.drag_started();
+    if dragged {
         tile.dnd_set_drag_payload(PhotoDrag(Vec::new(), vec![missing.at]));
     }
     tile.on_hover_text(format!("{}\n{hover}", missing.name));
@@ -443,34 +485,39 @@ fn paint_missing(ui: &mut egui::Ui, rect: egui::Rect, thumb_size: f32, missing: 
         y += galley.size().y + gap;
         painter.galley(egui::pos2(x, y - galley.size().y - gap), galley, color);
     }
-    missing.folder.is_some()
+    let add = missing.folder.is_some()
         && ui
             .put(
                 egui::Rect::from_center_size(egui::pos2(image_area.center().x, y + button_size.y / 2.0), button_size),
                 button,
             )
             .on_hover_text("Add this folder to Pico")
-            .clicked()
+            .clicked();
+    match (add, dragged) {
+        (true, _) => MissingTile::AddFolder,
+        (_, true) => MissingTile::Dragged,
+        _ => MissingTile::Idle,
+    }
 }
 
 /// Which gap between photos a drop at `at` (content coordinates) goes to:
 /// before the photo at the index, and whether its bar shows after the photo
 /// before (at the end of a row, or of all).
-fn drop_index(layout: &Layout, len: usize, at: egui::Pos2) -> (usize, bool) {
-    let row = ((at.y - layout.tops[0].1) / layout.step.y).floor().max(0.0) as usize;
+fn drop_index(layout: &Layout, section: usize, len: usize, at: egui::Pos2) -> (usize, bool) {
+    let row = ((at.y - layout.tops[section].1) / layout.step.y).floor().max(0.0) as usize;
     let column = (at.x / layout.step.x).round().clamp(0.0, layout.columns as f32) as usize;
     let to = (row * layout.columns + column).min(len);
     (to, to > 0 && (column == layout.columns || to == len))
 }
 
 /// A bar in the gap a dragged photo would land in.
-fn paint_insertion(ui: &egui::Ui, layout: &Layout, (to, after): (usize, bool), origin: egui::Vec2) {
+fn paint_insertion(ui: &egui::Ui, layout: &Layout, section: usize, (to, after): (usize, bool), origin: egui::Vec2) {
     let gap = layout.step.x - layout.cell.x;
     let (x, cell) = if after {
-        let cell = layout.cell_rect(0, to - 1);
+        let cell = layout.cell_rect(section, to - 1);
         (cell.right() + gap / 2.0, cell)
     } else {
-        let cell = layout.cell_rect(0, to);
+        let cell = layout.cell_rect(section, to);
         (cell.left() - gap / 2.0, cell)
     };
     let line = [egui::pos2(x, cell.top()), egui::pos2(x, cell.bottom())].map(|p| p + origin);

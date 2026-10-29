@@ -574,6 +574,50 @@ fn albums_of_photos_all_outside_pico_can_be_arranged() {
 }
 
 #[test]
+fn albums_follow_one_another_in_one_ribbon() {
+    let fixture = Fixture::new("album-ribbon");
+    std::fs::write(
+        fixture.dir.join(".picasa.ini"),
+        "[.album:aa11]\r\nname=Trip\r\ntoken=aa11\r\n[.album:bb22]\r\nname=Home\r\ntoken=bb22\r\n\
+         [a.png]\r\nalbums=aa11\r\n[b.png]\r\nalbums=aa11,bb22\r\n[c.png]\r\nalbums=bb22\r\n",
+    )
+    .unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().open_album("Trip");
+    harness.step();
+    harness.step();
+    // Both albums are in the grid in list order, each under its header; b
+    // is in both.
+    let trip = harness.get_by_label("Trip, 2 photos  ·  October 2026").rect();
+    let home = harness.get_by_label("Home, 2 photos  ·  October 2026").rect();
+    assert!(home.top() < trip.top(), "{home:?} {trip:?}");
+    assert_eq!(harness.get_all_by_label("b.png").count(), 2);
+    screenshot(&mut harness, "album-ribbon");
+
+    // Clicking a photo of another album makes that album current.
+    harness.get_by_label("c.png").click();
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["b.png", "c.png"]);
+
+    // Photos are arranged within their own album only.
+    let a = harness.get_by_label("a.png").rect();
+    let home_b =
+        harness.get_all_by_label("b.png").map(|n| n.rect()).min_by(|x, y| x.top().total_cmp(&y.top())).unwrap();
+    drag_to(&mut harness, a.center(), home_b.left_center() - egui::vec2(2.0, 0.0));
+    assert!(!harness.state().album_file_text("bb22").contains("a.png"), "{}", harness.state().album_file_text("bb22"));
+    let c = harness.get_by_label("c.png").rect();
+    drag_to(&mut harness, c.center(), home_b.left_center() - egui::vec2(2.0, 0.0));
+    let text = harness.state().album_file_text("bb22");
+    let at = |name: &str| text.find(&format!(">{}</filename>", fixture.dir.join(name).display())).unwrap_or(usize::MAX);
+    assert!(at("c.png") < at("b.png"), "{text}");
+    harness.state_mut().open_album("Trip");
+    harness.state_mut().sort("custom", false);
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["a.png", "b.png"], "Trip keeps its order");
+}
+
+#[test]
 fn albums_keep_a_custom_order() {
     let fixture = Fixture::new("custom-order");
     std::fs::write(
@@ -2227,6 +2271,14 @@ fn timeline_groups_by_month() {
     harness.get_by_label("March 2021  (2)").click();
     harness.step();
     assert_eq!(harness.state().listing_names(), ["c.png", "a.png"], "in the order they were taken");
+    // The months follow one another in one ribbon, newest first.
+    let june = harness.get_by_label("June 2021, 1 photo").rect();
+    let march = harness.get_by_label("March 2021, 2 photos").rect();
+    assert!(june.top() < march.top(), "{june:?} {march:?}");
+    // Clicking a photo of another month makes that month current.
+    harness.get_by_label("b.png").click();
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["b.png"]);
     harness.state_mut().open_month("2021:06");
     assert_eq!(harness.state().listing_names(), ["b.png"]);
     assert!(harness.state().place_keys().is_empty(), "no GPS, no places");
