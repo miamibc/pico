@@ -98,6 +98,8 @@ pub struct PicoApp {
     /// Photos held in the Photo Tray across folders (Ctrl+H), by path so they
     /// survive rescans.
     tray: Vec<PathBuf>,
+    /// The Photo Tray and all it does are shown (View > Photo Tray).
+    show_tray: bool,
     /// A folder, album, month or place picked in the list, for the ribbon to
     /// scroll to.
     ribbon_jump: Option<Source>,
@@ -226,6 +228,7 @@ impl PicoApp {
             current: None,
             selection: BTreeSet::new(),
             tray: Vec::new(),
+            show_tray: false,
             band_base: None,
             ribbon_jump: None,
             ribbon_offset: 0.0,
@@ -370,6 +373,7 @@ impl PicoApp {
         );
         set("reverse", self.reverse.to_string());
         set("filmstrip", self.show_filmstrip.to_string());
+        set("tray", self.show_tray.to_string());
         set("info_panel", self.show_info.to_string());
         set("info_sections", self.info.open_sections.iter().cloned().collect::<Vec<_>>().join(","));
         set("folder_tree", self.folder_tree.to_string());
@@ -433,6 +437,7 @@ impl PicoApp {
         };
         self.reverse = flag("reverse", false);
         self.show_filmstrip = flag("filmstrip", true);
+        self.show_tray = flag("tray", false);
         self.show_info = flag("info_panel", false);
         self.info.open_sections =
             get("info_sections").unwrap_or_default().split(',').filter(|s| !s.is_empty()).map(str::to_owned).collect();
@@ -1564,13 +1569,18 @@ impl PicoApp {
                 .show(ctx, |ui| {
                     egui::Frame::popup(ui.style()).show(ui, |ui| {
                         let photos = plural(drag.0.len() + drag.1.len(), "photo");
-                        ui.label(if matches!(self.source, Some(Source::Album(_))) {
-                            tr!(
+                        let album = matches!(self.source, Some(Source::Album(_)));
+                        ui.label(match (album, self.show_tray) {
+                            (true, true) => tr!(
                                 "{photos}: drop on a folder, an album or the tray, or between photos to arrange them",
                                 photos = photos
-                            )
-                        } else {
-                            tr!("{photos}: drop on a folder, an album or the tray", photos = photos)
+                            ),
+                            (false, true) => tr!("{photos}: drop on a folder, an album or the tray", photos = photos),
+                            (true, false) => tr!(
+                                "{photos}: drop on a folder or an album, or between photos to arrange them",
+                                photos = photos
+                            ),
+                            (false, false) => tr!("{photos}: drop on a folder or an album", photos = photos),
                         });
                     });
                 });
@@ -1806,6 +1816,15 @@ impl PicoApp {
                 ui.checkbox(&mut self.show_filmstrip, tr!("Filmstrip"))
                     .on_hover_text(tr!("Neighbouring photos above the open one"));
                 ui.checkbox(&mut self.show_hidden, tr!("Hidden Pictures"));
+                if ui
+                    .checkbox(&mut self.show_tray, tr!("Photo Tray"))
+                    .on_hover_text(tr!("Hold photos from any folders to show, export or glue them together"))
+                    .changed()
+                    && !self.show_tray
+                    && self.source == Some(Source::Tray)
+                {
+                    self.select_source(Source::Starred);
+                }
             });
             ui.menu_button(tr!("Picture"), |ui| {
                 let any = !self.targets().is_empty();
@@ -2079,7 +2098,7 @@ impl PicoApp {
             self.rotate_targets(-1);
         }
         self.album_menu(ui);
-        if ui.button(tr!("Hold in Tray")).on_hover_text("Ctrl+H").clicked() {
+        if self.show_tray && ui.button(tr!("Hold in Tray")).on_hover_text("Ctrl+H").clicked() {
             self.hold();
         }
         let hide = !self.targets().iter().all(|&at| self.file(at).is_some_and(|f| f.meta.hidden));
@@ -2188,7 +2207,7 @@ impl PicoApp {
             }
         }
         ui.separator();
-        if ui.button(tr!("Hold in Tray")).on_hover_text("Ctrl+H").clicked() {
+        if self.show_tray && ui.button(tr!("Hold in Tray")).on_hover_text("Ctrl+H").clicked() {
             self.hold();
         }
         self.album_menu(ui);
@@ -2220,7 +2239,8 @@ impl PicoApp {
         {
             self.select_source(Source::Starred);
         }
-        if !self.tray.is_empty()
+        if self.show_tray
+            && !self.tray.is_empty()
             && ui
                 .selectable_label(
                     self.source == Some(Source::Tray),
@@ -2596,10 +2616,12 @@ impl PicoApp {
             self.folder_list(ui)
         });
         self.sidebar_width = sidebar.response.rect.width().round();
-        let tray = egui::Panel::bottom("tray").show(ui, |ui| self.tray_panel(ui)).response;
-        if let Some(drag) = drop_target(ui, &tray) {
-            self.selection = drag.0.iter().copied().collect();
-            self.hold();
+        if self.show_tray {
+            let tray = egui::Panel::bottom("tray").show(ui, |ui| self.tray_panel(ui)).response;
+            if let Some(drag) = drop_target(ui, &tray) {
+                self.selection = drag.0.iter().copied().collect();
+                self.hold();
+            }
         }
         egui::CentralPanel::default_margins().show(ui, |ui| {
             if self.folders.is_empty() {
@@ -2867,7 +2889,7 @@ impl PicoApp {
                 open: cmd && i.key_pressed(egui::Key::Num3),
             }
         });
-        if keys.hold {
+        if keys.hold && self.show_tray {
             self.hold();
         }
         if keys.new_album && !self.targets().is_empty() {
@@ -3375,7 +3397,8 @@ impl PicoApp {
                     for (group, keys) in SHORTCUTS {
                         ui.heading(crate::i18n::tr(group));
                         egui::Grid::new(*group).num_columns(2).striped(true).show(ui, |ui| {
-                            for (key, what) in *keys {
+                            // The tray's keys only while it is shown.
+                            for (key, what) in keys.iter().filter(|k| self.show_tray || k.0 != "Ctrl+H") {
                                 ui.strong(crate::i18n::tr(key));
                                 ui.label(crate::i18n::tr(what));
                                 ui.end_row();
@@ -3725,6 +3748,10 @@ impl PicoApp {
 
     pub fn confirming_move(&self) -> bool {
         self.confirm_move.is_some()
+    }
+
+    pub fn show_tray(&mut self, on: bool) {
+        self.show_tray = on;
     }
 
     pub fn tray_len(&self) -> usize {

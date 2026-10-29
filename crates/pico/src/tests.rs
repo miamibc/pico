@@ -758,6 +758,7 @@ fn photo_tray_holds_photos_across_folders() {
     std::fs::create_dir_all(fixture.dir.join("more")).unwrap();
     RgbImage::from_pixel(60, 40, Rgb([200, 200, 0])).save(fixture.dir.join("more/d.png")).unwrap();
     let mut harness = harness(&fixture.dir);
+    harness.state_mut().show_tray(true);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 2);
     harness.get_by_label("Holiday  (3)").click();
     harness.step();
@@ -814,6 +815,7 @@ fn tray_thumbnails_open_the_viewer_and_unhold() {
         .with_step_dt(0.05)
         .build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![dir], false));
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().show_tray(true);
     harness.get_by_label("a.png").click();
     harness.step();
     harness.get_by_label("c.png").click_modifiers(Modifiers::COMMAND);
@@ -873,6 +875,8 @@ fn tray_thumbnails_open_the_viewer_and_unhold() {
 fn thumbnail_size_by_slider_and_ctrl_wheel() {
     let fixture = Fixture::new("thumb-size");
     let mut harness = harness(&fixture.dir);
+    harness.state_mut().show_tray(true);
+    harness.state_mut().show_tray(true);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
     assert_eq!(harness.state().thumbnail_size(), 160.0);
     harness.hover_at(harness.get_by_label("b.png").rect().center());
@@ -938,6 +942,7 @@ fn drag_photos_to_folders_and_the_tray_and_drop_folders_in() {
     std::fs::create_dir_all(fixture.dir.join("more")).unwrap();
     RgbImage::from_pixel(60, 40, Rgb([200, 200, 0])).save(fixture.dir.join("more/d.png")).unwrap();
     let mut harness = harness(&fixture.dir);
+    harness.state_mut().show_tray(true);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 2);
     harness.get_by_label("Holiday  (3)").click();
     harness.step();
@@ -1275,6 +1280,7 @@ fn settings_come_back_next_time() {
 fn keyboard_shortcuts_window() {
     let fixture = Fixture::new("shortcuts");
     let mut harness = harness(&fixture.dir);
+    harness.state_mut().show_tray(true);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
     harness.get_by_label("Help").click();
     harness.step();
@@ -2425,4 +2431,28 @@ fn options_switch_animations_and_language() {
     harness.get_by_label("Записал. Pico не забудет.");
     let settings = harness.state().settings_for_test(&ctx);
     assert_eq!(settings.get("language").map(String::as_str), Some("ru"));
+}
+
+#[test]
+fn photo_tray_is_hidden_until_shown() {
+    let fixture = Fixture::new("tray-hidden");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    assert!(harness.query_by_label("Hold").is_none(), "no tray");
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::H);
+    harness.step();
+    assert_eq!(harness.state().tray_len(), 0, "Ctrl+H does nothing");
+
+    harness.get_by_label("View").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Photo Tray").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Hold");
+    let ctx = harness.ctx.clone();
+    let settings = harness.state().settings_for_test(&ctx);
+    assert_eq!(settings.get("tray").map(String::as_str), Some("true"));
 }
