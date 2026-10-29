@@ -2456,3 +2456,26 @@ fn photo_tray_is_hidden_until_shown() {
     let settings = harness.state().settings_for_test(&ctx);
     assert_eq!(settings.get("tray").map(String::as_str), Some("true"));
 }
+
+#[test]
+fn viewer_bar_never_runs_under_the_properties_panel() {
+    let fixture = Fixture::new("viewer-bar-fit");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    harness.run_steps(6);
+    let edge = harness.get_by_label("Properties").rect().left();
+    let slider = harness.get_by_role(egui::accesskit::Role::Slider).rect();
+    assert!(slider.right() < edge, "the zoom slider reaches {}, the panel starts at {edge}", slider.right());
+    // The caption field, not the tag field in the panel.
+    let caption = harness
+        .get_all_by(|n| n.role() == egui::accesskit::Role::TextInput)
+        .map(|n| n.rect())
+        .find(|r| r.left() < edge)
+        .expect("the caption field");
+    assert!(caption.right() < edge + 1.0, "the caption reaches {}, the panel starts at {edge}", caption.right());
+    screenshot(&mut harness, "viewer-bar-fit");
+}

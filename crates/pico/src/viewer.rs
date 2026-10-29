@@ -62,6 +62,9 @@ type Size = (u32, u32);
 /// What a texture shows: the file plus the edits it was rendered with.
 type RenderKey = (PathBuf, String);
 
+/// Room Fit, 1:1 and the zoom slider with its value take in the bar.
+const ZOOM_CONTROLS_WIDTH: f32 = 280.0;
+
 #[derive(Default)]
 pub struct Viewer {
     /// Working copy and its size relative to the original photo.
@@ -324,7 +327,9 @@ impl Viewer {
 
     fn toolbar(&mut self, ui: &mut egui::Ui, file: &MediaFile, position: (usize, usize)) -> Option<ViewerAction> {
         let mut action = None;
-        ui.horizontal(|ui| {
+        // Wraps onto a second row where the window is too narrow for it all,
+        // rather than running under the Properties panel.
+        ui.horizontal_wrapped(|ui| {
             if ui.button(tr!("⬅ Back to Library")).on_hover_text("Esc").clicked() {
                 action = Some(ViewerAction::Close);
             }
@@ -360,8 +365,10 @@ impl Viewer {
             if ui.button("⟳").on_hover_text(tr!("Rotate clockwise (Ctrl+R)")).clicked() {
                 action = Some(ViewerAction::Rotate(1));
             }
-            if file.kind != MediaKind::Video && self.tool.is_none() && self.texture.is_some() {
-                let edited = !file.meta.filters.0.is_empty();
+            // Shown before the photo is ready too, so the bar keeps its rows.
+            if file.kind != MediaKind::Video && self.tool.is_none() {
+                let ready = self.texture.is_some();
+                let edited = ready && !file.meta.filters.0.is_empty();
                 let button = ui
                     .add_enabled(edited, egui::Button::new(tr!("Original")))
                     .on_hover_text(tr!("Hold to see the photo without its edits (or hold \\)"))
@@ -369,7 +376,11 @@ impl Viewer {
                 let key_held = !ui.ctx().egui_wants_keyboard_input() && ui.input(|i| i.key_down(egui::Key::Backslash));
                 self.show_original = edited && (button.is_pointer_button_down_on() || key_held);
                 ui.separator();
-                self.zoom_controls(ui);
+                // Fit, 1:1 and the slider stay together on one row.
+                if ui.available_size_before_wrap().x < ZOOM_CONTROLS_WIDTH {
+                    ui.end_row();
+                }
+                self.zoom_controls(ui, ready);
             } else {
                 self.show_original = false;
             }
@@ -382,10 +393,14 @@ impl Viewer {
                 action = self.player.save_frame().map(from_player);
             }
             ui.separator();
+            // The caption takes the rest of the row, else a row of its own.
+            if ui.available_size_before_wrap().x < 200.0 {
+                ui.end_row();
+            }
             let edit = ui.add(
                 egui::TextEdit::singleline(&mut self.caption)
                     .hint_text(tr!("Add a caption. Future you will thank you."))
-                    .desired_width(f32::INFINITY),
+                    .desired_width(ui.available_size_before_wrap().x),
             );
             let committed = edit.lost_focus() || (edit.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
             let caption = Some(self.caption.trim().to_owned()).filter(|c| !c.is_empty());
@@ -497,14 +512,20 @@ impl Viewer {
         }
     }
 
-    fn zoom_controls(&mut self, ui: &mut egui::Ui) {
+    /// Fit, 1:1 and the zoom slider; greyed out until the photo is `ready`.
+    /// About [`ZOOM_CONTROLS_WIDTH`] wide.
+    fn zoom_controls(&mut self, ui: &mut egui::Ui, ready: bool) {
         let fit = self.fit_zoom.max(0.01);
-        if ui.selectable_label(self.zoom.is_none(), "Fit").on_hover_text(tr!("Fit the photo in the window")).clicked() {
+        if ui
+            .add_enabled(ready, egui::Button::selectable(self.zoom.is_none(), "Fit"))
+            .on_hover_text(tr!("Fit the photo in the window"))
+            .clicked()
+        {
             self.zoom = None;
             self.pan = egui::Vec2::ZERO;
         }
         if ui
-            .selectable_label(self.zoom == Some(1.0), "1:1")
+            .add_enabled(ready, egui::Button::selectable(self.zoom == Some(1.0), "1:1"))
             .on_hover_text(tr!("One photo pixel per screen pixel"))
             .clicked()
         {
@@ -517,7 +538,11 @@ impl Viewer {
             .suffix("%")
             .fixed_decimals(0)
             .show_value(true);
-        if ui.add(slider).on_hover_text(tr!("Zoom (Ctrl+wheel; drag the photo to look around)")).changed() {
+        if ui
+            .add_enabled(ready, slider)
+            .on_hover_text(tr!("Zoom (Ctrl+wheel; drag the photo to look around)"))
+            .changed()
+        {
             self.set_zoom(percent / 100.0);
         }
     }
