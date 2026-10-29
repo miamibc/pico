@@ -310,8 +310,6 @@ XDG: GNOME, KDE и другие) и меняется сразу, без пере
   (`releases/`) и как обновлять редко меняющиеся
   данные — места, теги EXIF, заметки производителей, лицензии — и какие поля метаданных должны
   совпадать (`data-updates.md`).
-- `research/`, `docs/research/picasa3/` — материалы реверс-инжиниринга и
-  разбор форматов Picasa 3 (не в git).
 
 Эффекты Creative Kit следуют рецептам Picnik (Google, Apache License 2.0).
 Названия мест — из [GeoNames](https://www.geonames.org/) (`cities1000`,

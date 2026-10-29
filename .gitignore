@@ -1,12 +1,8 @@
 # Rust build output
 /target/
 
-# Reverse-engineering artifacts of the original Picasa 3 (Google code/data; local reference only)
-/research/picasa3/decomp/
-/research/picasa3/*.snapshot
-/research/picasa3/resources/
-/research/picasa3/exe_strings.txt
-/research/picasa3/runtime/
+# Local reference material, not published
+/research/picasa3/
 /research/picnik-src/
 
 # Generated test library (testdata/make_testdata.py); source photos are not ours to publish

@@ -329,8 +329,6 @@ language is in `crates/pico/po/README.md`.
   (`releases/`), and how to update rarely
   changing data — places, EXIF tags, makers' notes, licenses — and which metadata fields must
   agree (`data-updates.md`).
-- `research/`, `docs/research/picasa3/` — reverse-engineering material and the
-  analysis of the Picasa 3 formats (not in git).
 
 Creative Kit effects follow Picnik's recipes (Google, Apache License 2.0).
 Place names come from [GeoNames](https://www.geonames.org/) (`cities1000`,
