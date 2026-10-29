@@ -123,6 +123,25 @@ Groups of fields that must agree:
 | Rating | Rating | Rating | — | — | number |
 | Lens | Lens Model | Lens Model, Lens | — | — | text |
 
+The camera maker's notes (MakerNote, read in `crates/pico-core/src/maker_notes.rs`)
+show in the EXIF section under the maker's name and are checked against EXIF:
+
+| What | EXIF | Maker's notes | Compared as |
+|---|---|---|---|
+| Exposure time | Exposure Time, Shutter Speed Value | Canon Exposure Time | within 1/3 stop |
+| Aperture | F Number, Aperture Value | Canon F-Number | within 1/3 stop |
+| ISO | ISO | Canon ISO, NIKON ISO | within 15% |
+| Focal length | Focal Length | Canon Focal Length | within 3% |
+| Exposure compensation | Exposure Compensation | Canon Exposure Compensation | within 0.2 EV |
+| Serial number | Body Serial Number | Canon, NIKON, OLYMPUS Serial Number | digits |
+| Owner | Camera Owner | Canon Owner Name | text |
+| Lens | Lens Model | Canon Lens Model, OLYMPUS Lens Model | text |
+| Camera | Model | Canon Image Type | one name in the other |
+| Clock | Date Taken | NIKON Power Up Time | switched on before the shot |
+
+Canon's lists start with their own length; when they do not, an editor moved
+the notes without fixing their offsets, and the Maker Note row says so.
+
 Besides that, every XMP property from the `exif:` and `tiff:` namespaces is a
 copy of the EXIF tag of the same name (`exif:ExposureTime` ↔ Exposure Time) and
 is compared with it: as a date if the name starts with "Date", otherwise as
@@ -137,7 +156,8 @@ How values are compared:
 - **date** — by digits down to the second, and only as precisely as both
   values go (`2018:02:09 19:17:10` = `2018-02-09T19:17:10.57+02:00`; the time
   zone is ignored);
-- **number** — a rating as stars or a digit (`★★★☆☆ (3)` = `3`).
+- **number** — a rating as stars or a digit (`★★★☆☆ (3)` = `3`);
+- **within** — numbers, as far apart as the camera's own rounding allows.
 
 Only fields that are present are compared; a field without a pair gets no
 badge. To add a group, append it to `GROUPS` — the labels must match the ones

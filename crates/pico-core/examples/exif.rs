@@ -10,6 +10,13 @@ fn main() {
                 for (label, value) in exif.fields {
                     println!("  {label:>14}: {value}");
                 }
+                println!("  All tags:");
+                for (label, value) in &exif.all {
+                    println!("    {label}: {value}");
+                }
+                for (_, label, note) in pico_core::agree::disagreements(&[("EXIF", &exif.all)]) {
+                    println!("  ! {label}: {}", note.replace('\n', "; "));
+                }
             }
             None => println!("  (no EXIF)"),
         }

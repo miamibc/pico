@@ -18,6 +18,7 @@ pub mod folders;
 pub mod geo;
 pub mod ini;
 pub mod library;
+mod maker_notes;
 pub mod media;
 pub mod meta;
 pub mod metadata;

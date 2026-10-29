@@ -156,8 +156,8 @@ pub struct Exif {
     /// Human-readable `(label, value)` pairs in display order: the summary.
     pub fields: Vec<(&'static str, String)>,
     /// Every tag of the main, EXIF and GPS directories, named and readable,
-    /// in file order; what cannot be read (the maker's notes, pointers) in
-    /// hex.
+    /// in file order, then the text in the maker's notes; what cannot be read
+    /// (the rest of the maker's notes, pointers) in hex.
     pub all: Vec<(String, String)>,
 }
 
@@ -252,7 +252,27 @@ pub fn parse(tiff: &[u8]) -> Option<Exif> {
     // The EXIF and GPS directories, and the Interoperability one inside EXIF.
     let mut pending = std::collections::VecDeque::from(subs);
     let mut seen = vec![ifd0];
+    let mut maker = Vec::new();
     while let Some((tag, offset)) = pending.pop_front() {
+        if tag == 0x927c {
+            let text = |tag: u32| match tags.get(&tag) {
+                Some(Value::Text(text)) => text.clone(),
+                _ => String::new(),
+            };
+            let (make, model) = (text(0x010f), text(0x0110));
+            let length = match tags.get(&0x927c) {
+                Some(Value::Bytes(b)) => b.len(),
+                _ => 0,
+            };
+            if let Some((summary, rows)) = crate::maker_notes::read(tiff, little, offset, length, &make, &model) {
+                // In place of the hex.
+                if let Some(row) = all.iter_mut().find(|(name, _)| name == "Maker Note") {
+                    row.1 = summary;
+                }
+                maker = rows;
+            }
+            continue;
+        }
         if seen.contains(&offset) || seen.len() > 8 {
             continue;
         }
@@ -272,6 +292,7 @@ pub fn parse(tiff: &[u8]) -> Option<Exif> {
         }
         pending.extend(nested);
     }
+    all.extend(maker);
     // IFD1 describes the embedded thumbnail.
     if let Some(ifd1) = reader.next_ifd(ifd0).filter(|&at| at != 0 && !seen.contains(&at)) {
         let mut found = std::collections::BTreeMap::new();
@@ -330,7 +351,7 @@ pub fn parse(tiff: &[u8]) -> Option<Exif> {
 }
 
 #[derive(Debug, Clone)]
-enum Value {
+pub(crate) enum Value {
     Text(String),
     Numbers(Vec<u32>),
     Rationals(Vec<(f64, f64)>),
@@ -344,7 +365,7 @@ enum Value {
 
 impl Value {
     /// The value at `at` as a number, whatever its type.
-    fn number(&self, at: usize) -> Option<f64> {
+    pub(crate) fn number(&self, at: usize) -> Option<f64> {
         match self {
             Value::Numbers(n) => n.get(at).map(|&v| v as f64),
             Value::Signed(n) => n.get(at).map(|&v| v as f64),
@@ -355,7 +376,7 @@ impl Value {
         }
     }
 
-    fn count(&self) -> usize {
+    pub(crate) fn count(&self) -> usize {
         match self {
             Value::Numbers(n) => n.len(),
             Value::Signed(n) => n.len(),
@@ -488,18 +509,18 @@ fn describe(tag: u32, value: &Value) -> Option<(String, String)> {
 }
 
 /// An exposure time: "1/250 s", or "2.5 s".
-fn exposure(seconds: f64) -> String {
+pub(crate) fn exposure(seconds: f64) -> String {
     if seconds > 0.0 && seconds < 1.0 { format!("1/{:.0} s", 1.0 / seconds) } else { format!("{seconds:.1} s") }
 }
 
 /// A number without needless decimals: 56, 56.5, 0.0123.
-fn trim_number(v: f64) -> String {
+pub(crate) fn trim_number(v: f64) -> String {
     format!("{}", (v * 10_000.0).round() / 10_000.0)
 }
 
 /// LensSpecification: the shortest and longest focal length and the widest
 /// aperture at each, 0 where unknown: "70–200 mm f/2.8".
-fn lens(value: &Value) -> Option<String> {
+pub(crate) fn lens(value: &Value) -> Option<String> {
     let [short, long, at_short, at_long] = [value.number(0)?, value.number(1)?, value.number(2)?, value.number(3)?];
     let focal = if short == long || long == 0.0 {
         format!("{} mm", trim_number(short))
@@ -515,7 +536,7 @@ fn lens(value: &Value) -> Option<String> {
 }
 
 /// Any value as text: numbers and ratios as they are.
-fn plain(value: &Value) -> Option<String> {
+pub(crate) fn plain(value: &Value) -> Option<String> {
     let ratio = |(n, d): &(f64, f64)| {
         if *d == 1.0 || *d == 0.0 { format!("{n}") } else { format!("{}", ((n / d) * 10_000.0).round() / 10_000.0) }
     };
@@ -536,7 +557,7 @@ fn plain(value: &Value) -> Option<String> {
 }
 
 /// The first bytes of a binary block in hex, and its size.
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     const SHOWN: usize = 32;
     let head: Vec<String> = bytes.iter().take(SHOWN).map(|b| format!("{b:02X}")).collect();
     if bytes.len() > SHOWN { format!("{} … ({} bytes)", head.join(" "), bytes.len()) } else { head.join(" ") }
@@ -892,18 +913,18 @@ fn tag_name(tag: u32) -> Option<&'static str> {
     })
 }
 
-struct Tiff<'a> {
-    data: &'a [u8],
-    little: bool,
+pub(crate) struct Tiff<'a> {
+    pub(crate) data: &'a [u8],
+    pub(crate) little: bool,
 }
 
 impl Tiff<'_> {
-    fn u16(&self, at: usize) -> Option<u16> {
+    pub(crate) fn u16(&self, at: usize) -> Option<u16> {
         let b = [*self.data.get(at)?, *self.data.get(at + 1)?];
         Some(if self.little { u16::from_le_bytes(b) } else { u16::from_be_bytes(b) })
     }
 
-    fn u32(&self, at: usize) -> Option<u32> {
+    pub(crate) fn u32(&self, at: usize) -> Option<u32> {
         let b = [*self.data.get(at)?, *self.data.get(at + 1)?, *self.data.get(at + 2)?, *self.data.get(at + 3)?];
         Some(if self.little { u32::from_le_bytes(b) } else { u32::from_be_bytes(b) })
     }
@@ -916,7 +937,12 @@ impl Tiff<'_> {
 
     /// Reads one IFD's entries; pointers to the EXIF, GPS and
     /// Interoperability IFDs go to `subs`.
-    fn read_ifd(&self, at: usize, tags: &mut std::collections::BTreeMap<u32, Value>, subs: &mut Vec<(u16, usize)>) {
+    pub(crate) fn read_ifd(
+        &self,
+        at: usize,
+        tags: &mut std::collections::BTreeMap<u32, Value>,
+        subs: &mut Vec<(u16, usize)>,
+    ) {
         let Some(count) = self.u16(at) else { return };
         for i in 0..count as usize {
             let entry = at + 2 + i * 12;
@@ -936,6 +962,10 @@ impl Tiff<'_> {
             if start + total > self.data.len() {
                 continue;
             }
+            // The maker's notes are a directory of their own in most cameras.
+            if tag == 0x927c {
+                subs.push((tag, start));
+            }
             if tag == 0x8769 || tag == 0x8825 || tag == 0xa005 {
                 if let Some(offset) = self.u32(entry + 8) {
                     subs.push((tag, offset as usize));
@@ -947,7 +977,15 @@ impl Tiff<'_> {
                 2 => {
                     let bytes = &self.data[start..start + total];
                     let text = bytes.split(|&b| b == 0).next().unwrap_or(&[]);
-                    Value::Text(String::from_utf8_lossy(text).into_owned())
+                    match std::str::from_utf8(text) {
+                        Ok(text) => Value::Text(text.to_owned()),
+                        // Older cameras wrote Latin-1 ("©"); anything else
+                        // under a text type is binary data, kept as it is.
+                        Err(_) if text.iter().all(|&b| (0x20..0x7f).contains(&b) || b >= 0xa0) => {
+                            Value::Text(text.iter().map(|&b| b as char).collect())
+                        }
+                        Err(_) => Value::Bytes(bytes.to_vec()),
+                    }
                 }
                 3 => Value::Numbers((0..n).filter_map(|k| self.u16(start + 2 * k).map(u32::from)).collect()),
                 // LONG, and IFD (an offset, as in DNG).
@@ -1073,6 +1111,46 @@ pub(crate) mod read_tests {
         assert_eq!(shown(0xa43a, text("darktable")), named("RAW Developing Software", "darktable"));
         assert_eq!(shown(0x1_0030, text("x")).0, "GPS Tag 0x0030");
         assert_eq!(shown(0x7777, text("x")).0, "Tag 0x7777");
+    }
+
+    /// IFD0 with Make "Canon", an EXIF directory holding the maker's notes,
+    /// and in those a bare directory with two text entries, one of them
+    /// binary data under a text type.
+    fn canon_tiff() -> Vec<u8> {
+        let mut t = b"II*\0".to_vec();
+        t.extend_from_slice(&8u32.to_le_bytes());
+        let entry = |t: &mut Vec<u8>, tag: u16, kind: u16, n: u32, value: u32| {
+            t.extend_from_slice(&tag.to_le_bytes());
+            t.extend_from_slice(&kind.to_le_bytes());
+            t.extend_from_slice(&n.to_le_bytes());
+            t.extend_from_slice(&value.to_le_bytes());
+        };
+        // IFD0 at 8: Make at 38, EXIF IFD at 44.
+        t.extend_from_slice(&2u16.to_le_bytes());
+        entry(&mut t, 0x010f, 2, 6, 38);
+        entry(&mut t, 0x8769, 4, 1, 44);
+        t.extend_from_slice(&0u32.to_le_bytes());
+        t.extend_from_slice(b"Canon\0");
+        // EXIF IFD at 44: MakerNote (UNDEFINED) at 62.
+        t.extend_from_slice(&1u16.to_le_bytes());
+        entry(&mut t, 0x927c, 7, 30, 62);
+        t.extend_from_slice(&0u32.to_le_bytes());
+        // The notes at 62, 30 bytes; both texts fit in their entries.
+        t.extend_from_slice(&2u16.to_le_bytes());
+        entry(&mut t, 0x0006, 2, 4, u32::from_le_bytes(*b"A40\0"));
+        entry(&mut t, 0x0009, 2, 4, u32::from_le_bytes([0xff, 0x01, 0xfe, 0]));
+        t.extend_from_slice(&0u32.to_le_bytes());
+        t
+    }
+
+    #[test]
+    fn reads_the_text_in_the_makers_notes() {
+        let exif = parse(&canon_tiff()).unwrap();
+        let get = |label: &str| exif.all.iter().find(|(l, _)| l == label).map(|(_, v)| v.as_str());
+        assert_eq!(get("Maker Note"), Some("Canon, 2 entries"));
+        assert_eq!(get("Canon Image Type"), Some("A40"));
+        // Binary data under a text type shows in hex.
+        assert_eq!(get("Canon Owner Name"), Some("FF 01 FE 00"));
     }
 
     #[test]
