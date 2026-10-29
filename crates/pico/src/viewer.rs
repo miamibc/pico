@@ -11,7 +11,6 @@ use crate::tools::{self, CropTool, Tool, ToolAction};
 use eframe::egui;
 use pico_core::adjust;
 use pico_core::effects::{self, Group, ParamValue};
-use pico_core::exif;
 use pico_core::filters::{Filter, FilterStack, Value};
 use pico_core::image::DynamicImage;
 use pico_core::image::imageops::FilterType;
@@ -74,17 +73,12 @@ pub struct Viewer {
     rendering: Option<(RenderKey, Receiver<Rendered>)>,
     /// Levels of the picture on screen, edits included.
     histogram: Option<(RenderKey, Box<Histogram>)>,
-    /// Camera details from EXIF, read when the photo opens.
-    camera: Option<(PathBuf, Vec<(&'static str, String)>)>,
     error: Option<String>,
     caption: String,
     caption_for: Option<PathBuf>,
     /// Uncommitted edits while a slider is being dragged.
     draft: Option<(PathBuf, FilterStack)>,
     show_edit_panel: bool,
-    /// Histogram and camera settings over the photo, as Picasa's "Histogram &
-    /// Camera Information".
-    show_camera_info: bool,
     /// The open Crop or Straighten tool and the file it belongs to.
     tool: Option<(PathBuf, Tool)>,
     player: Player,
@@ -200,10 +194,6 @@ impl Viewer {
             let size =
                 (file.kind == MediaKind::Photo).then(|| pico_core::image::image_dimensions(&file.path).ok()).flatten();
             self.header_size = Some((file.path.clone(), size));
-            const CAMERA_FIELDS: [&str; 5] = ["Camera", "Exposure", "Aperture", "ISO", "Focal length"];
-            let fields = exif::read(&file.path).map_or_else(Vec::new, |e| e.fields);
-            let fields = fields.into_iter().filter(|(label, _)| CAMERA_FIELDS.contains(label)).collect();
-            self.camera = Some((file.path.clone(), fields));
         }
         if self.caption_for.as_ref() != Some(&file.path) {
             self.caption = file.meta.caption.clone().unwrap_or_default();
@@ -243,9 +233,6 @@ impl Viewer {
         self.update_rendering(ui.ctx(), file, &meta);
         self.update_original(ui.ctx(), file);
         let picture_action = egui::CentralPanel::no_frame().show(ui, |ui| self.picture(ui, &meta)).inner;
-        if self.show_camera_info {
-            self.camera_info(ui.ctx(), file);
-        }
         self.update_detail(ui.ctx(), file, &meta);
         if action.is_none() && picture_action.is_some() {
             return picture_action;
@@ -335,8 +322,6 @@ impl Viewer {
             }
             if file.kind != MediaKind::Video {
                 ui.toggle_value(&mut self.show_edit_panel, tr!("Edit")).on_hover_text(tr!("Show the edit panel"));
-                ui.toggle_value(&mut self.show_camera_info, tr!("Info"))
-                    .on_hover_text(tr!("Histogram & Camera Information"));
             }
             if ui.button(tr!("▶ Slideshow")).on_hover_text("Ctrl+4").clicked() {
                 action = Some(ViewerAction::Slideshow);
@@ -461,55 +446,10 @@ impl Viewer {
         Some(if near(edited.0, same.0) && near(edited.1, same.1) { (same, None) } else { (edited, Some(same)) })
     }
 
-    /// A see-through box in the photo's top right corner with its levels and
-    /// camera settings.
-    fn camera_info(&self, ctx: &egui::Context, file: &MediaFile) {
-        let Some(area) = self.photo_area else { return };
-        egui::Area::new(egui::Id::unique("camera info"))
-            .pivot(egui::Align2::RIGHT_TOP)
-            .fixed_pos(area.right_top() + egui::vec2(-10.0, 10.0))
-            .interactable(false)
-            .show(ctx, |ui| {
-                egui::Frame::new()
-                    .fill(egui::Color32::from_black_alpha(170))
-                    .corner_radius(6.0)
-                    .inner_margin(10.0)
-                    .show(ui, |ui| {
-                        ui.set_width(220.0);
-                        ui.visuals_mut().override_text_color = Some(egui::Color32::from_gray(230));
-                        self.levels_and_camera(ui, file);
-                    });
-            });
-    }
-
-    /// The histogram of the picture as edited, and the camera settings, one
-    /// to a line as in Picasa.
-    fn levels_and_camera(&self, ui: &mut egui::Ui, file: &MediaFile) {
-        let shown = self.texture.as_ref().map(|(key, _)| key);
-        if let Some((_, histogram)) = self.histogram.as_ref().filter(|(key, _)| Some(key) == shown) {
-            paint_histogram(ui, histogram);
-        }
-        let fields = self.camera.as_ref().filter(|(path, _)| path == &file.path).map(|(_, f)| f.as_slice());
-        let value = |label: &str| fields.unwrap_or_default().iter().find(|(l, _)| *l == label).map(|(_, v)| v.clone());
-        if let Some(camera) = value("Camera") {
-            ui.label(camera);
-        }
-        let settings: Vec<String> = ["Focal length", "Exposure", "Aperture", "ISO"]
-            .iter()
-            .filter_map(|label| {
-                value(label).map(|v| match *label {
-                    "ISO" => format!("ISO {v}"),
-                    "Focal length" => tr!("Focal length: {length}", length = v),
-                    _ => v,
-                })
-            })
-            .collect();
-        if settings.is_empty() && value("Camera").is_none() {
-            ui.label(tr!("No camera details. A screenshot, perhaps?"));
-        }
-        for setting in settings {
-            ui.label(setting);
-        }
+    /// The levels of `path` as shown, edits included, once it is on screen.
+    pub fn histogram(&self, path: &std::path::Path) -> Option<&Histogram> {
+        let shown = self.texture.as_ref().map(|(key, _)| key).filter(|key| key.0 == path)?;
+        self.histogram.as_ref().filter(|(key, _)| key == shown).map(|(_, h)| h.as_ref())
     }
 
     /// Fit, 1:1 and the zoom slider; greyed out until the photo is `ready`.
@@ -1099,33 +1039,5 @@ fn from_player(action: PlayerAction) -> ViewerAction {
         PlayerAction::SavedFrame(path) => ViewerAction::FileAdded(path),
         PlayerAction::Error(message) => ViewerAction::Status(message),
         PlayerAction::Close => ViewerAction::Close,
-    }
-}
-
-/// Red, green and blue levels drawn over each other on a dark strip.
-fn paint_histogram(ui: &mut egui::Ui, histogram: &Histogram) {
-    let width = ui.available_width().min(256.0);
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, 64.0), egui::Sense::hover());
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, "Histogram"));
-    let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 2.0, egui::Color32::from_gray(20));
-    // Pure black and white often spike; scale to the levels in between.
-    let peak = histogram.iter().flat_map(|c| c[1..255].iter()).copied().max().unwrap_or(0).max(1) as f32;
-    let colors = [
-        egui::Color32::from_rgba_unmultiplied(255, 70, 70, 140),
-        egui::Color32::from_rgba_unmultiplied(70, 220, 70, 140),
-        egui::Color32::from_rgba_unmultiplied(80, 120, 255, 140),
-    ];
-    let bar = rect.width() / 256.0;
-    for (counts, color) in histogram.iter().zip(colors) {
-        for (level, &count) in counts.iter().enumerate() {
-            if count == 0 {
-                continue;
-            }
-            let height = (count as f32 / peak).min(1.0) * rect.height();
-            let x = rect.left() + (level as f32 + 0.5) * bar;
-            let stroke = egui::Stroke::new(bar.max(1.0), color);
-            painter.line_segment([egui::pos2(x, rect.bottom()), egui::pos2(x, rect.bottom() - height)], stroke);
-        }
     }
 }

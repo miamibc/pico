@@ -20,7 +20,7 @@ msgstr "Не удалось сохранить настройки: {e}"
 msgid "Could not save the folder list: {e}"
 msgstr "Не удалось сохранить список папок: {e}"
 
-#: crates/pico/src/app.rs:642 crates/pico/src/app.rs:1820 crates/pico/src/app.rs:2247 crates/pico/src/app.rs:2788
+#: crates/pico/src/app.rs:642 crates/pico/src/app.rs:1811 crates/pico/src/app.rs:2230 crates/pico/src/app.rs:2771
 msgid "Photo Tray"
 msgstr "Лоток"
 
@@ -40,7 +40,7 @@ msgstr "В лотке: {photos}"
 msgid "{photos} held, {n} selected"
 msgstr "В лотке: {photos}, выделено: {n}"
 
-#: crates/pico/src/app.rs:653 crates/pico/src/app.rs:753
+#: crates/pico/src/app.rs:653 crates/pico/src/app.rs:747
 msgid "Hold"
 msgstr "Отложить"
 
@@ -48,7 +48,7 @@ msgstr "Отложить"
 msgid "Keep the selection in the tray (Ctrl+H)"
 msgstr "Положить выделенное в лоток (Ctrl+H)"
 
-#: crates/pico/src/app.rs:664 crates/pico/src/app.rs:750
+#: crates/pico/src/app.rs:664 crates/pico/src/app.rs:744
 msgid "Unhold"
 msgstr "Убрать"
 
@@ -64,7 +64,7 @@ msgstr "Очистить"
 msgid "Empty the tray; the photos stay where they are"
 msgstr "Очистить лоток; сами фото останутся на месте"
 
-#: crates/pico/src/app.rs:698 crates/pico/src/viewer.rs:336
+#: crates/pico/src/app.rs:698 crates/pico/src/viewer.rs:326
 msgid "▶ Slideshow"
 msgstr "▶ Слайд-шоу"
 
@@ -84,1120 +84,1100 @@ msgstr "Сделать фильм…"
 msgid "Show Tray"
 msgstr "Показать лоток"
 
-#: crates/pico/src/app.rs:722
-msgid "Thumbnail size (Ctrl+wheel over the photos)"
-msgstr "Размер миниатюр (Ctrl+колесо над фото)"
-
-#: crates/pico/src/app.rs:746 crates/pico/src/app.rs:1789
+#: crates/pico/src/app.rs:740 crates/pico/src/app.rs:1783
 msgid "View"
 msgstr "Вид"
 
-#: crates/pico/src/app.rs:750
+#: crates/pico/src/app.rs:744
 msgid "Take the photo out of the tray"
 msgstr "Убрать фото из лотка"
 
-#: crates/pico/src/app.rs:753
+#: crates/pico/src/app.rs:747
 msgid "Keep the photo in the tray"
 msgstr "Оставить фото в лотке"
 
-#: crates/pico/src/app.rs:762
+#: crates/pico/src/app.rs:756
 msgid "Tray: {name}"
 msgstr "Лоток: {name}"
 
-#: crates/pico/src/app.rs:905
+#: crates/pico/src/app.rs:899
 msgid "Could not save the album: {e}"
 msgstr "Не удалось сохранить альбом: {e}"
 
-#: crates/pico/src/app.rs:1063
+#: crates/pico/src/app.rs:1057
 msgid "{photos} of this album could not be found: moved or deleted."
 msgstr "Не найдено фото этого альбома: {photos} (перемещены или удалены)."
 
-#: crates/pico/src/app.rs:1149
+#: crates/pico/src/app.rs:1143
 msgid "Saved to {path}"
 msgstr "Сохранено в {path}"
 
-#: crates/pico/src/app.rs:1156 crates/pico/src/app.rs:1461 crates/pico/src/app.rs:1482
+#: crates/pico/src/app.rs:1150 crates/pico/src/app.rs:1455 crates/pico/src/app.rs:1476
 msgid "Could not write {path}: {e}"
 msgstr "Не удалось записать {path}: {e}"
 
-#: crates/pico/src/app.rs:1162
+#: crates/pico/src/app.rs:1156
 msgid "Updated {photos}"
 msgstr "Обновлено: {photos}"
 
-#: crates/pico/src/app.rs:1191
+#: crates/pico/src/app.rs:1185
 msgid "Copied {files} to the clipboard"
 msgstr "Скопировано в буфер обмена: {files}"
 
-#: crates/pico/src/app.rs:1192
+#: crates/pico/src/app.rs:1186
 msgid "Could not copy to the clipboard: {e}"
 msgstr "Не удалось скопировать в буфер обмена: {e}"
 
-#: crates/pico/src/app.rs:1214
+#: crates/pico/src/app.rs:1208
 msgid "Copied {effects}"
 msgstr "Скопировано: {effects}"
 
-#: crates/pico/src/app.rs:1251
+#: crates/pico/src/app.rs:1245
 msgid "No duplicates. Every photo is one of a kind."
 msgstr "Дубликатов нет. Каждое фото единственное в своём роде."
 
-#: crates/pico/src/app.rs:1252
+#: crates/pico/src/app.rs:1246
 msgid "{groups} of identical files"
 msgstr "Одинаковые файлы: {groups}"
 
-#: crates/pico/src/app.rs:1265
+#: crates/pico/src/app.rs:1259
 msgid "Add a folder to Pico"
 msgstr "Добавить папку в Pico"
 
-#: crates/pico/src/app.rs:1266
+#: crates/pico/src/app.rs:1260
 msgid "Export to folder"
 msgstr "Экспорт в папку"
 
-#: crates/pico/src/app.rs:1327
+#: crates/pico/src/app.rs:1321
 msgid "Collage saved to {path}"
 msgstr "Коллаж сохранён в {path}"
 
-#: crates/pico/src/app.rs:1332
+#: crates/pico/src/app.rs:1326
 msgid "Collage saved to {path} and set as the desktop background"
 msgstr "Коллаж сохранён в {path} и поставлен обоями рабочего стола"
 
-#: crates/pico/src/app.rs:1334
+#: crates/pico/src/app.rs:1328
 msgid "Saved, but could not set the wallpaper: {e}"
 msgstr "Сохранено, но поставить обои не удалось: {e}"
 
-#: crates/pico/src/app.rs:1401
+#: crates/pico/src/app.rs:1395
 msgid "Making a movie… popcorn recommended."
 msgstr "Делаем фильм… рекомендуем попкорн."
 
-#: crates/pico/src/app.rs:1411 crates/pico/src/app.rs:3092
+#: crates/pico/src/app.rs:1405 crates/pico/src/app.rs:3076
 msgid "Preparing photo {done} of {total}…"
 msgstr "Готовим фото {done} из {total}…"
 
-#: crates/pico/src/app.rs:1420
+#: crates/pico/src/app.rs:1414
 msgid "Movie saved to {path}"
 msgstr "Фильм сохранён в {path}"
 
-#: crates/pico/src/app.rs:1423
+#: crates/pico/src/app.rs:1417
 msgid "Could not make the movie: {e}"
 msgstr "Не удалось сделать фильм: {e}"
 
-#: crates/pico/src/app.rs:1472
+#: crates/pico/src/app.rs:1466
 msgid "Renamed the album to \"{name}\""
 msgstr "Альбом переименован в «{name}»"
 
-#: crates/pico/src/app.rs:1489
+#: crates/pico/src/app.rs:1483
 msgid "Could not delete the album file: {e}"
 msgstr "Не удалось удалить файл альбома: {e}"
 
-#: crates/pico/src/app.rs:1496
+#: crates/pico/src/app.rs:1490
 msgid "Deleted the album \"{name}\""
 msgstr "Альбом «{name}» удалён"
 
-#: crates/pico/src/app.rs:1510
+#: crates/pico/src/app.rs:1504
 msgid "Took {photos} out of \"{name}\"; the files stay"
 msgstr "Убрано из «{name}»: {photos}; файлы на месте"
 
-#: crates/pico/src/app.rs:1530
+#: crates/pico/src/app.rs:1524
 msgid "Added {photos} to \"{name}\""
 msgstr "Добавлено в «{name}»: {photos}"
 
-#: crates/pico/src/app.rs:1555
+#: crates/pico/src/app.rs:1549
 msgid "Those are already in Pico."
 msgstr "Эти папки уже есть в Pico."
 
-#: crates/pico/src/app.rs:1556
+#: crates/pico/src/app.rs:1550
 msgid "Added {folders} to Pico"
 msgstr "Добавлено в Pico: {folders}"
 
-#: crates/pico/src/app.rs:1574
+#: crates/pico/src/app.rs:1568
 msgid "{photos}: drop on a folder, an album or the tray, or between photos to arrange them"
 msgstr "{photos}: бросьте на папку, альбом или лоток, или между фото, чтобы переставить"
 
-#: crates/pico/src/app.rs:1578
+#: crates/pico/src/app.rs:1572
 msgid "{photos}: drop on a folder, an album or the tray"
 msgstr "{photos}: бросьте на папку, альбом или лоток"
 
-#: crates/pico/src/app.rs:1579
+#: crates/pico/src/app.rs:1573
 msgid "{photos}: drop on a folder or an album, or between photos to arrange them"
 msgstr "{photos}: бросьте на папку или альбом, или между фото, чтобы переставить"
 
-#: crates/pico/src/app.rs:1583
+#: crates/pico/src/app.rs:1577
 msgid "{photos}: drop on a folder or an album"
 msgstr "{photos}: бросьте на папку или альбом"
 
-#: crates/pico/src/app.rs:1595
+#: crates/pico/src/app.rs:1589
 msgid "Drop folders here to add them to Pico"
 msgstr "Бросьте сюда папки, чтобы добавить их в Pico"
 
-#: crates/pico/src/app.rs:1624
+#: crates/pico/src/app.rs:1618
 msgid "Moved {files} to \"{name}\""
 msgstr "Перенесено в «{name}»: {files}"
 
-#: crates/pico/src/app.rs:1626
+#: crates/pico/src/app.rs:1620
 msgid "Moved {files}, {stayed} stayed: {first}"
 msgstr "Перенесено: {files}, осталось: {stayed}: {first}"
 
-#: crates/pico/src/app.rs:1685
+#: crates/pico/src/app.rs:1679
 msgid "Saved {path}"
 msgstr "Сохранено: {path}"
 
-#: crates/pico/src/app.rs:1751
+#: crates/pico/src/app.rs:1745
 msgid "File"
 msgstr "Файл"
 
-#: crates/pico/src/app.rs:1752
+#: crates/pico/src/app.rs:1746
 msgid "Add Folder to Pico…"
 msgstr "Добавить папку в Pico…"
 
-#: crates/pico/src/app.rs:1755 crates/pico/src/app.rs:2155
+#: crates/pico/src/app.rs:1749 crates/pico/src/app.rs:2143
 msgid "Rescan Folders"
 msgstr "Пересканировать папки"
 
-#: crates/pico/src/app.rs:1762
+#: crates/pico/src/app.rs:1756
 msgid "Exit"
 msgstr "Выход"
 
-#: crates/pico/src/app.rs:1766 crates/pico/src/viewer.rs:332
+#: crates/pico/src/app.rs:1760 crates/pico/src/viewer.rs:324
 msgid "Edit"
 msgstr "Правка"
 
-#: crates/pico/src/app.rs:1767
+#: crates/pico/src/app.rs:1761
 msgid "Select All"
 msgstr "Выделить всё"
 
-#: crates/pico/src/app.rs:1770
+#: crates/pico/src/app.rs:1764
 msgid "Invert Selection"
 msgstr "Обратить выделение"
 
-#: crates/pico/src/app.rs:1773
+#: crates/pico/src/app.rs:1767
 msgid "Clear Selection"
 msgstr "Снять выделение"
 
-#: crates/pico/src/app.rs:1777
+#: crates/pico/src/app.rs:1771
 msgid "Copy"
 msgstr "Копировать"
 
-#: crates/pico/src/app.rs:1778
+#: crates/pico/src/app.rs:1772
 msgid "Ctrl+C: copy the files, to paste into a chat or a folder"
 msgstr "Ctrl+C: скопировать файлы, чтобы вставить в чат или папку"
 
-#: crates/pico/src/app.rs:1781
+#: crates/pico/src/app.rs:1775
 msgid "Copy All Effects"
 msgstr "Копировать все эффекты"
 
-#: crates/pico/src/app.rs:1784
+#: crates/pico/src/app.rs:1778
 msgid "Paste All Effects"
 msgstr "Вставить все эффекты"
 
-#: crates/pico/src/app.rs:1790
+#: crates/pico/src/app.rs:1784
 msgid "Slideshow"
 msgstr "Слайд-шоу"
 
-#: crates/pico/src/app.rs:1793 crates/pico/src/app.rs:4000
+#: crates/pico/src/app.rs:1787 crates/pico/src/app.rs:3984
 msgid "Thumbnail size"
 msgstr "Размер миниатюр"
 
-#: crates/pico/src/app.rs:1794
+#: crates/pico/src/app.rs:1788
 msgid "Thumbnail Captions"
 msgstr "Подписи миниатюр"
 
-#: crates/pico/src/app.rs:1799
+#: crates/pico/src/app.rs:1793
 msgid "Sort"
 msgstr "Сортировка"
 
-#: crates/pico/src/app.rs:1800
+#: crates/pico/src/app.rs:1794
 msgid "By Name"
 msgstr "По имени"
 
-#: crates/pico/src/app.rs:1801
+#: crates/pico/src/app.rs:1795
 msgid "By Date Taken"
 msgstr "По дате съёмки"
 
-#: crates/pico/src/app.rs:1802
+#: crates/pico/src/app.rs:1796
 msgid "By Size"
 msgstr "По размеру"
 
-#: crates/pico/src/app.rs:1805
+#: crates/pico/src/app.rs:1799
 msgid "Custom Order"
 msgstr "Свой порядок"
 
-#: crates/pico/src/app.rs:1806
+#: crates/pico/src/app.rs:1800
 msgid "The album's own order: drag photos to arrange them"
 msgstr "Порядок альбома: перетаскивайте фото, чтобы расставить"
 
-#: crates/pico/src/app.rs:1807
+#: crates/pico/src/app.rs:1801
 msgid "Albums only"
 msgstr "Только для альбомов"
 
-#: crates/pico/src/app.rs:1810
+#: crates/pico/src/app.rs:1804
 msgid "Reverse Order"
 msgstr "Обратный порядок"
 
-#: crates/pico/src/app.rs:1812
-msgid "Only Starred Photos"
-msgstr "Только отмеченные"
-
-#: crates/pico/src/app.rs:1813
-msgid "Only Videos"
-msgstr "Только видео"
-
-#: crates/pico/src/app.rs:1814
+#: crates/pico/src/app.rs:1806
 msgid "Properties and Tags"
 msgstr "Свойства и теги"
 
-#: crates/pico/src/app.rs:1815
-msgid "Folder List"
-msgstr "Список папок"
-
-#: crates/pico/src/app.rs:1816
+#: crates/pico/src/app.rs:1807
 msgid "Filmstrip"
 msgstr "Лента снимков"
 
-#: crates/pico/src/app.rs:1817
+#: crates/pico/src/app.rs:1808
 msgid "Neighbouring photos above the open one"
 msgstr "Соседние снимки над открытым фото"
 
-#: crates/pico/src/app.rs:1818
+#: crates/pico/src/app.rs:1809
 msgid "Hidden Pictures"
 msgstr "Скрытые фото"
 
-#: crates/pico/src/app.rs:1821
+#: crates/pico/src/app.rs:1812
 msgid "Hold photos from any folders to show, export or glue them together"
 msgstr "Откладывайте фото из любых папок, чтобы показать, экспортировать или склеить их вместе"
 
-#: crates/pico/src/app.rs:1829
+#: crates/pico/src/app.rs:1820
 msgid "Picture"
 msgstr "Изображение"
 
-#: crates/pico/src/app.rs:1833 crates/pico/src/app.rs:3165
+#: crates/pico/src/app.rs:1824 crates/pico/src/app.rs:3149
 msgid "Create"
 msgstr "Создать"
 
-#: crates/pico/src/app.rs:1836
+#: crates/pico/src/app.rs:1827
 msgid "Movie…"
 msgstr "Фильм…"
 
-#: crates/pico/src/app.rs:1837
+#: crates/pico/src/app.rs:1828
 msgid "From the selected photos"
 msgstr "Из выделенных фото"
 
-#: crates/pico/src/app.rs:1843
+#: crates/pico/src/app.rs:1834
 msgid "Picture Collage…"
 msgstr "Коллаж…"
 
-#: crates/pico/src/app.rs:1844
+#: crates/pico/src/app.rs:1835
 msgid "From the selected photos, or all shown"
 msgstr "Из выделенных фото или из всех показанных"
 
-#: crates/pico/src/app.rs:1850
+#: crates/pico/src/app.rs:1841
 msgid "Tools"
 msgstr "Инструменты"
 
-#: crates/pico/src/app.rs:1851
+#: crates/pico/src/app.rs:1842
 msgid "Show Duplicate Files"
 msgstr "Найти дубликаты"
 
-#: crates/pico/src/app.rs:1854
-msgid "Folder Manager…"
-msgstr "Менеджер папок…"
-
-#: crates/pico/src/app.rs:1857
+#: crates/pico/src/app.rs:1845
 msgid "Options…"
 msgstr "Параметры…"
 
-#: crates/pico/src/app.rs:1861
+#: crates/pico/src/app.rs:1849
 msgid "Help"
 msgstr "Справка"
 
-#: crates/pico/src/app.rs:1862 crates/pico/src/app.rs:3394
+#: crates/pico/src/app.rs:1850 crates/pico/src/app.rs:3378
 msgid "Keyboard Shortcuts"
 msgstr "Горячие клавиши"
 
-#: crates/pico/src/app.rs:1865 crates/pico/src/app.rs:3420
+#: crates/pico/src/app.rs:1853 crates/pico/src/app.rs:3404
 msgid "About Pico"
 msgstr "О Pico"
 
-#: crates/pico/src/app.rs:1873
+#: crates/pico/src/app.rs:1861
 msgid "Export Picture to Folder…"
 msgstr "Экспорт в папку…"
 
-#: crates/pico/src/app.rs:1876
+#: crates/pico/src/app.rs:1864
 msgid "Save"
 msgstr "Сохранить"
 
-#: crates/pico/src/app.rs:1876
+#: crates/pico/src/app.rs:1864
 msgid "Write the edits into the file; the original is kept"
 msgstr "Записать правки в файл; оригинал сохранится"
 
-#: crates/pico/src/app.rs:1879
+#: crates/pico/src/app.rs:1867
 msgid "Save a Copy"
 msgstr "Сохранить копию"
 
-#: crates/pico/src/app.rs:1882
+#: crates/pico/src/app.rs:1870
 msgid "Revert"
 msgstr "Вернуть оригинал"
 
-#: crates/pico/src/app.rs:1882
+#: crates/pico/src/app.rs:1870
 msgid "Bring back the original saved by Save"
 msgstr "Вернуть оригинал, сохранённый командой «Сохранить»"
 
-#: crates/pico/src/app.rs:1886 crates/pico/src/app.rs:2119
+#: crates/pico/src/app.rs:1874 crates/pico/src/app.rs:2107
 msgid "Rename…"
 msgstr "Переименовать…"
 
-#: crates/pico/src/app.rs:1889 crates/pico/src/app.rs:2113 crates/pico/src/app.rs:2146
+#: crates/pico/src/app.rs:1877 crates/pico/src/app.rs:2101 crates/pico/src/app.rs:2134
 msgid "Locate on Disk"
 msgstr "Показать на диске"
 
-#: crates/pico/src/app.rs:1892 crates/pico/src/app.rs:2116
+#: crates/pico/src/app.rs:1880 crates/pico/src/app.rs:2104
 msgid "Open in Editor"
 msgstr "Открыть в редакторе"
 
-#: crates/pico/src/app.rs:1897 crates/pico/src/app.rs:2130 crates/pico/src/app.rs:2215
+#: crates/pico/src/app.rs:1885 crates/pico/src/app.rs:2118
 msgid "Remove from Album"
 msgstr "Убрать из альбома"
 
-#: crates/pico/src/app.rs:1899 crates/pico/src/app.rs:2132
+#: crates/pico/src/app.rs:1887 crates/pico/src/app.rs:2120
 msgid "Move to Trash…"
 msgstr "В корзину…"
 
-#: crates/pico/src/app.rs:1952 crates/pico/src/app.rs:3085
+#: crates/pico/src/app.rs:1940 crates/pico/src/app.rs:3069
 msgid "Exporting {done} of {total}…"
 msgstr "Экспорт: {done} из {total}…"
 
-#: crates/pico/src/app.rs:1954
+#: crates/pico/src/app.rs:1942
 msgid "Exported {pictures} to {folder}"
 msgstr "Экспортировано в {folder}: {pictures}"
 
-#: crates/pico/src/app.rs:1960
+#: crates/pico/src/app.rs:1948
 msgid "Exported {done} of {total}; {failed} failed"
 msgstr "Экспортировано {done} из {total}; не вышло: {failed}"
 
-#: crates/pico/src/app.rs:1999
+#: crates/pico/src/app.rs:1987
 msgid "Could not save {path}: {e}"
 msgstr "Не удалось сохранить {path}: {e}"
 
-#: crates/pico/src/app.rs:2014
+#: crates/pico/src/app.rs:2002
 msgid "Could not save a copy of {file}: {e}"
 msgstr "Не удалось сохранить копию {file}: {e}"
 
-#: crates/pico/src/app.rs:2023
+#: crates/pico/src/app.rs:2011
 msgid "Could not revert {path}: {e}"
 msgstr "Не удалось вернуть оригинал {path}: {e}"
 
-#: crates/pico/src/app.rs:2027
+#: crates/pico/src/app.rs:2015
 msgid "Reverted. The edits are back in the edit stack, where Undo can reach them."
 msgstr "Оригинал возвращён. Правки снова в списке правок, их можно отменить."
 
-#: crates/pico/src/app.rs:2043 crates/pico/src/app.rs:2149
+#: crates/pico/src/app.rs:2031 crates/pico/src/app.rs:2137
 msgid "Could not open the file manager: {e}"
 msgstr "Не удалось открыть файловый менеджер: {e}"
 
-#: crates/pico/src/app.rs:2051
+#: crates/pico/src/app.rs:2039
 msgid "Could not open {file}: {e}"
 msgstr "Не удалось открыть {file}: {e}"
 
-#: crates/pico/src/app.rs:2068
+#: crates/pico/src/app.rs:2056
 msgid "Could not move to the trash: {e}"
 msgstr "Не удалось переместить в корзину: {e}"
 
-#: crates/pico/src/app.rs:2079
+#: crates/pico/src/app.rs:2067
 msgid "Moved {files} to the trash. It's not gone gone."
 msgstr "В корзине: {files}. Это ещё не навсегда."
 
-#: crates/pico/src/app.rs:2086
+#: crates/pico/src/app.rs:2074
 msgid "View and Edit"
 msgstr "Просмотр и правка"
 
-#: crates/pico/src/app.rs:2091
+#: crates/pico/src/app.rs:2079
 msgid "Star"
 msgstr "Отметить звёздочкой"
 
-#: crates/pico/src/app.rs:2091
+#: crates/pico/src/app.rs:2079
 msgid "Unstar"
 msgstr "Снять звёздочку"
 
-#: crates/pico/src/app.rs:2094 crates/pico/src/app.rs:2189
+#: crates/pico/src/app.rs:2082 crates/pico/src/app.rs:2177
 msgid "Rotate Clockwise"
 msgstr "Повернуть по часовой"
 
-#: crates/pico/src/app.rs:2097 crates/pico/src/app.rs:2192
+#: crates/pico/src/app.rs:2085 crates/pico/src/app.rs:2180
 msgid "Rotate Counterclockwise"
 msgstr "Повернуть против часовой"
 
-#: crates/pico/src/app.rs:2101 crates/pico/src/app.rs:2210
+#: crates/pico/src/app.rs:2089 crates/pico/src/app.rs:2198
 msgid "Hold in Tray"
 msgstr "Отложить в лоток"
 
-#: crates/pico/src/app.rs:2105 crates/pico/src/app.rs:2227
+#: crates/pico/src/app.rs:2093 crates/pico/src/app.rs:2210
 msgid "Hide"
 msgstr "Скрыть"
 
-#: crates/pico/src/app.rs:2105 crates/pico/src/app.rs:2227
+#: crates/pico/src/app.rs:2093 crates/pico/src/app.rs:2210
 msgid "Unhide"
 msgstr "Показать"
 
-#: crates/pico/src/app.rs:2109
+#: crates/pico/src/app.rs:2097
 msgid "Export to Folder…"
 msgstr "Экспорт в папку…"
 
-#: crates/pico/src/app.rs:2122 crates/pico/src/app.rs:2151
+#: crates/pico/src/app.rs:2110 crates/pico/src/app.rs:2139
 msgid "Copy Full Path"
 msgstr "Копировать путь"
 
-#: crates/pico/src/app.rs:2142
+#: crates/pico/src/app.rs:2130
 msgid "View Slideshow"
 msgstr "Слайд-шоу"
 
-#: crates/pico/src/app.rs:2159
+#: crates/pico/src/app.rs:2147
 msgid "Remove from Pico"
 msgstr "Убрать из Pico"
 
-#: crates/pico/src/app.rs:2160
+#: crates/pico/src/app.rs:2148
 msgid "Leave this folder out; no files are touched"
 msgstr "Исключить эту папку; файлы не трогаются"
 
-#: crates/pico/src/app.rs:2167
-msgid "Left out {name}. Tools > Folder Manager brings it back."
-msgstr "Папка {name} исключена. Вернуть: Инструменты > Менеджер папок."
+#: crates/pico/src/app.rs:2155
+msgid "Left out {name}. File > Add Folder to Pico brings it back."
+msgstr "Папка {name} исключена. Вернуть: Файл > Добавить папку в Pico."
 
-#: crates/pico/src/app.rs:2172
+#: crates/pico/src/app.rs:2160
 msgid "Add to Album"
 msgstr "Добавить в альбом"
 
-#: crates/pico/src/app.rs:2178
+#: crates/pico/src/app.rs:2166
 msgid "New Album…"
 msgstr "Новый альбом…"
 
-#: crates/pico/src/app.rs:2185
+#: crates/pico/src/app.rs:2173
 msgid "Star / Unstar"
 msgstr "Звёздочка вкл/выкл"
 
-#: crates/pico/src/app.rs:2197 crates/pico/src/viewer.rs:596
+#: crates/pico/src/app.rs:2185 crates/pico/src/viewer.rs:561
 msgid "I'm Feeling Lucky"
 msgstr "Мне повезёт!"
 
-#: crates/pico/src/app.rs:2198 crates/pico/src/viewer.rs:597
+#: crates/pico/src/app.rs:2186 crates/pico/src/viewer.rs:562
 msgid "Auto Contrast"
 msgstr "Автокоррекция контраста"
 
-#: crates/pico/src/app.rs:2199 crates/pico/src/viewer.rs:598
+#: crates/pico/src/app.rs:2187 crates/pico/src/viewer.rs:563
 msgid "Auto Color"
 msgstr "Автокоррекция цвета"
 
-#: crates/pico/src/app.rs:2200
+#: crates/pico/src/app.rs:2188
 msgid "Black-and-White"
 msgstr "Чёрно-белый"
 
-#: crates/pico/src/app.rs:2201 crates/pico-core/src/effects.rs:101
+#: crates/pico/src/app.rs:2189 crates/pico-core/src/effects.rs:101
 msgid "Warmify"
 msgstr "Тона теплее"
 
-#: crates/pico/src/app.rs:2202 crates/pico-core/src/effects.rs:102
+#: crates/pico/src/app.rs:2190 crates/pico-core/src/effects.rs:102
 msgid "Film Grain"
 msgstr "Зернистость фотоплёнки"
 
-#: crates/pico/src/app.rs:2203 crates/pico-core/src/effects.rs:98
+#: crates/pico/src/app.rs:2191 crates/pico-core/src/effects.rs:98
 msgid "Sharpen"
 msgstr "Увеличить резкость"
 
-#: crates/pico/src/app.rs:2220 crates/pico/src/viewer.rs:702
+#: crates/pico/src/app.rs:2203 crates/pico/src/viewer.rs:667
 msgid "Undo All Edits"
 msgstr "Отменить все правки"
 
-#: crates/pico/src/app.rs:2233 crates/pico/src/app.rs:3985
+#: crates/pico/src/app.rs:2216 crates/pico/src/app.rs:3969
 msgid "Library"
 msgstr "Библиотека"
 
-#: crates/pico/src/app.rs:2237 crates/pico/src/app.rs:2785
+#: crates/pico/src/app.rs:2220 crates/pico/src/app.rs:2768
 msgid "Starred Photos"
 msgstr "Отмеченные фото"
 
-#: crates/pico/src/app.rs:2257
+#: crates/pico/src/app.rs:2240
 msgid "Albums"
 msgstr "Альбомы"
 
-#: crates/pico/src/app.rs:2272
+#: crates/pico/src/app.rs:2255
 msgid "Rename Album…"
 msgstr "Переименовать альбом…"
 
-#: crates/pico/src/app.rs:2275
+#: crates/pico/src/app.rs:2258
 msgid "Delete Album…"
 msgstr "Удалить альбом…"
 
-#: crates/pico/src/app.rs:2291 crates/pico/src/app.rs:2798
+#: crates/pico/src/app.rs:2274 crates/pico/src/app.rs:2781
 msgid "Timeline"
 msgstr "Хронология"
 
-#: crates/pico/src/app.rs:2322
+#: crates/pico/src/app.rs:2305
 msgid "Places"
 msgstr "Места"
 
-#: crates/pico/src/app.rs:2342
+#: crates/pico/src/app.rs:2325
 msgid "Folders"
 msgstr "Папки"
 
-#: crates/pico/src/app.rs:2345
+#: crates/pico/src/app.rs:2328
 msgid "Tree or list, and order"
 msgstr "Дерево или список и порядок"
 
-#: crates/pico/src/app.rs:2474
+#: crates/pico/src/app.rs:2457
 msgid "Flat List"
 msgstr "Плоский список"
 
-#: crates/pico/src/app.rs:2475
+#: crates/pico/src/app.rs:2458
 msgid "Tree"
 msgstr "Дерево"
 
-#: crates/pico/src/app.rs:2475
+#: crates/pico/src/app.rs:2458
 msgid "Folders where they are on disk"
 msgstr "Папки так, как они лежат на диске"
 
-#: crates/pico/src/app.rs:2478
+#: crates/pico/src/app.rs:2461
 msgid "Sort by Name"
 msgstr "По имени"
 
-#: crates/pico/src/app.rs:2479
+#: crates/pico/src/app.rs:2462
 msgid "Sort by Date"
 msgstr "По дате"
 
-#: crates/pico/src/app.rs:2480
+#: crates/pico/src/app.rs:2463
 msgid "Newest first, by year"
 msgstr "Новые сверху, по годам"
 
-#: crates/pico/src/app.rs:2481
+#: crates/pico/src/app.rs:2464
 msgid "Sort by Recent Changes"
 msgstr "По недавним изменениям"
 
-#: crates/pico/src/app.rs:2482
+#: crates/pico/src/app.rs:2465
 msgid "Sort by Size"
 msgstr "По размеру"
 
-#: crates/pico/src/app.rs:2630
+#: crates/pico/src/app.rs:2613
 msgid "Counting pixels…"
 msgstr "Считаем пиксели…"
 
-#: crates/pico/src/app.rs:2632
+#: crates/pico/src/app.rs:2615
 msgid "No photos yet. Add a folder from the File menu — Pico promises not to upload anything."
 msgstr "Фото пока нет. Добавьте папку через меню «Файл» — Pico обещает ничего никуда не загружать."
 
-#: crates/pico/src/app.rs:2662
+#: crates/pico/src/app.rs:2645
 msgid "Nothing to show here."
 msgstr "Здесь нечего показать."
 
-#: crates/pico/src/app.rs:2664
+#: crates/pico/src/app.rs:2647
 msgid "No matches. Maybe it was a dream?"
 msgstr "Ничего не нашлось. Может, это был сон?"
 
-#: crates/pico/src/app.rs:2711
+#: crates/pico/src/app.rs:2694
 msgid "Adding {folder}"
 msgstr "Добавляем {folder}"
 
-#: crates/pico/src/app.rs:2782
+#: crates/pico/src/app.rs:2765
 msgid "Search results"
 msgstr "Результаты поиска"
 
-#: crates/pico/src/app.rs:2789
+#: crates/pico/src/app.rs:2772
 msgid "Held photos from any folder"
 msgstr "Отложенные фото из любых папок"
 
-#: crates/pico/src/app.rs:2793
+#: crates/pico/src/app.rs:2776
 msgid "Album"
 msgstr "Альбом"
 
-#: crates/pico/src/app.rs:2804
+#: crates/pico/src/app.rs:2787
 msgid "Place"
 msgstr "Место"
 
-#: crates/pico/src/app.rs:2807
+#: crates/pico/src/app.rs:2790
 msgid "Duplicate Files"
 msgstr "Дубликаты"
 
-#: crates/pico/src/app.rs:2809 crates/pico/src/app.rs:3099
+#: crates/pico/src/app.rs:2792 crates/pico/src/app.rs:3083
 msgid "Comparing files…"
 msgstr "Сравниваем файлы…"
 
-#: crates/pico/src/app.rs:2811
+#: crates/pico/src/app.rs:2794
 msgid "Identical files, side by side"
 msgstr "Одинаковые файлы рядом"
 
-#: crates/pico/src/app.rs:2827
+#: crates/pico/src/app.rs:2810
 msgid "Search (Ctrl+F)"
 msgstr "Поиск (Ctrl+F)"
 
-#: crates/pico/src/app.rs:2841
+#: crates/pico/src/app.rs:2824
 msgid "Only videos"
 msgstr "Только видео"
 
-#: crates/pico/src/app.rs:2842
+#: crates/pico/src/app.rs:2825
 msgid "Only starred photos"
 msgstr "Только отмеченные фото"
 
-#: crates/pico/src/app.rs:2845 crates/pico/src/app.rs:3073
+#: crates/pico/src/app.rs:2828 crates/pico/src/app.rs:3057
 msgid "{n} selected"
 msgstr "Выделено: {n}"
 
-#: crates/pico/src/app.rs:3038
+#: crates/pico/src/app.rs:3022
 msgid "{status}  ({n} found so far)"
 msgstr "{status}  (найдено: {n})"
 
-#: crates/pico/src/app.rs:3046
+#: crates/pico/src/app.rs:3030
 msgid "ffmpeg not found: videos will stay mysterious"
 msgstr "ffmpeg не найден: видео останутся загадкой"
 
-#: crates/pico/src/app.rs:3084
+#: crates/pico/src/app.rs:3068
 msgid "Exporting"
 msgstr "Экспорт"
 
-#: crates/pico/src/app.rs:3093 crates/pico/src/app.rs:3095
+#: crates/pico/src/app.rs:3077 crates/pico/src/app.rs:3079
 msgid "Making the Movie"
 msgstr "Делаем фильм"
 
-#: crates/pico/src/app.rs:3095
+#: crates/pico/src/app.rs:3079
 msgid "Encoding the movie…"
 msgstr "Кодируем фильм…"
 
-#: crates/pico/src/app.rs:3099
+#: crates/pico/src/app.rs:3083
 msgid "Finding Duplicates"
 msgstr "Ищем дубликаты"
 
-#: crates/pico/src/app.rs:3106
+#: crates/pico/src/app.rs:3090
 msgid "Export to Folder"
 msgstr "Экспорт в папку"
 
-#: crates/pico/src/app.rs:3107
+#: crates/pico/src/app.rs:3091
 msgid "Folder:"
 msgstr "Папка:"
 
-#: crates/pico/src/app.rs:3110 crates/pico/src/app.rs:3268 crates/pico/src/folder_manager.rs:136
+#: crates/pico/src/app.rs:3094 crates/pico/src/app.rs:3252 crates/pico/src/folder_manager.rs:136
 msgid "Browse…"
 msgstr "Обзор…"
 
-#: crates/pico/src/app.rs:3112
+#: crates/pico/src/app.rs:3096
 msgid "Image size:"
 msgstr "Размер изображения:"
 
-#: crates/pico/src/app.rs:3117
+#: crates/pico/src/app.rs:3101
 msgid "longest side, px"
 msgstr "длинная сторона, пикс."
 
-#: crates/pico/src/app.rs:3119
+#: crates/pico/src/app.rs:3103
 msgid "JPEG quality"
 msgstr "Качество JPEG"
 
-#: crates/pico/src/app.rs:3120
+#: crates/pico/src/app.rs:3104
 msgid "Edits are applied; the originals stay untouched."
 msgstr "Правки применяются; оригиналы не меняются."
 
-#: crates/pico/src/app.rs:3121
+#: crates/pico/src/app.rs:3105
 msgid "Export {pictures}"
 msgstr "Экспортировать: {pictures}"
 
-#: crates/pico/src/app.rs:3139 crates/pico/src/app.rs:3142 crates/pico/src/app.rs:3182 crates/pico/src/app.rs:3995
+#: crates/pico/src/app.rs:3123 crates/pico/src/app.rs:3126 crates/pico/src/app.rs:3166 crates/pico/src/app.rs:3979
 msgid "Rename"
 msgstr "Переименовать"
 
-#: crates/pico/src/app.rs:3147
+#: crates/pico/src/app.rs:3131
 msgid "Renamed to {name}"
 msgstr "Переименовано в {name}"
 
-#: crates/pico/src/app.rs:3150
+#: crates/pico/src/app.rs:3134
 msgid "Could not rename: {e}"
 msgstr "Не удалось переименовать: {e}"
 
-#: crates/pico/src/app.rs:3161
+#: crates/pico/src/app.rs:3145
 msgid "New Album"
 msgstr "Новый альбом"
 
-#: crates/pico/src/app.rs:3162 crates/pico/src/app.rs:3179
+#: crates/pico/src/app.rs:3146 crates/pico/src/app.rs:3163
 msgid "Album name"
 msgstr "Название альбома"
 
-#: crates/pico/src/app.rs:3178
+#: crates/pico/src/app.rs:3162
 msgid "Rename Album"
 msgstr "Переименовать альбом"
 
-#: crates/pico/src/app.rs:3196 crates/pico/src/app.rs:3200
+#: crates/pico/src/app.rs:3180 crates/pico/src/app.rs:3184
 msgid "Delete Album"
 msgstr "Удалить альбом"
 
-#: crates/pico/src/app.rs:3197
+#: crates/pico/src/app.rs:3181
 msgid "Delete the album \"{name}\"?"
 msgstr "Удалить альбом «{name}»?"
 
-#: crates/pico/src/app.rs:3198
+#: crates/pico/src/app.rs:3182
 msgid "The photos stay where they are."
 msgstr "Фото останутся на месте."
 
-#: crates/pico/src/app.rs:3201 crates/pico/src/app.rs:3219
+#: crates/pico/src/app.rs:3185 crates/pico/src/app.rs:3203
 msgid "Keep"
 msgstr "Оставить"
 
-#: crates/pico/src/app.rs:3215 crates/pico/src/app.rs:3218
+#: crates/pico/src/app.rs:3199 crates/pico/src/app.rs:3202
 msgid "Move to Trash"
 msgstr "В корзину"
 
-#: crates/pico/src/app.rs:3216
+#: crates/pico/src/app.rs:3200
 msgid "Move {files} to the trash?"
 msgstr "Переместить в корзину: {files}?"
 
-#: crates/pico/src/app.rs:3234
+#: crates/pico/src/app.rs:3218
 msgid "Move Photos"
 msgstr "Перенос фото"
 
-#: crates/pico/src/app.rs:3235
+#: crates/pico/src/app.rs:3219
 msgid "Move {files} to \"{name}\"?"
 msgstr "Перенести в «{name}»: {files}?"
 
-#: crates/pico/src/app.rs:3236
+#: crates/pico/src/app.rs:3220
 msgid "Captions, stars and edits go along."
 msgstr "Подписи, звёздочки и правки переедут вместе с ними."
 
-#: crates/pico/src/app.rs:3238
+#: crates/pico/src/app.rs:3222
 msgid "Move"
 msgstr "Перенести"
 
-#: crates/pico/src/app.rs:3239 crates/pico/src/folder_manager.rs:109 crates/pico/src/tools.rs:188 crates/pico/src/tools.rs:269
+#: crates/pico/src/app.rs:3223 crates/pico/src/folder_manager.rs:109 crates/pico/src/tools.rs:188 crates/pico/src/tools.rs:269
 msgid "Cancel"
 msgstr "Отмена"
 
-#: crates/pico/src/app.rs:3257
+#: crates/pico/src/app.rs:3241
 msgid "Create Movie"
 msgstr "Создать фильм"
 
-#: crates/pico/src/app.rs:3258
+#: crates/pico/src/app.rs:3242
 msgid "{photos} in the order shown."
 msgstr "{photos} в показанном порядке."
 
-#: crates/pico/src/app.rs:3263
+#: crates/pico/src/app.rs:3247
 msgid "seconds per photo"
 msgstr "секунд на фото"
 
-#: crates/pico/src/app.rs:3264
+#: crates/pico/src/app.rs:3248
 msgid "crossfade, seconds"
 msgstr "переход, секунд"
 
-#: crates/pico/src/app.rs:3265
+#: crates/pico/src/app.rs:3249
 msgid "Music (optional):"
 msgstr "Музыка (по желанию):"
 
-#: crates/pico/src/app.rs:3272
+#: crates/pico/src/app.rs:3256
 msgid "Music for the movie"
 msgstr "Музыка для фильма"
 
-#: crates/pico/src/app.rs:3278
+#: crates/pico/src/app.rs:3262
 msgid "Save as:"
 msgstr "Сохранить как:"
 
-#: crates/pico/src/app.rs:3281
+#: crates/pico/src/app.rs:3265
 msgid "Make the Movie"
 msgstr "Сделать фильм"
 
-#: crates/pico/src/app.rs:3314
+#: crates/pico/src/app.rs:3298
 msgid "Options"
 msgstr "Параметры"
 
-#: crates/pico/src/app.rs:3316
+#: crates/pico/src/app.rs:3300
 msgid "Look"
 msgstr "Оформление"
 
-#: crates/pico/src/app.rs:3319
+#: crates/pico/src/app.rs:3303
 msgid "As the system"
 msgstr "Как в системе"
 
-#: crates/pico/src/app.rs:3320
+#: crates/pico/src/app.rs:3304
 msgid "Dark"
 msgstr "Тёмная"
 
-#: crates/pico/src/app.rs:3321
+#: crates/pico/src/app.rs:3305
 msgid "Light"
 msgstr "Светлая"
 
-#: crates/pico/src/app.rs:3326
+#: crates/pico/src/app.rs:3310
 msgid "Photos keep their dark backdrop either way."
 msgstr "Фото в любом случае показываются на тёмном фоне."
 
-#: crates/pico/src/app.rs:3327
+#: crates/pico/src/app.rs:3311
 msgid "Animations"
 msgstr "Анимации"
 
-#: crates/pico/src/app.rs:3327
+#: crates/pico/src/app.rs:3311
 msgid "A star flies onto a starred photo; the photos glide on after the wheel and spring back at the ends"
 msgstr "Звёздочка летит на отмеченное фото; после колеса мыши фото катятся по инерции и пружинят у краёв"
 
-#: crates/pico/src/app.rs:3331
+#: crates/pico/src/app.rs:3315
 msgid "Language"
 msgstr "Язык"
 
-#: crates/pico/src/app.rs:3339
+#: crates/pico/src/app.rs:3323
 msgid "As the system ({language})"
 msgstr "Как в системе ({language})"
 
-#: crates/pico/src/app.rs:3354
+#: crates/pico/src/app.rs:3338
 msgid "Settings saved and written down. All in order!"
 msgstr "Сохранил и записал настройки. Порядок!"
 
-#: crates/pico/src/app.rs:3355
+#: crates/pico/src/app.rs:3339
 msgid "Noted. Pico won't forget."
 msgstr "Записал. Pico не забудет."
 
-#: crates/pico/src/app.rs:3356
+#: crates/pico/src/app.rs:3340
 msgid "Roger that! Pico remembered."
 msgstr "Есть контакт. Pico запомнил."
 
-#: crates/pico/src/app.rs:3362
+#: crates/pico/src/app.rs:3346
 msgid "Thumbnails"
 msgstr "Миниатюры"
 
-#: crates/pico/src/app.rs:3365
+#: crates/pico/src/app.rs:3349
 msgid "Cache: {size} MB"
 msgstr "Кэш: {size} МБ"
 
-#: crates/pico/src/app.rs:3367
+#: crates/pico/src/app.rs:3351
 msgid "Clear Thumbnail Cache"
 msgstr "Очистить кэш миниатюр"
 
-#: crates/pico/src/app.rs:3370
+#: crates/pico/src/app.rs:3354
 msgid "Thumbnail cache cleared; thumbnails will be redrawn as needed."
 msgstr "Кэш миниатюр очищен; миниатюры перерисуются по мере надобности."
 
-#: crates/pico/src/app.rs:3373
+#: crates/pico/src/app.rs:3357
 msgid "Video tools"
 msgstr "Инструменты для видео"
 
-#: crates/pico/src/app.rs:3377
+#: crates/pico/src/app.rs:3361
 msgid "ffplay (sound)"
 msgstr "ffplay (звук)"
 
-#: crates/pico/src/app.rs:3381
+#: crates/pico/src/app.rs:3365
 msgid "{name}: not found"
 msgstr "{name}: не найден"
 
-#: crates/pico/src/app.rs:3439
+#: crates/pico/src/app.rs:3423
 msgid "Version {version}"
 msgstr "Версия {version}"
 
-#: crates/pico/src/app.rs:3440
+#: crates/pico/src/app.rs:3424
 msgid "No cloud. No uploads. Your photos stay exactly where you left them."
 msgstr "Никакого облака. Никаких загрузок. Ваши фото остаются там, где вы их оставили."
 
-#: crates/pico/src/app.rs:3444
+#: crates/pico/src/app.rs:3428
 msgid "Open-source licenses"
 msgstr "Лицензии открытого ПО"
 
-#: crates/pico/src/app.rs:3589
+#: crates/pico/src/app.rs:3573
 msgid "Original size"
 msgstr "Исходный размер"
 
-#: crates/pico/src/app.rs:3590
+#: crates/pico/src/app.rs:3574
 msgid "800 pixels"
 msgstr "800 пикселей"
 
-#: crates/pico/src/app.rs:3591
+#: crates/pico/src/app.rs:3575
 msgid "1024 pixels"
 msgstr "1024 пикселя"
 
-#: crates/pico/src/app.rs:3592
+#: crates/pico/src/app.rs:3576
 msgid "1600 pixels"
 msgstr "1600 пикселей"
 
-#: crates/pico/src/app.rs:3593
+#: crates/pico/src/app.rs:3577
 msgid "2048 pixels"
 msgstr "2048 пикселей"
 
-#: crates/pico/src/app.rs:3594
+#: crates/pico/src/app.rs:3578
 msgid "Custom"
 msgstr "Свой"
 
-#: crates/pico/src/app.rs:3942
+#: crates/pico/src/app.rs:3926
 msgid "{first} to {last}"
 msgstr "{first} — {last}"
 
-#: crates/pico/src/app.rs:3955
+#: crates/pico/src/app.rs:3939
 msgid "{count}, {missing} not in Pico"
 msgstr "{count}, нет в Pico: {missing}"
 
-#: crates/pico/src/app.rs:3987
+#: crates/pico/src/app.rs:3971
 msgid "Arrows"
 msgstr "Стрелки"
 
-#: crates/pico/src/app.rs:3987
+#: crates/pico/src/app.rs:3971
 msgid "Move between photos"
 msgstr "Переход между фото"
 
-#: crates/pico/src/app.rs:3988 crates/pico/src/app.rs:4008
+#: crates/pico/src/app.rs:3972 crates/pico/src/app.rs:3992
 msgid "First / last photo"
 msgstr "Первое / последнее фото"
 
-#: crates/pico/src/app.rs:3989
+#: crates/pico/src/app.rs:3973
 msgid "A screenful up / down"
 msgstr "На экран вверх / вниз"
 
-#: crates/pico/src/app.rs:3990
+#: crates/pico/src/app.rs:3974
 msgid "Open the photo"
 msgstr "Открыть фото"
 
-#: crates/pico/src/app.rs:3991
+#: crates/pico/src/app.rs:3975
 msgid "Select all / invert / clear"
 msgstr "Выделить всё / обратить / снять"
 
-#: crates/pico/src/app.rs:3992
+#: crates/pico/src/app.rs:3976
 msgid "Hold in the Photo Tray"
 msgstr "Отложить в лоток"
 
-#: crates/pico/src/app.rs:3993
+#: crates/pico/src/app.rs:3977
 msgid "Star or unstar"
 msgstr "Поставить или снять звёздочку"
 
-#: crates/pico/src/app.rs:3994
+#: crates/pico/src/app.rs:3978
 msgid "New album from the selection"
 msgstr "Новый альбом из выделенного"
 
-#: crates/pico/src/app.rs:3996
+#: crates/pico/src/app.rs:3980
 msgid "Move to the trash"
 msgstr "В корзину"
 
-#: crates/pico/src/app.rs:3997
+#: crates/pico/src/app.rs:3981
 msgid "Locate on disk"
 msgstr "Показать на диске"
 
-#: crates/pico/src/app.rs:3998
+#: crates/pico/src/app.rs:3982
 msgid "Open in another program"
 msgstr "Открыть в другой программе"
 
-#: crates/pico/src/app.rs:3999
+#: crates/pico/src/app.rs:3983
 msgid "Export to a folder"
 msgstr "Экспорт в папку"
 
-#: crates/pico/src/app.rs:4000
+#: crates/pico/src/app.rs:3984
 msgid "Ctrl+1 / Ctrl+2, Ctrl+wheel"
 msgstr "Ctrl+1 / Ctrl+2, Ctrl+колесо"
 
-#: crates/pico/src/app.rs:4001
+#: crates/pico/src/app.rs:3985
 msgid "Search"
 msgstr "Поиск"
 
-#: crates/pico/src/app.rs:4005
+#: crates/pico/src/app.rs:3989
 msgid "Photo"
 msgstr "Фото"
 
-#: crates/pico/src/app.rs:4007
+#: crates/pico/src/app.rs:3991
 msgid "Left / Right, wheel"
 msgstr "Влево / вправо, колесо"
 
-#: crates/pico/src/app.rs:4007
+#: crates/pico/src/app.rs:3991
 msgid "Previous / next photo"
 msgstr "Предыдущее / следующее фото"
 
-#: crates/pico/src/app.rs:4009
+#: crates/pico/src/app.rs:3993
 msgid "Ctrl+wheel, pinch"
 msgstr "Ctrl+колесо, щипок"
 
-#: crates/pico/src/app.rs:4009
+#: crates/pico/src/app.rs:3993
 msgid "Zoom"
 msgstr "Масштаб"
 
-#: crates/pico/src/app.rs:4010
+#: crates/pico/src/app.rs:3994
 msgid "Double-click, Esc"
 msgstr "Двойной щелчок, Esc"
 
-#: crates/pico/src/app.rs:4010
+#: crates/pico/src/app.rs:3994
 msgid "Back to the library"
 msgstr "Назад в библиотеку"
 
-#: crates/pico/src/app.rs:4011
+#: crates/pico/src/app.rs:3995
 msgid "Full screen"
 msgstr "Полный экран"
 
-#: crates/pico/src/app.rs:4012
+#: crates/pico/src/app.rs:3996
 msgid "Undo / redo an edit"
 msgstr "Отменить / вернуть правку"
 
-#: crates/pico/src/app.rs:4013
+#: crates/pico/src/app.rs:3997
 msgid "\\ (hold)"
 msgstr "\\ (держать)"
 
-#: crates/pico/src/app.rs:4013
+#: crates/pico/src/app.rs:3997
 msgid "Show the original"
 msgstr "Показать оригинал"
 
-#: crates/pico/src/app.rs:4017
+#: crates/pico/src/app.rs:4001
 msgid "Everywhere"
 msgstr "Везде"
 
-#: crates/pico/src/app.rs:4019
+#: crates/pico/src/app.rs:4003
 msgid "Rotate clockwise / counterclockwise"
 msgstr "Повернуть по / против часовой"
 
-#: crates/pico/src/app.rs:4020
+#: crates/pico/src/app.rs:4004
 msgid "I'm Feeling Lucky / black and white"
 msgstr "Мне повезёт / чёрно-белое"
 
-#: crates/pico/src/app.rs:4021
+#: crates/pico/src/app.rs:4005
 msgid "Copy the files, to paste into a chat or a folder"
 msgstr "Скопировать файлы, чтобы вставить в чат или папку"
 
-#: crates/pico/src/app.rs:4022
+#: crates/pico/src/app.rs:4006
 msgid "Properties and tags / add a tag"
 msgstr "Свойства и теги / добавить тег"
 
-#: crates/pico/src/app.rs:4023
+#: crates/pico/src/app.rs:4007
 msgid "Slideshow (arrows, Space, -/+ and Esc in it)"
 msgstr "Слайд-шоу (в нём стрелки, пробел, -/+ и Esc)"
 
-#: crates/pico/src/app.rs:4024
+#: crates/pico/src/app.rs:4008
 msgid "This list"
 msgstr "Этот список"
 
-#: crates/pico/src/app.rs:1055
+#: crates/pico/src/app.rs:1049
 msgid "{n} photo of this album is in folders Pico does not watch; add them with File > Add Folder to Pico: {folders}"
 msgid_plural "{n} photos of this album are in folders Pico does not watch; add them with File > Add Folder to Pico: {folders}"
 msgstr[0] "{n} фото этого альбома лежит в папках, за которыми Pico не следит; добавьте их через Файл > Добавить папку в Pico: {folders}"
 msgstr[1] "{n} фото этого альбома лежат в папках, за которыми Pico не следит; добавьте их через Файл > Добавить папку в Pico: {folders}"
 msgstr[2] "{n} фото этого альбома лежат в папках, за которыми Pico не следит; добавьте их через Файл > Добавить папку в Pico: {folders}"
 
-#: crates/pico/src/app.rs:4032
+#: crates/pico/src/app.rs:4016
 msgid "{n} photo"
 msgid_plural "{n} photos"
 msgstr[0] "{n} фотография"
 msgstr[1] "{n} фотографии"
 msgstr[2] "{n} фотографий"
 
-#: crates/pico/src/app.rs:4033
+#: crates/pico/src/app.rs:4017
 msgid "{n} video"
 msgid_plural "{n} videos"
 msgstr[0] "{n} видео"
 msgstr[1] "{n} видео"
 msgstr[2] "{n} видео"
 
-#: crates/pico/src/app.rs:4034
+#: crates/pico/src/app.rs:4018
 msgid "{n} picture"
 msgid_plural "{n} pictures"
 msgstr[0] "{n} изображение"
 msgstr[1] "{n} изображения"
 msgstr[2] "{n} изображений"
 
-#: crates/pico/src/app.rs:4035
+#: crates/pico/src/app.rs:4019
 msgid "{n} file"
 msgid_plural "{n} files"
 msgstr[0] "{n} файл"
 msgstr[1] "{n} файла"
 msgstr[2] "{n} файлов"
 
-#: crates/pico/src/app.rs:4036 crates/pico/src/folder_manager.rs:256
+#: crates/pico/src/app.rs:4020 crates/pico/src/folder_manager.rs:256
 msgid "{n} folder"
 msgid_plural "{n} folders"
 msgstr[0] "{n} папка"
 msgstr[1] "{n} папки"
 msgstr[2] "{n} папок"
 
-#: crates/pico/src/app.rs:4037
+#: crates/pico/src/app.rs:4021
 msgid "{n} effect"
 msgid_plural "{n} effects"
 msgstr[0] "{n} эффект"
 msgstr[1] "{n} эффекта"
 msgstr[2] "{n} эффектов"
 
-#: crates/pico/src/app.rs:4038
+#: crates/pico/src/app.rs:4022
 msgid "{n} group"
 msgid_plural "{n} groups"
 msgstr[0] "{n} группа"
@@ -1440,7 +1420,7 @@ msgstr "Имя файла"
 msgid "Caption"
 msgstr "Подпись"
 
-#: crates/pico/src/grid.rs:50 crates/pico/src/info.rs:65
+#: crates/pico/src/grid.rs:50 crates/pico/src/info.rs:71
 msgid "Tags"
 msgstr "Теги"
 
@@ -1568,79 +1548,79 @@ msgstr "{day} ноября {year}"
 msgid "{day} December {year}"
 msgstr "{day} декабря {year}"
 
-#: crates/pico/src/info.rs:44
+#: crates/pico/src/info.rs:46
 msgid "Properties"
 msgstr "Свойства"
 
-#: crates/pico/src/info.rs:52
+#: crates/pico/src/info.rs:54
 msgid "Copy: all the metadata as tab-separated values, to paste into a spreadsheet"
 msgstr "Копировать: все метаданные таблицей (через табуляцию), чтобы вставить в электронную таблицу"
 
-#: crates/pico/src/info.rs:61
+#: crates/pico/src/info.rs:67
 msgid "Pick a photo to see its secrets."
 msgstr "Выберите фото, чтобы узнать его секреты."
 
-#: crates/pico/src/info.rs:78
+#: crates/pico/src/info.rs:84
 msgid "Name"
 msgstr "Имя"
 
-#: crates/pico/src/info.rs:80
+#: crates/pico/src/info.rs:86
 msgid "Folder"
 msgstr "Папка"
 
-#: crates/pico/src/info.rs:82
+#: crates/pico/src/info.rs:88
 msgid "File size"
 msgstr "Размер файла"
 
-#: crates/pico/src/info.rs:84
+#: crates/pico/src/info.rs:90
 msgid "Dimensions"
 msgstr "Размеры"
 
-#: crates/pico/src/info.rs:87
+#: crates/pico/src/info.rs:93
 msgid "Created"
 msgstr "Создан"
 
-#: crates/pico/src/info.rs:89
+#: crates/pico/src/info.rs:95
 msgid "Modified"
 msgstr "Изменён"
 
-#: crates/pico/src/info.rs:116
+#: crates/pico/src/info.rs:122
 msgid "The positions differ:\n{positions}"
 msgstr "Координаты расходятся:\n{positions}"
 
-#: crates/pico/src/info.rs:169
+#: crates/pico/src/info.rs:175
 msgid "No camera details in this file."
 msgstr "В этом файле нет данных камеры."
 
-#: crates/pico/src/info.rs:175
+#: crates/pico/src/info.rs:181
 msgid "Select photos to tag them."
 msgstr "Выделите фото, чтобы поставить теги."
 
-#: crates/pico/src/info.rs:188
+#: crates/pico/src/info.rs:194
 msgid "Tag all selected…"
 msgstr "Тег для всех выделенных…"
 
-#: crates/pico/src/info.rs:188
+#: crates/pico/src/info.rs:194
 msgid "Add a tag…"
 msgstr "Добавить тег…"
 
-#: crates/pico/src/info.rs:197
+#: crates/pico/src/info.rs:203
 msgid "Add"
 msgstr "Добавить"
 
-#: crates/pico/src/info.rs:204
+#: crates/pico/src/info.rs:210
 msgid "No tags yet."
 msgstr "Тегов пока нет."
 
-#: crates/pico/src/info.rs:213
+#: crates/pico/src/info.rs:219
 msgid "Remove this tag"
 msgstr "Убрать этот тег"
 
-#: crates/pico/src/info.rs:257
+#: crates/pico/src/info.rs:263
 msgid "Show on OpenStreetMap"
 msgstr "Показать на OpenStreetMap"
 
-#: crates/pico/src/info.rs:307
+#: crates/pico/src/info.rs:313
 msgid "{n} bytes"
 msgstr "{n} байт"
 
@@ -1696,7 +1676,7 @@ msgstr "Как снято"
 msgid "Drag over the photo to choose what stays"
 msgstr "Обведите на фото то, что останется"
 
-#: crates/pico/src/tools.rs:165 crates/pico/src/viewer.rs:587
+#: crates/pico/src/tools.rs:165 crates/pico/src/viewer.rs:552
 msgid "Crop"
 msgstr "Кадрирование"
 
@@ -1744,7 +1724,7 @@ msgstr "Слева"
 msgid "Defaults"
 msgstr "По умолчанию"
 
-#: crates/pico/src/tools.rs:284 crates/pico/src/viewer.rs:591
+#: crates/pico/src/tools.rs:284 crates/pico/src/viewer.rs:556
 msgid "Straighten"
 msgstr "Выравнивание"
 
@@ -1756,67 +1736,59 @@ msgstr "Выровняйте горизонт по сетке."
 msgid "Angle"
 msgstr "Угол"
 
-#: crates/pico/src/viewer.rs:328
+#: crates/pico/src/viewer.rs:320
 msgid "⬅ Back to Library"
 msgstr "⬅ В библиотеку"
 
-#: crates/pico/src/viewer.rs:332
+#: crates/pico/src/viewer.rs:324
 msgid "Show the edit panel"
 msgstr "Показать панель правки"
 
-#: crates/pico/src/viewer.rs:333
-msgid "Info"
-msgstr "Сведения"
-
-#: crates/pico/src/viewer.rs:334
-msgid "Histogram & Camera Information"
-msgstr "Гистограмма и данные камеры"
-
-#: crates/pico/src/viewer.rs:339
+#: crates/pico/src/viewer.rs:329
 msgid "Full screen (F11; Esc to leave)"
 msgstr "Полный экран (F11; выход — Esc)"
 
-#: crates/pico/src/viewer.rs:343
+#: crates/pico/src/viewer.rs:333
 msgid "Previous (Left arrow; Home for the first)"
 msgstr "Предыдущее (стрелка влево; Home — первое)"
 
-#: crates/pico/src/viewer.rs:347
+#: crates/pico/src/viewer.rs:337
 msgid "Next (Right arrow; End for the last)"
 msgstr "Следующее (стрелка вправо; End — последнее)"
 
-#: crates/pico/src/viewer.rs:351
+#: crates/pico/src/viewer.rs:341
 msgid "★ Starred"
 msgstr "★ Отмечено"
 
-#: crates/pico/src/viewer.rs:351
+#: crates/pico/src/viewer.rs:341
 msgid "☆ Star"
 msgstr "☆ Отметить"
 
-#: crates/pico/src/viewer.rs:357
+#: crates/pico/src/viewer.rs:347
 msgid "Rotate counterclockwise (Ctrl+Shift+R)"
 msgstr "Повернуть против часовой (Ctrl+Shift+R)"
 
-#: crates/pico/src/viewer.rs:360
+#: crates/pico/src/viewer.rs:350
 msgid "Rotate clockwise (Ctrl+R)"
 msgstr "Повернуть по часовой (Ctrl+R)"
 
-#: crates/pico/src/viewer.rs:366 crates/pico/src/viewer.rs:805
+#: crates/pico/src/viewer.rs:358 crates/pico/src/viewer.rs:770
 msgid "Original"
 msgstr "Оригинал"
 
-#: crates/pico/src/viewer.rs:367
+#: crates/pico/src/viewer.rs:359
 msgid "Hold to see the photo without its edits (or hold \\)"
 msgstr "Держите, чтобы увидеть фото без правок (или держите \\)"
 
-#: crates/pico/src/viewer.rs:368
+#: crates/pico/src/viewer.rs:360
 msgid "No edits to compare with"
 msgstr "Нет правок для сравнения"
 
-#: crates/pico/src/viewer.rs:378
+#: crates/pico/src/viewer.rs:374
 msgid "Save Frame as Photo"
 msgstr "Сохранить кадр как фото"
 
-#: crates/pico/src/viewer.rs:379
+#: crates/pico/src/viewer.rs:375
 msgid "Save the frame on screen next to the video"
 msgstr "Сохранить кадр с экрана рядом с видео"
 
@@ -1832,91 +1804,83 @@ msgstr "дата файла {date}"
 msgid "{size} (original {original})"
 msgstr "{size} (исходный {original})"
 
-#: crates/pico/src/viewer.rs:487
-msgid "Focal length: {length}"
-msgstr "Фокусное расстояние: {length}"
-
-#: crates/pico/src/viewer.rs:493
-msgid "No camera details. A screenshot, perhaps?"
-msgstr "Нет данных камеры. Может, это снимок экрана?"
-
-#: crates/pico/src/viewer.rs:502
+#: crates/pico/src/viewer.rs:461
 msgid "Fit the photo in the window"
 msgstr "Вписать фото в окно"
 
-#: crates/pico/src/viewer.rs:508
+#: crates/pico/src/viewer.rs:469
 msgid "One photo pixel per screen pixel"
 msgstr "Один пиксель фото на пиксель экрана"
 
-#: crates/pico/src/viewer.rs:520
+#: crates/pico/src/viewer.rs:483
 msgid "Zoom (Ctrl+wheel; drag the photo to look around)"
 msgstr "Масштаб (Ctrl+колесо; фото можно двигать мышью)"
 
-#: crates/pico/src/viewer.rs:585
+#: crates/pico/src/viewer.rs:550
 msgid "Basic Fixes"
 msgstr "Основные"
 
-#: crates/pico/src/viewer.rs:608
+#: crates/pico/src/viewer.rs:573
 msgid "Tuning"
 msgstr "Редактирование"
 
-#: crates/pico/src/viewer.rs:617 crates/pico-core/src/effects.rs:384 crates/pico-core/src/effects.rs:392 crates/pico-core/src/effects.rs:402
+#: crates/pico/src/viewer.rs:582 crates/pico-core/src/effects.rs:384 crates/pico-core/src/effects.rs:392 crates/pico-core/src/effects.rs:402
 msgid "Fill Light"
 msgstr "Выравнивающее осветление"
 
-#: crates/pico/src/viewer.rs:618 crates/pico-core/src/effects.rs:403
+#: crates/pico/src/viewer.rs:583 crates/pico-core/src/effects.rs:403
 msgid "Highlights"
 msgstr "Осветление"
 
-#: crates/pico/src/viewer.rs:619 crates/pico-core/src/effects.rs:404
+#: crates/pico/src/viewer.rs:584 crates/pico-core/src/effects.rs:404
 msgid "Shadows"
 msgstr "Затенение"
 
-#: crates/pico/src/viewer.rs:620 crates/pico-core/src/effects.rs:357 crates/pico-core/src/effects.rs:411
+#: crates/pico/src/viewer.rs:585 crates/pico-core/src/effects.rs:357 crates/pico-core/src/effects.rs:411
 msgid "Color Temperature"
 msgstr "Цветовая температура"
 
-#: crates/pico/src/viewer.rs:646
+#: crates/pico/src/viewer.rs:611
 msgid "Effects"
 msgstr "Эффекты"
 
-#: crates/pico/src/viewer.rs:655
+#: crates/pico/src/viewer.rs:620
 msgid "Creative Kit"
 msgstr "Фотостудия"
 
-#: crates/pico/src/viewer.rs:684
+#: crates/pico/src/viewer.rs:649
 msgid "No edits yet. The photo is perfect, apparently."
 msgstr "Правок пока нет. Видимо, фото идеально."
 
-#: crates/pico/src/viewer.rs:688
+#: crates/pico/src/viewer.rs:653
 msgid "{n} not shown yet (kept in the file)"
 msgstr "Ещё не показано: {n} (сохраняются в файле)"
 
-#: crates/pico/src/viewer.rs:689
+#: crates/pico/src/viewer.rs:654
 msgid "Pico keeps edits it cannot draw yet, so Picasa still sees them."
 msgstr "Pico сохраняет правки, которые пока не умеет рисовать, чтобы их видела Picasa."
 
-#: crates/pico/src/viewer.rs:693
+#: crates/pico/src/viewer.rs:658
 msgid "Undo"
 msgstr "Отменить"
 
-#: crates/pico/src/viewer.rs:694
+#: crates/pico/src/viewer.rs:659
 msgid "Remove the last edit (Ctrl+Z)"
 msgstr "Отменить последнюю правку (Ctrl+Z)"
 
-#: crates/pico/src/viewer.rs:697
+#: crates/pico/src/viewer.rs:662
 msgid "Redo"
 msgstr "Вернуть"
 
-#: crates/pico/src/viewer.rs:698
+#: crates/pico/src/viewer.rs:663
 msgid "Bring the edit back (Ctrl+Y)"
 msgstr "Вернуть правку (Ctrl+Y)"
 
-#: crates/pico/src/viewer.rs:855
+#: crates/pico/src/viewer.rs:820
 msgid "Pico squinted at this file and gave up:\n{error}"
 msgstr "Pico прищурился, глядя на этот файл, и сдался:\n{error}"
 
-#: crates/pico/src/viewer.rs:685
+#: crates/pico/src/viewer.rs:650
 msgid "{n} edit"
 msgid_plural "{n} edits"
 msgstr[0] "{n} правка"

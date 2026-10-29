@@ -5,6 +5,7 @@ use pico_core::exif::{self, Exif};
 use pico_core::library::MediaFile;
 use pico_core::media::MediaKind;
 use pico_core::metadata;
+use pico_core::render::Histogram;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 
@@ -37,6 +38,7 @@ impl InfoPanel {
         ui: &mut egui::Ui,
         current: Option<&MediaFile>,
         targets: &[&MediaFile],
+        histogram: Option<&Histogram>,
     ) -> Option<TagAction> {
         let mut action = None;
         // The heading and Copy stay put above the scrolling list.
@@ -55,6 +57,10 @@ impl InfoPanel {
             }
         });
         egui::ScrollArea::vertical().show(ui, |ui| {
+            // The levels of the photo open in the viewer, as edited.
+            if let Some(histogram) = histogram {
+                paint_histogram(ui, histogram);
+            }
             match current {
                 Some(file) => self.properties(ui, file),
                 None => {
@@ -325,5 +331,33 @@ impl ModifiedText for MediaFile {
         let created = std::fs::metadata(&self.path).ok()?.created().ok()?;
         let secs = created.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
         Some(pico_core::fileops::exif_style_date(secs) + " UTC")
+    }
+}
+
+/// Red, green and blue levels drawn over each other on a dark strip.
+fn paint_histogram(ui: &mut egui::Ui, histogram: &Histogram) {
+    let width = ui.available_width().min(256.0);
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, 64.0), egui::Sense::hover());
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, "Histogram"));
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 2.0, egui::Color32::from_gray(20));
+    // Pure black and white often spike; scale to the levels in between.
+    let peak = histogram.iter().flat_map(|c| c[1..255].iter()).copied().max().unwrap_or(0).max(1) as f32;
+    let colors = [
+        egui::Color32::from_rgba_unmultiplied(255, 70, 70, 140),
+        egui::Color32::from_rgba_unmultiplied(70, 220, 70, 140),
+        egui::Color32::from_rgba_unmultiplied(80, 120, 255, 140),
+    ];
+    let bar = rect.width() / 256.0;
+    for (counts, color) in histogram.iter().zip(colors) {
+        for (level, &count) in counts.iter().enumerate() {
+            if count == 0 {
+                continue;
+            }
+            let height = (count as f32 / peak).min(1.0) * rect.height();
+            let x = rect.left() + (level as f32 + 0.5) * bar;
+            let stroke = egui::Stroke::new(bar.max(1.0), color);
+            painter.line_segment([egui::pos2(x, rect.bottom()), egui::pos2(x, rect.bottom() - height)], stroke);
+        }
     }
 }

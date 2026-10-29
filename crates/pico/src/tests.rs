@@ -351,19 +351,18 @@ fn hold_original_to_compare() {
 }
 
 #[test]
-fn histogram_and_camera_over_the_photo() {
+fn histogram_in_properties() {
     let fixture = Fixture::new("histogram");
     let mut harness = harness(&fixture.dir);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
     harness.state_mut().open_file_named("a.png");
     wait_until(&mut harness, "the photo to load", |app| app.viewer_loaded());
     harness.step();
-    assert!(harness.query_by_label("Histogram").is_none(), "hidden until asked for");
-    harness.get_by_label("Info").click();
-    harness.step();
-    harness.step();
+    assert!(harness.query_by_label("Histogram").is_none(), "hidden with Properties");
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    harness.run_steps(3);
     harness.get_by_label("Histogram");
-    harness.get_by_label("No camera details. A screenshot, perhaps?");
+    harness.get_by_label("No camera details in this file.");
     screenshot(&mut harness, "histogram");
 }
 
@@ -872,10 +871,9 @@ fn tray_thumbnails_open_the_viewer_and_unhold() {
 }
 
 #[test]
-fn thumbnail_size_by_slider_and_ctrl_wheel() {
+fn thumbnail_size_by_ctrl_wheel() {
     let fixture = Fixture::new("thumb-size");
     let mut harness = harness(&fixture.dir);
-    harness.state_mut().show_tray(true);
     harness.state_mut().show_tray(true);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
     assert_eq!(harness.state().thumbnail_size(), 160.0);
@@ -886,7 +884,8 @@ fn thumbnail_size_by_slider_and_ctrl_wheel() {
     harness.event(egui::Event::Zoom(4.0));
     harness.step();
     assert_eq!(harness.state().thumbnail_size(), 256.0, "no bigger than the largest size");
-    harness.get_by_label("Thumbnail size (Ctrl+wheel over the photos)");
+    // The size is in the View menu only, even with the tray shown.
+    assert!(harness.query_by_role(egui::accesskit::Role::Slider).is_none());
     screenshot(&mut harness, "thumb-size");
 }
 
@@ -1514,7 +1513,9 @@ fn crop_tool_drag_on_rotated_photo_and_straighten() {
     wait_until(&mut harness, "the rotated photo", |app| app.viewer_loaded());
 
     harness.get_by_label("Crop").click();
-    harness.step();
+    // The bar loses its zoom controls and may take fewer rows; the photo
+    // settles a few frames later.
+    harness.run_steps(4);
     let photo = harness.get_by_label("Photo").rect();
     // Select the top-left quarter of the photo as shown (rotated clockwise).
     harness.drag_at(photo.min + egui::vec2(1.0, 1.0));
@@ -2143,7 +2144,7 @@ fn albums_create_open_add_and_remove() {
     assert_eq!(harness.state().listing_names(), ["a.png", "c.png"]);
     harness.get_by_label("a.png").click();
     harness.step();
-    harness.get_by_label("Picture").click();
+    harness.get_by_label("File").click();
     harness.step();
     harness.step();
     harness.get_by_label("Remove from Album").click();
@@ -2218,10 +2219,10 @@ fn tools_duplicates_folder_manager_and_options() {
     harness.get_by_label("Clear Thumbnail Cache");
     screenshot(&mut harness, "options");
 
-    harness.get_by_label("Tools").click();
+    harness.get_by_label("File").click();
     harness.step();
     harness.step();
-    harness.get_by_label("Folder Manager…").click();
+    harness.get_by_label("Add Folder to Pico…").click();
     harness.step();
     harness.step();
     // The manager opens on the watched folder; typing extends its path.
@@ -2242,10 +2243,10 @@ fn tools_duplicates_folder_manager_and_options() {
     wait_until(&mut harness, "the rescan", |app| app.folder_count() == 1);
     assert_eq!(harness.state().watched_count(), 1);
 
-    harness.get_by_label("Tools").click();
+    harness.get_by_label("File").click();
     harness.step();
     harness.step();
-    harness.get_by_label("Folder Manager…").click();
+    harness.get_by_label("Add Folder to Pico…").click();
     harness.step();
     harness.step();
     harness.get_by_label("Leave out of Pico").click();

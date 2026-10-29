@@ -691,8 +691,8 @@ impl PicoApp {
         }
     }
 
-    /// Slideshow, Export, Collage and Movie for the tray, and the thumbnail
-    /// size; remembers how wide they are.
+    /// Slideshow, Export, Collage and Movie for the tray; remembers how wide
+    /// they are.
     fn tray_actions(&mut self, ui: &mut egui::Ui, any: bool, held: bool) {
         let actions = egui::Grid::new("tray actions").num_columns(2).show(ui, |ui| {
             if ui.add_enabled(any, egui::Button::new(tr!("▶ Slideshow"))).clicked() && self.take_tray() {
@@ -715,12 +715,6 @@ impl PicoApp {
             if !held {
                 ui.label("");
             }
-            // The thumbnail size, under the actions to leave the strip room.
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("🗖").weak());
-                let slider = egui::Slider::new(&mut self.thumb_size, MIN_THUMB..=MAX_THUMB).show_value(false);
-                ui.add_sized([110.0, 18.0], slider).on_hover_text(tr!("Thumbnail size (Ctrl+wheel over the photos)"));
-            });
         });
         let wanted = actions.response.rect.width() + 4.0 * ui.spacing().item_spacing.x;
         if (wanted - self.tray_actions_width).abs() > 0.5 {
@@ -1809,10 +1803,7 @@ impl PicoApp {
                     ui.separator();
                     ui.checkbox(&mut self.reverse, tr!("Reverse Order"));
                 });
-                ui.checkbox(&mut self.starred_only, tr!("Only Starred Photos"));
-                ui.checkbox(&mut self.videos_only, tr!("Only Videos"));
                 ui.checkbox(&mut self.show_info, tr!("Properties and Tags")).on_hover_text("Alt+Enter, Ctrl+K");
-                ui.menu_button(tr!("Folder List"), |ui| self.folder_list_options(ui));
                 ui.checkbox(&mut self.show_filmstrip, tr!("Filmstrip"))
                     .on_hover_text(tr!("Neighbouring photos above the open one"));
                 ui.checkbox(&mut self.show_hidden, tr!("Hidden Pictures"));
@@ -1850,9 +1841,6 @@ impl PicoApp {
             ui.menu_button(tr!("Tools"), |ui| {
                 if ui.button(tr!("Show Duplicate Files")).clicked() {
                     self.find_duplicates(ui.ctx());
-                }
-                if ui.button(tr!("Folder Manager…")).clicked() {
-                    self.open_folder_manager();
                 }
                 if ui.button(tr!("Options…")).clicked() {
                     self.show_options = true;
@@ -2164,7 +2152,7 @@ impl PicoApp {
             rules.set_in_library(&path, false);
             let name = Folder::file_name(&path);
             self.set_rules(ui.ctx(), rules);
-            self.status = tr!("Left out {name}. Tools > Folder Manager brings it back.", name = name);
+            self.status = tr!("Left out {name}. File > Add Folder to Pico brings it back.", name = name);
         }
     }
 
@@ -2211,11 +2199,6 @@ impl PicoApp {
             self.hold();
         }
         self.album_menu(ui);
-        if matches!(self.source, Some(Source::Album(_)))
-            && ui.button(tr!("Remove from Album")).on_hover_text("Delete").clicked()
-        {
-            self.delete_targets();
-        }
         ui.separator();
         if ui.button(tr!("Undo All Edits")).clicked() {
             self.edit_targets(|meta| {
@@ -2964,10 +2947,11 @@ impl PicoApp {
             let file = |at: FileRef| self.folders.get(at.0).and_then(|f| f.files.get(at.1));
             let current = current.and_then(file);
             let target_files: Vec<&MediaFile> = targets.iter().filter_map(|&at| file(at)).collect();
+            let histogram = current.filter(|_| self.view == View::Photo).and_then(|f| self.viewer.histogram(&f.path));
             let panel = egui::Panel::right("info")
                 .resizable(true)
                 .default_size(self.info_width)
-                .show(ui, |ui| self.info.show(ui, current, &target_files));
+                .show(ui, |ui| self.info.show(ui, current, &target_files, histogram));
             (panel.inner, panel.response.rect.width().round())
         };
         self.info_width = width;
