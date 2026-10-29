@@ -61,16 +61,26 @@ const GROUPS: &[(Compare, &[(&str, &str)])] = &[
     (Compare::Near(0.15), &[("EXIF", "ISO"), ("EXIF", "Canon ISO"), ("EXIF", "NIKON ISO")]),
     (Compare::Near(0.03), &[("EXIF", "Focal Length"), ("EXIF", "Canon Focal Length")]),
     (Compare::Plus(0.2), &[("EXIF", "Exposure Compensation"), ("EXIF", "Canon Exposure Compensation")]),
+    // Adobe copies what the maker's notes say into XMP's `aux:` properties.
     (
-        Compare::Digits,
+        Compare::Serial,
         &[
             ("EXIF", "Body Serial Number"),
             ("EXIF", "Canon Serial Number"),
             ("EXIF", "NIKON Serial Number"),
             ("EXIF", "OLYMPUS Serial Number"),
+            ("XMP", "Serial Number"),
         ],
     ),
-    (Compare::Text, &[("EXIF", "Camera Owner"), ("EXIF", "Canon Owner Name")]),
+    (
+        Compare::Serial,
+        &[("EXIF", "Lens Serial Number"), ("EXIF", "OLYMPUS Lens Serial Number"), ("XMP", "Lens Serial Number")],
+    ),
+    (Compare::Text, &[("EXIF", "Camera Owner"), ("EXIF", "Canon Owner Name"), ("XMP", "Owner Name")]),
+    (
+        Compare::Version,
+        &[("EXIF", "Canon Firmware Version"), ("EXIF", "OLYMPUS Body Firmware Version"), ("XMP", "Firmware")],
+    ),
     (Compare::Model, &[("EXIF", "Model"), ("EXIF", "Canon Image Type")]),
     // The camera was switched on before the photo was taken.
     (Compare::Before, &[("EXIF", "NIKON Power Up Time"), ("EXIF", "Date Taken")]),
@@ -78,7 +88,7 @@ const GROUPS: &[(Compare, &[(&str, &str)])] = &[
 
 /// XMP's copies of EXIF tags carry EXIF's labels; these are compared as
 /// positions elsewhere, being written differently.
-const NOT_ALIKE: &[&str] = &["GPS Latitude", "GPS Longitude", "GPS Latitude Ref", "GPS Longitude Ref"];
+const NOT_ALIKE: &[&str] = &["GPS Latitude", "GPS Longitude", "GPS Latitude Ref", "GPS Longitude Ref", "Padding"];
 
 #[derive(Clone, Copy)]
 enum Compare {
@@ -96,13 +106,19 @@ enum Compare {
     Near(f64),
     /// Numbers within so much of each other: EV.
     Plus(f64),
-    /// The same digits, leading zeros aside: serial numbers.
-    Digits,
+    /// The same letters and digits, case and leading zeros aside: serial
+    /// numbers ("0000c1c975" and "C1C975").
+    Serial,
+    /// The same version number: "Firmware Version 1.0.3" and "1.0.3".
+    Version,
     /// One camera name inside the other, the maker's name aside:
     /// "Canon PowerShot A400" in "IMG:PowerShot A400 JPEG".
     Model,
     /// Dates in this order, the first no later than the next.
     Before,
+    /// An EXIF tag and XMP's copy of it, each written its own way: "2.20"
+    /// and "220", "Inches" and "Inch", "Uncalibrated" and 65535.
+    Copy,
 }
 
 impl Compare {
@@ -118,7 +134,7 @@ impl Compare {
     fn takes(self, value: &str) -> bool {
         match self {
             Compare::Stops(_) | Compare::Near(_) | Compare::Plus(_) => number(value).is_some(),
-            Compare::Digits => value.chars().any(|c| c.is_ascii_digit()),
+            Compare::Serial | Compare::Version => value.chars().any(|c| c.is_ascii_digit()),
             // Some cameras put their firmware where the model would be.
             Compare::Model => !value.to_lowercase().starts_with("firmware"),
             _ => true,
@@ -149,7 +165,7 @@ pub fn disagreements(sections: &[(&str, &[(String, String)])]) -> Vec<(String, S
     for (label, _) in exif_rows {
         let grouped = groups.iter().any(|(_, g)| g.contains(&("EXIF", label.as_str())));
         if !grouped && !NOT_ALIKE.contains(&label.as_str()) && value("XMP", label).is_some() {
-            let compare = if label.starts_with("Date") { Compare::Date } else { Compare::Text };
+            let compare = if label.starts_with("Date") { Compare::Date } else { Compare::Copy };
             groups.push((compare, vec![("EXIF", label.as_str()), ("XMP", label.as_str())]));
         }
     }
@@ -209,9 +225,17 @@ fn alike(compare: Compare, a: &str, b: &str) -> bool {
             (Some(a), Some(b)) => (a - b).abs() <= most + 1e-9,
             _ => true,
         },
-        Compare::Digits => {
-            let digits = |s: &str| s.chars().filter(char::is_ascii_digit).collect::<String>();
-            digits(a).trim_start_matches('0') == digits(b).trim_start_matches('0')
+        Compare::Serial => {
+            let serial = |s: &str| s.chars().filter(char::is_ascii_alphanumeric).collect::<String>().to_lowercase();
+            serial(a).trim_start_matches('0') == serial(b).trim_start_matches('0')
+        }
+        Compare::Version => {
+            // The first run of digits and dots.
+            let version = |s: &str| {
+                let start = s.find(|c: char| c.is_ascii_digit()).unwrap_or(s.len());
+                s[start..].chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect::<String>()
+            };
+            version(a).trim_end_matches('.') == version(b).trim_end_matches('.')
         }
         Compare::Model => {
             let name = |s: &str| {
@@ -230,6 +254,28 @@ fn alike(compare: Compare, a: &str, b: &str) -> bool {
             let (a, b) = (digits(a), digits(b));
             let n = a.len().min(b.len());
             a[..n] <= b[..n]
+        }
+        Compare::Copy => {
+            let loose = |s: &str| {
+                let s = s.trim().to_lowercase();
+                // Uncalibrated colour, as a word or as 0xFFFF, 0xFFFFFFFF.
+                if s.contains("uncalibrated") || s.contains("65535") || s == "4294967295" {
+                    return "uncalibrated".to_owned();
+                }
+                // Version numbers with or without dots: 2.20, 220, "Exif Version 2.2".
+                if s.contains("version") || s.chars().all(|c| c.is_ascii_digit() || c == '.') {
+                    let digits: String = s.chars().filter(char::is_ascii_digit).collect();
+                    if s.contains("version") || s.contains('.') || digits.len() == 3 || digits.len() == 4 {
+                        return digits.trim_end_matches('0').to_owned();
+                    }
+                }
+                s
+            };
+            // Word by word, one in the plural or not: "Inches" and "Inch".
+            let plural = |x: &str, y: &str| x == y || x == format!("{y}s") || x == format!("{y}es");
+            let (a, b) = (loose(a), loose(b));
+            let (a, b): (Vec<&str>, Vec<&str>) = (a.split_whitespace().collect(), b.split_whitespace().collect());
+            a.len() == b.len() && a.iter().zip(&b).all(|(x, y)| plural(x, y) || plural(y, x))
         }
         Compare::Number => {
             // "★★★☆☆ (3)" or "3".
@@ -284,6 +330,25 @@ mod tests {
     }
 
     #[test]
+    fn xmp_copies_of_exif_may_be_written_their_own_way() {
+        let exif = rows(&[
+            ("Exif Version", "2.20"),
+            ("Color Space", "Uncalibrated"),
+            ("Resolution Unit", "Inches"),
+            ("Software", "GIMP 2.10.22"),
+        ]);
+        let xmp = rows(&[
+            ("Exif Version", "220"),
+            ("Color Space", "4294967295"),
+            ("Resolution Unit", "Inch"),
+            ("Creator Tool", "GIMP 2.10"),
+        ]);
+        let found = disagreements(&[("EXIF", &exif), ("XMP", &xmp)]);
+        let flagged: Vec<(&str, &str)> = found.iter().map(|(s, l, _)| (s.as_str(), l.as_str())).collect();
+        assert_eq!(flagged, [("EXIF", "Software"), ("XMP", "Creator Tool")]);
+    }
+
+    #[test]
     fn checks_the_makers_notes_against_exif() {
         let exif = rows(&[
             // Within a third of a stop, and equal: fine.
@@ -305,20 +370,28 @@ mod tests {
             ("NIKON Power Up Time", "2013:10:17 11:27:04"),
             ("Body Serial Number", "0025021"),
             ("Canon Serial Number", "25021"),
+            ("Canon Firmware Version", "Firmware Version 1.0.3"),
+            ("Lens Serial Number", "0000c1c975"),
         ]);
-        let found = disagreements(&[("EXIF", &exif)]);
+        // Adobe's copies of the notes in XMP: the same firmware and lens, but
+        // another body.
+        let xmp = rows(&[("Firmware", "1.0.3"), ("Lens Serial Number", "C1C975"), ("Serial Number", "25022")]);
+        let found = disagreements(&[("EXIF", &exif), ("XMP", &xmp)]);
         let flagged: Vec<&str> = found.iter().map(|(_, l, _)| l.as_str()).collect();
         assert_eq!(
             flagged,
             [
                 "Focal Length",
                 "Canon Focal Length",
+                "Body Serial Number",
+                "Canon Serial Number",
+                "Serial Number",
                 "Camera Owner",
                 "Canon Owner Name",
                 "NIKON Power Up Time",
                 "Date Taken"
             ]
         );
-        assert!(found[4].2.starts_with("Should come in this order"), "{}", found[4].2);
+        assert!(found[7].2.starts_with("Should come in this order"), "{}", found[7].2);
     }
 }

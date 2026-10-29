@@ -36,6 +36,9 @@ pub(crate) fn read(
         (note, false, 14)
     } else if note.starts_with(b"FUJIFILM") {
         (note, true, Tiff { data: note, little: true }.u32(8)? as usize)
+    } else if note.starts_with(b"QVC\0") {
+        // Casio's newer notes.
+        (tiff, little, at + 6)
     } else if note.starts_with(b"Panasonic\0") || note.starts_with(b"SONY DSC ") || note.starts_with(b"SONY CAM ") {
         (tiff, little, at + 12)
     } else if note.starts_with(b"Nikon\0\x01") || note.starts_with(b"OLYMP\0") || note.starts_with(b"EPSON\0") {
@@ -72,8 +75,12 @@ pub(crate) fn read(
     let mut rows: Vec<(String, String)> = tags
         .iter()
         .filter_map(|(&tag, value)| {
-            let name = maker_tag_name(&maker, tag).map_or_else(|| format!("Tag 0x{tag:04X}"), str::to_owned);
-            let text = maker_value(&maker, tag, value, little).or_else(|| maker_plain(value))?;
+            let name = maker_tag_name(&maker, tag)
+                .or_else(|| known(&maker, 0, tag).map(|t| t.name))
+                .map_or_else(|| format!("Tag 0x{tag:04X}"), str::to_owned);
+            let text = maker_value(&maker, tag, value, little)
+                .or_else(|| meaning(&maker, 0, tag, value))
+                .or_else(|| maker_plain(value))?;
             let text = text.trim().to_owned();
             (!text.is_empty()).then(|| (format!("{maker} {name}"), text))
         })
@@ -276,7 +283,49 @@ fn spell(maker: &str, model: &str, tags: &BTreeMap<u32, Value>) -> (Vec<(u32, Fi
             out.push((0x0004, canon_shot_info(shot, model)));
         }
     }
+    // Lists only the tables know: each place, named, with its meaning.
+    for (&tag, value) in tags {
+        // List 0 is the main directory's table, not a list's.
+        let Some(list) = u16::try_from(tag).ok().filter(|&l| l != 0) else { continue };
+        let (Value::Numbers(values), Some(table)) = (value, crate::maker_tags::table(&key(maker), list)) else {
+            continue;
+        };
+        if out.iter().any(|(t, _)| *t == tag) {
+            continue;
+        }
+        let fields = table
+            .iter()
+            .filter_map(|entry| {
+                let v = *values.get(entry.tag as usize)? as u16 as i16 as i64;
+                let text =
+                    entry.values.iter().find(|(n, _)| *n == v).map_or_else(|| v.to_string(), |(_, m)| (*m).to_owned());
+                Some((entry.name, text))
+            })
+            .collect();
+        out.push((tag, fields));
+    }
     (out, true)
+}
+
+/// The maker's name as the tables have it: `CANON`, `NIKON`, `OLYMPUS`…
+fn key(maker: &str) -> String {
+    maker.trim_end_matches([',', '.']).to_ascii_uppercase()
+}
+
+/// The tables' entry for `tag` in the maker's main directory (`list` 0) or
+/// in its list `list`.
+fn known(maker: &str, list: u16, tag: u32) -> Option<&'static crate::maker_tags::Tag> {
+    crate::maker_tags::table(&key(maker), list)?.iter().find(|t| u32::from(t.tag) == tag)
+}
+
+/// What a single value means, as the tables have it.
+fn meaning(maker: &str, list: u16, tag: u32, value: &Value) -> Option<String> {
+    if value.count() != 1 {
+        return None;
+    }
+    let number = value.number(0)? as i64;
+    let entry = known(maker, list, tag)?;
+    entry.values.iter().find(|(n, _)| *n == number).map(|(_, m)| (*m).to_owned())
 }
 
 /// Canon's way of writing EV: in 1/32 steps, with 1/3 and 2/3 stops coded

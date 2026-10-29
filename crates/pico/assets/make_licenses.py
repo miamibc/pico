@@ -25,6 +25,9 @@ DATA AND RECIPES
     License: CC BY 4.0, https://creativecommons.org/licenses/by/4.0/
   Countries, seas and continents: Natural Earth (www.naturalearthdata.com).
     Public domain.
+  Camera makers' notes (MakerNote): tag names and value meanings from
+    ExifRead's tables (github.com/ianare/exif-py), (c) Gene Cash, Ianaré
+    Sévi and contributors. License: BSD-3-Clause.
   Creative Kit effect recipes follow the Picnik source by Google.
     License: Apache-2.0, https://www.apache.org/licenses/LICENSE-2.0
 

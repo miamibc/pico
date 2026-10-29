@@ -14,7 +14,8 @@ fn main() {
                 for (label, value) in &exif.all {
                     println!("    {label}: {value}");
                 }
-                for (_, label, note) in pico_core::agree::disagreements(&[("EXIF", &exif.all)]) {
+                let xmp = pico_core::xmp::read(&path);
+                for (_, label, note) in pico_core::agree::disagreements(&[("EXIF", &exif.all), ("XMP", &xmp)]) {
                     println!("  ! {label}: {}", note.replace('\n', "; "));
                 }
             }

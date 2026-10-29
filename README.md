@@ -344,6 +344,13 @@ specifications:
   "Raw profile type".
 - WebP — the [RIFF container description](https://developers.google.com/speed/webp/docs/riff_container).
 - Video — the output of [ffprobe](https://ffmpeg.org/ffprobe.html).
+- HEIC, HEIF and AVIF — EXIF found through the item boxes of
+  [ISO/IEC 23008-12](https://www.iso.org/standard/83650.html).
+- The camera makers' notes (MakerNote) — entry names and value meanings from
+  [ExifRead](https://github.com/ianare/exif-py)'s tables (BSD-3-Clause;
+  `crates/pico-core/src/maker_tags.rs`, `make maker-tags`), the arithmetic
+  after [ExifTool's tag tables](https://exiftool.org/TagNames/). What the notes
+  say is checked against EXIF and XMP, and fields that disagree get a "!".
 
 All third-party packages and the texts of their licenses are shown in
 **Help → About**; the list lives in `crates/pico/assets/licenses.txt` and is

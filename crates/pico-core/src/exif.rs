@@ -170,6 +170,21 @@ pub fn read(path: &std::path::Path) -> Option<Exif> {
     let mut head = Vec::new();
     // EXIF sits at the start; 256 KiB covers it even with large previews.
     std::fs::File::open(path).ok()?.take(256 * 1024).read_to_end(&mut head).ok()?;
+    // HEIC, HEIF and AVIF keep EXIF as an item of its own, found by the
+    // item list and located by the item locations.
+    if head.get(4..8) == Some(b"ftyp")
+        && let Some((offset, length)) = heif_exif(&head)
+    {
+        use std::io::{Seek, SeekFrom};
+        let mut file = std::fs::File::open(path).ok()?;
+        file.seek(SeekFrom::Start(offset)).ok()?;
+        let mut item = Vec::new();
+        file.take(length.min(16 * 1024 * 1024)).read_to_end(&mut item).ok()?;
+        // The item starts with where the TIFF header is, after "Exif\0\0".
+        let skip = u32::from_be_bytes(item.get(..4)?.try_into().ok()?) as usize;
+        let tiff = item.get(4 + skip..)?;
+        return parse(tiff.strip_prefix(EXIF_HEADER).unwrap_or(tiff));
+    }
     if head.starts_with(b"II*\0") || head.starts_with(b"MM\0*") {
         // TIFF and RAW: the whole file is the block, with values further in.
         head.clear();
@@ -180,6 +195,73 @@ pub fn read(path: &std::path::Path) -> Option<Exif> {
 }
 
 /// The TIFF-structured EXIF block of a file's first bytes.
+/// Where the EXIF item of a HEIF file (HEIC, AVIF) is: its offset and
+/// length, from the `meta` box in `head` (ISO/IEC 14496-12 and 23008-12).
+pub(crate) fn heif_exif(head: &[u8]) -> Option<(u64, u64)> {
+    // The boxes in `data`: (type, contents).
+    fn boxes(mut data: &[u8]) -> Vec<(&[u8], &[u8])> {
+        let mut out = Vec::new();
+        while data.len() >= 8 {
+            let size = u32::from_be_bytes(data[..4].try_into().unwrap()) as u64;
+            let (header, size) = match size {
+                1 if data.len() >= 16 => (16, u64::from_be_bytes(data[8..16].try_into().unwrap())),
+                0 => (8, data.len() as u64),
+                size => (8, size),
+            };
+            let Some(size) = usize::try_from(size).ok().filter(|&s| s >= header) else { break };
+            let end = size.min(data.len());
+            out.push((&data[4..8], &data[header.min(end)..end]));
+            data = &data[end..];
+        }
+        out
+    }
+    // Big-endian numbers of 0, 4 or 8 bytes, moving on.
+    fn take(data: &mut &[u8], bytes: usize) -> Option<u64> {
+        let (field, rest) = (data.get(..bytes)?, data.get(bytes..)?);
+        *data = rest;
+        Some(field.iter().fold(0u64, |n, &b| n << 8 | u64::from(b)))
+    }
+    let meta = boxes(head).into_iter().find(|(kind, _)| *kind == b"meta")?.1;
+    // A full box: version and flags first.
+    let children = boxes(meta.get(4..)?);
+    let iinf = children.iter().find(|(kind, _)| *kind == b"iinf")?.1;
+    let version = *iinf.first()?;
+    let entries = iinf.get(4 + if version == 0 { 2 } else { 4 }..)?;
+    let item = boxes(entries).into_iter().filter(|(kind, _)| *kind == b"infe").find_map(|(_, infe)| {
+        let mut data = infe;
+        let version = *data.first()?;
+        take(&mut data, 4)?;
+        let id = take(&mut data, if version >= 3 { 4 } else { 2 })?;
+        take(&mut data, 2)?;
+        (version >= 2 && data.get(..4)? == b"Exif").then_some(id)
+    })?;
+    let mut iloc = children.iter().find(|(kind, _)| *kind == b"iloc")?.1;
+    let version = *iloc.first()?;
+    take(&mut iloc, 4)?;
+    let sizes = take(&mut iloc, 2)?;
+    let (offset_size, length_size) = ((sizes >> 12) as usize & 15, (sizes >> 8) as usize & 15);
+    let (base_size, index_size) = ((sizes >> 4) as usize & 15, if version >= 1 { sizes as usize & 15 } else { 0 });
+    let count = take(&mut iloc, if version < 2 { 2 } else { 4 })?;
+    for _ in 0..count {
+        let id = take(&mut iloc, if version < 2 { 2 } else { 4 })?;
+        // Only offsets into the file itself (construction method 0).
+        let method = if version >= 1 { take(&mut iloc, 2)? & 15 } else { 0 };
+        take(&mut iloc, 2)?;
+        let base = take(&mut iloc, base_size)?;
+        let extents = take(&mut iloc, 2)?;
+        let mut first = None;
+        for _ in 0..extents {
+            take(&mut iloc, index_size)?;
+            let (offset, length) = (take(&mut iloc, offset_size)?, take(&mut iloc, length_size)?);
+            first = first.or(Some((base + offset, length)));
+        }
+        if id == item && method == 0 {
+            return first;
+        }
+    }
+    None
+}
+
 fn tiff_block(head: &[u8]) -> Option<Vec<u8>> {
     if let Some(segment) = exif_segment(head) {
         return Some(segment[4 + EXIF_HEADER.len()..].to_vec());
@@ -1141,6 +1223,29 @@ pub(crate) mod read_tests {
         entry(&mut t, 0x0009, 2, 4, u32::from_le_bytes([0xff, 0x01, 0xfe, 0]));
         t.extend_from_slice(&0u32.to_le_bytes());
         t
+    }
+
+    #[test]
+    fn finds_the_exif_item_of_heif_files() {
+        let sized = |kind: &[u8], body: Vec<u8>| {
+            [((body.len() + 8) as u32).to_be_bytes().to_vec(), kind.to_vec(), body].concat()
+        };
+        // An image item (1) and the EXIF item (2), version 2 entries.
+        let infe = |id: u16, kind: &[u8]| {
+            sized(b"infe", [vec![2, 0, 0, 0], id.to_be_bytes().to_vec(), vec![0, 0], kind.to_vec(), vec![0]].concat())
+        };
+        let iinf = sized(b"iinf", [vec![0, 0, 0, 0, 0, 2], infe(1, b"hvc1"), infe(2, b"Exif")].concat());
+        // Version 0, 4-byte offsets and lengths, no base offset: two items, one extent each.
+        let mut iloc = vec![0, 0, 0, 0, 0x44, 0x00, 0, 2];
+        for (id, offset, length) in [(1u16, 1000u32, 500u32), (2, 4242, 77)] {
+            iloc.extend(id.to_be_bytes());
+            iloc.extend([0, 0, 0, 1]);
+            iloc.extend(offset.to_be_bytes());
+            iloc.extend(length.to_be_bytes());
+        }
+        let meta = sized(b"meta", [vec![0, 0, 0, 0], iinf, sized(b"iloc", iloc)].concat());
+        let file = [sized(b"ftyp", b"heic\0\0\0\0mif1heic".to_vec()), meta].concat();
+        assert_eq!(heif_exif(&file), Some((4242, 77)));
     }
 
     #[test]

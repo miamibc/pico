@@ -19,6 +19,7 @@ pub mod geo;
 pub mod ini;
 pub mod library;
 mod maker_notes;
+mod maker_tags;
 pub mod media;
 pub mod meta;
 pub mod metadata;

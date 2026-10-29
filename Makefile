@@ -3,7 +3,7 @@
 
 PICTURES ?= $(HOME)/Pictures
 
-.PHONY: all build release windows run test lint fmt check testdata tour logo licenses po places exif-tags install clean
+.PHONY: all build release windows run test lint fmt check testdata tour logo licenses po places exif-tags maker-tags install clean
 
 all: release
 
@@ -96,6 +96,16 @@ exif-tags:
 
 # Installs the binary into ~/.cargo/bin; on Linux also the menu entry and
 # icon into ~/.local/share (GNOME on Wayland takes the icon only from there).
+# Names and value meanings of the camera makers' notes (MakerNote), from
+# ExifRead's tables (BSD-3-Clause), into crates/pico-core/src/maker_tags.rs.
+EXIFREAD = 3.5.1
+maker-tags:
+	mkdir -p $(DATA_DL)/exifread
+	curl -fL -o $(DATA_DL)/exifread.tar.gz https://github.com/ianare/exif-py/archive/refs/tags/$(EXIFREAD).tar.gz
+	tar xzf $(DATA_DL)/exifread.tar.gz -C $(DATA_DL)/exifread
+	python3 -I crates/pico-core/data/make_maker_tags.py $(DATA_DL)/exifread crates/pico-core/src/maker_tags.rs
+	rustfmt --edition 2024 crates/pico-core/src/maker_tags.rs
+
 install:
 	cargo install --path crates/pico
 	install -Dm644 docs/logo/pico.svg $(HOME)/.local/share/icons/hicolor/scalable/apps/pico.svg

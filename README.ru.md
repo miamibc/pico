@@ -322,6 +322,13 @@ CC BY 4.0) и [Natural Earth](https://www.naturalearthdata.com/) (страны, 
   `gAMA`, `sRGB`, `iCCP`, текстовые блоки, `eXIf`) и «Raw profile type» ImageMagick.
 - WebP — [описание контейнера RIFF](https://developers.google.com/speed/webp/docs/riff_container).
 - Видео — вывод [ffprobe](https://ffmpeg.org/ffprobe.html).
+- HEIC, HEIF и AVIF — EXIF находится по блокам элементов
+  [ISO/IEC 23008-12](https://www.iso.org/standard/83650.html).
+- Заметки производителей камер (MakerNote) — названия записей и значения из
+  таблиц [ExifRead](https://github.com/ianare/exif-py) (BSD-3-Clause;
+  `crates/pico-core/src/maker_tags.rs`, `make maker-tags`), расчёты — по
+  [таблицам ExifTool](https://exiftool.org/TagNames/). Сказанное в заметках
+  сверяется с EXIF и XMP, и расходящиеся поля получают значок «!».
 
 Все сторонние пакеты и тексты их лицензий видны в **Help → About**; список
 лежит в `crates/pico/assets/licenses.txt` и обновляется командой

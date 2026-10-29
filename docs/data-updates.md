@@ -89,6 +89,34 @@ The other formats (XMP, IPTC, ICC, PNG, WebP) are parsed according to their
 specifications, linked in the "For developers" section of `README.md`. They
 hardly ever change and need no separate updates.
 
+## Camera makers' notes (MakerNote)
+
+```sh
+make maker-tags
+```
+
+What it does: downloads ExifRead (a Python EXIF reader under BSD-3-Clause,
+<https://github.com/ianare/exif-py>; the version is `EXIFREAD` in the
+`Makefile`) and `crates/pico-core/data/make_maker_tags.py` reads its makers'
+tables (Canon, Nikon, Olympus, Fujifilm, Sony, Casio, Apple, DJI) into
+`crates/pico-core/src/maker_tags.rs`: entry names and what their values mean.
+The tables are Python dict literals and are read with `ast`, never run.
+
+Pico reads the notes in `crates/pico-core/src/maker_notes.rs`. What is
+written there by hand comes first: names of the entries compared with EXIF,
+and values that take arithmetic (Canon's EV, ISO and times, Nikon's clock and
+time zone, Olympus's directories). The generated tables fill in the rest.
+
+Then:
+
+1. `git diff crates/pico-core/src/maker_tags.rs` — new cameras in Canon's
+   Model ID, new entries.
+2. ExifRead is not ExifTool: where a table disagrees with what cameras
+   write (Canon's AF Info 2 is one place off), leave it out or cut it in
+   `TABLES` / `LAST_FIXED` of the script.
+3. `make check`, and look at **Properties** on photos from those makers.
+4. Commit `maker_tags.rs` and the script, if it changed.
+
 ## Licenses
 
 ```sh
@@ -141,6 +169,12 @@ show in the EXIF section under the maker's name and are checked against EXIF:
 
 Canon's lists start with their own length; when they do not, an editor moved
 the notes without fixing their offsets, and the Maker Note row says so.
+
+Adobe's tools copy what the notes say into XMP's `aux:` properties: Serial
+Number, Lens Serial Number, Owner Name and Firmware are checked against the
+notes and EXIF too (serial numbers by their letters and digits, firmware by
+its version number). XMP's other copies of EXIF tags may be written their own
+way ("2.20" and "220", "Inches" and "Inch") and still agree.
 
 Besides that, every XMP property from the `exif:` and `tiff:` namespaces is a
 copy of the EXIF tag of the same name (`exif:ExposureTime` ↔ Exposure Time) and
