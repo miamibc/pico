@@ -73,29 +73,32 @@ tests), `make testdata` (a test library in `testdata/library`, see
   with GPS, grouped by place: the nearest city, otherwise the country, sea or
   ocean, continent; works offline) and **Folders**.
   Folders given on the command line or added with
-  **File → Add Folder to Pico…** (also **Tools → Folder Manager…**) are
-  remembered. Folder Manager shows the disk tree on the left and, for the
+  **File → Add Folder to Pico…** are remembered. Folder Manager shows the disk tree on the left and, for the
   selected folder, **Watch for photos** or **Leave out of Pico** on the right.
   The rule of the nearest folder wins: you can watch `~/Pictures`, leave out
   `~/Pictures/Screenshots`, and inside it turn one folder back on. The path can
   be typed in or picked with the system dialog (**Browse…**). Changes apply on
   **OK**; the files themselves are not touched.
-- The **Photo Tray** at the bottom: while it is empty, it shows the selection;
-  **Hold** (**Ctrl+H**) puts the selected photos into the tray, and they stay
-  there as you move between folders. The **Slideshow**, **Export…**, **Make a
-  Collage…** and **Make a Movie…** buttons work on the tray (or on the
-  selection if the tray is empty); **Remove** takes the selected photos out of
-  the tray, **Clear** empties it. A **Photo Tray** section appears on the left.
-  No files are moved.
-- Thumbnail size: the slider at the bottom right or **Ctrl+wheel** over the
-  photos (pinch on a touchpad); **Ctrl+1** / **Ctrl+2** — small and normal.
+- The **Photo Tray** is hidden until **View → Photo Tray** turns it on; albums
+  do its job for most. Then it sits at the bottom: while it is empty, it shows
+  the selection; **Hold** (**Ctrl+H**) puts the selected photos into the tray,
+  and they stay there as you move between folders. The **Slideshow**,
+  **Export…**, **Make a Collage…** and **Make a Movie…** buttons work on the
+  tray (or on the selection if the tray is empty); **Unhold** takes photos out
+  of it, **Clear** empties it. A **Photo Tray** section appears on the left. No
+  files are moved.
+- Thumbnail size: **View → Thumbnail size** or **Ctrl+wheel** over the photos
+  (pinch on a touchpad); **Ctrl+1** / **Ctrl+2** — small and normal.
+- The wheel scrolls the thumbnails with some weight: they glide on a little
+  and spring back at the top and bottom (**Tools → Options… → Animations**
+  turns it off).
 - You can select with a rectangle: drag the mouse across the thumbnails (with
   **Ctrl** — add to the selection). Near the edge of the window the grid
   scrolls by itself.
 - **Drag and drop.** Thumbnails (all selected ones at once) can be dropped on
   a folder on the left — Pico asks and moves the files together with their
   captions, stars, edits and saved original; on an album — to add them to the
-  album; on the tray — to put them in the tray. Folders (and files — by their
+  album; on the tray (when shown) — to put them in the tray. Folders (and files — by their
   folder) from a file manager can be dropped right into the Pico window, and
   they are added to the library.
 - Right click on a thumbnail opens a menu: star, rotate, album, hide, export,
@@ -104,18 +107,20 @@ tests), `make testdata` (a test library in `testdata/library`, see
   Right click on a folder on the left: slideshow, locate on disk, copy path,
   rescan, remove from Pico.
 - The sections on the left (**Albums**, **Folders**, **Timeline**, **Places**)
-  can be collapsed. The **…** button next to **Folders** (or **View → Folder
-  List**): a flat list or a tree (folders where they sit on the disk), sorted
+  can be collapsed. The **…** button next to **Folders**: a flat list or a tree (folders where they sit on the disk), sorted
   by name, date (newest first, grouped by year), recent changes or size.
 - Folders are shown on the right as one continuous ribbon, as in Picasa: each
   has a header with its name, photo count, months taken and description.
   Clicking a folder on the left scrolls the ribbon to it, and while scrolling
   the folder at the top is highlighted. Arrow keys, the viewer and the
-  slideshow stay within one folder.
+  slideshow stay within one folder. Albums, months of the **Timeline** and
+  **Places** follow one another in a ribbon of their own the same way; a photo
+  clicked in the next one makes that one current.
 - On the right are the thumbnails. Double click or **Enter** opens a photo;
   double click on the open photo (or **Esc**) returns to the library.
 - Above the open photo is a filmstrip of the neighbouring shots; clicking a
-  thumbnail opens it. The filmstrip can be hidden: **View → Filmstrip**.
+  thumbnail opens it. The filmstrip can be hidden: **View → Filmstrip**. The
+  bar below the photo takes more rows where the window is narrow.
 - The mouse wheel over a photo flips through the shots, **Ctrl+wheel** (or a
   pinch on a touchpad) zooms around the pointer. At the bottom are **Fit**,
   **1:1** and a slider up to 800%; a zoomed photo can be dragged with the
@@ -126,9 +131,6 @@ tests), `make testdata` (a test library in `testdata/library`, see
   one too) and file size; for a video — frame size and duration.
 - **Original** at the bottom (or the **\\** key): while the button is held, you
   see the photo without edits — handy for comparing before and after.
-- At the bottom of the **Edit** panel are a histogram (red, green, blue; it
-  follows the edits) and camera data: model, shutter speed, aperture, ISO,
-  focal length.
 - **Undo** (**Ctrl+Z**) removes the last edit, **Redo** (**Ctrl+Y** or
   **Ctrl+Shift+Z**) brings it back. After **Undo All Edits**, Redo brings the
   edits back one by one. A new edit clears the Redo history.
@@ -144,19 +146,25 @@ tests), `make testdata` (a test library in `testdata/library`, see
 - Badges in the corner of a thumbnail: **✏** — the photo has edits, **📍** —
   it is known where it was taken (the tooltip says the same).
 - The **★** button next to the search shows only starred photos, **▶** — only
-  videos (the same is in the **View** menu).
+  videos.
 - **View**: thumbnail size, captions under them (file name, caption, tags),
-  sorting (by name, date taken, size, reversed), showing hidden photos,
-  slideshow.
+  sorting (by name, date taken, size, reversed), showing hidden photos, the
+  Photo Tray, slideshow.
 - **Alt+Enter** (or **View → Properties and Tags**) opens a panel on the right
-  with the photo's properties (size, resolution, camera, shutter speed, ISO,
-  GPS…) and tags. Below them is all of the file's metadata by section (Pico
+  with the photo's histogram (red, green, blue, with the edits; the same in the
+  library and the viewer), properties (size, resolution, camera, shutter speed,
+  ISO, GPS…) and tags. Below them is all of the file's metadata by section (Pico
   remembers which are open and which are collapsed between runs): every EXIF
   field (internal and binary ones in hex), XMP, IPTC, the ICC profile, JPEG,
-  PNG and WebP headers, video tags. If fields with the same meaning disagree
-  (author, title, description, rights, keywords, dates, software, rating,
-  lens — in EXIF, XMP, IPTC and PNG; copies of EXIF tags in XMP), each of them
-  gets a "!" badge, and the tooltip shows all the values. The coordinates in
+  PNG and WebP headers, video tags, and the camera maker's notes (MakerNote:
+  Canon, Nikon, Olympus, Fujifilm, Sony, Casio, Apple, DJI), read out where
+  their meaning is known. If fields with the same meaning disagree (author,
+  title, description, rights, keywords, dates, software, rating, lens — in
+  EXIF, XMP, IPTC and PNG; copies of EXIF tags in XMP; the camera's settings,
+  serial numbers, owner and clock in the maker's notes against EXIF and XMP),
+  each of them gets a "!" badge, and the tooltip shows all the values. Maker's
+  notes moved by an editor without fixing them say so. Such traces tell an
+  edited file from one straight out of the camera. The coordinates in
   the **GPS** row are gathered from EXIF, XMP and video tags and work as a
   link: they open the place on OpenStreetMap in the browser; if the sources
   disagree, they get a "!" badge too. The **📋 Copy** icon to the right of the
@@ -247,8 +255,8 @@ previous and next, **−/+** — display time, **Esc** — exit.
   macOS trash).
 - **Tools → Show Duplicate Files** finds identical files across the whole
   library.
-- **Tools → Options…** — size and cleanup of the thumbnail cache, whether
-  ffmpeg was found.
+- **Tools → Options…** — theme, animations, language, size and cleanup of the
+  thumbnail cache, whether ffmpeg was found. Changes are kept at once.
 
 ## Keyboard shortcuts
 
@@ -259,7 +267,7 @@ The full list is also in the program itself: **Help → Keyboard Shortcuts**
 |---|---|---|
 | Library | arrows, Enter (or Ctrl+3) | select, open |
 | Library | Home / End, PgUp / PgDn | first / last, page up / down |
-| Library | Ctrl+H | hold in the tray |
+| Library | Ctrl+H | hold in the tray (when shown) |
 | Library | S | star |
 | Everywhere | Ctrl+R / Ctrl+Shift+R | rotate clockwise / counterclockwise |
 | Library | Ctrl+Shift+E / Ctrl+Shift+B | I'm Feeling Lucky / B&W |
@@ -274,12 +282,17 @@ The full list is also in the program itself: **Help → Keyboard Shortcuts**
 | Photo | \\ (hold) | show the original |
 | Photo | F11 | full screen |
 
-## Appearance
+## Appearance and language
 
-**Tools → Options → Look**: theme as in the system (the default), dark or
+**Tools → Options… → Look**: theme as in the system (the default), dark or
 light. "As in the system" on Linux follows the desktop settings (the XDG
 portal: GNOME, KDE and others) and changes at once, without a restart. Photos
 in the viewer and the slideshow are always on a dark background.
+**Animations** turns the flying star and the scrolling with weight on or off.
+
+**Language**: as in the system (the default), English or Russian; it changes at
+once. Translations are gettext `.po` files in `crates/pico/po`; how to add a
+language is in `crates/pico/po/README.md`.
 
 ## Where things are stored
 
@@ -289,8 +302,8 @@ in the viewer and the slideshow are always on a dark background.
 - `~/.config/pico/watched_folders.txt` and `excluded_folders.txt` — the
   library's folders and the ones left out of it.
 - `~/.config/pico/settings.txt` — what Pico remembers between runs: thumbnail
-  size, captions, sorting, the filmstrip, the folder list view, the properties
-  panel, the window size, the widths of the left and right panels, which
+  size, captions, sorting, the filmstrip, the Photo Tray, the folder list view,
+  the properties panel, theme, language, animations, the window size, the widths of the left and right panels, which
   sections on the left and in the properties panel are open, and the last open
   folder (`key=value` lines, can be edited by hand; written a second after a
   change and on exit).
@@ -303,16 +316,18 @@ in the viewer and the slideshow are always on a dark background.
 - `crates/pico-core` — everything without a UI: `.picasa.ini` (`ini`, `meta`),
   collages (`collage`), the edit stack (`filters`, `rect64`), effects
   (`adjust`, `effects`, `ops`, `render`), files (`media`, `library`, `export`,
-  `fileops`), metadata (`exif`, `exif_tags`, `xmp`, `metadata`), albums
+  `fileops`), metadata (`exif`, `exif_tags`, `maker_notes`, `maker_tags`,
+  `xmp`, `metadata`, and `agree` for the fields that must agree), albums
   (`album_file`), thumbnails, video and movies (`thumbnail`, `video`, `movie`),
   settings (`config`).
 - `crates/pico` — the egui app: library (`app`, `grid`), collages
   (`collage_view`), properties and tags (`info`), viewing and editing
-  (`viewer`, `tools`), video (`player`), slideshow (`slideshow`), windowless UI
-  tests (`tests`, screenshots in `target/ui-shots/`).
+  (`viewer`, `tools`), video (`player`), slideshow (`slideshow`), translations
+  (`i18n`, the texts in `po/`), windowless UI tests (`tests`, screenshots in
+  `target/ui-shots/`).
 - `docs/` — project notes, release notes
   (`releases/`), an analysis of the Picasa 3 formats, and how to update rarely
-  changing data — places, EXIF tags, licenses — and which metadata fields must
+  changing data — places, EXIF tags, makers' notes, licenses — and which metadata fields must
   agree (`data-updates.md`).
 - `research/` — reverse-engineering material (not in git).
 
