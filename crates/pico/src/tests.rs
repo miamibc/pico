@@ -64,6 +64,16 @@ fn wait_until(harness: &mut Harness<'_, PicoApp>, what: &str, done: impl Fn(&Pic
     harness.step();
 }
 
+/// Steps the UI until a node labelled `label` shows (background work).
+fn wait_for_label(harness: &mut Harness<'_, PicoApp>, label: &str) {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while harness.query_by_label(label).is_none() {
+        assert!(Instant::now() < deadline, "timed out waiting for {label}");
+        harness.step();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
 /// Saves a screenshot for eyeballing; skipped where no GPU adapter exists.
 fn screenshot(harness: &mut Harness<'_, PicoApp>, name: &str) {
     let Ok(image) = harness.render() else { return };
@@ -351,20 +361,31 @@ fn hold_original_to_compare() {
 }
 
 #[test]
-fn histogram_and_camera_over_the_photo() {
+fn histogram_in_properties() {
     let fixture = Fixture::new("histogram");
     let mut harness = harness(&fixture.dir);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    // In the library, for the photo picked.
+    harness.get_by_label("b.png").click();
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    wait_for_label(&mut harness, "Histogram");
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    harness.run_steps(3);
+
+    // In the viewer.
     harness.state_mut().open_file_named("a.png");
     wait_until(&mut harness, "the photo to load", |app| app.viewer_loaded());
     harness.step();
-    assert!(harness.query_by_label("Histogram").is_none(), "hidden until asked for");
-    harness.get_by_label("Info").click();
-    harness.step();
+    assert!(harness.query_by_label("Histogram").is_none(), "hidden with Properties");
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    wait_for_label(&mut harness, "Histogram");
+    harness.get_by_label("No camera details in this file.");
+    screenshot(&mut harness, "histogram");
+
+    // Back in the library it is the very same, there at once.
+    harness.key_press(Key::Escape);
     harness.step();
     harness.get_by_label("Histogram");
-    harness.get_by_label("No camera details. A screenshot, perhaps?");
-    screenshot(&mut harness, "histogram");
 }
 
 #[test]
@@ -574,6 +595,50 @@ fn albums_of_photos_all_outside_pico_can_be_arranged() {
 }
 
 #[test]
+fn albums_follow_one_another_in_one_ribbon() {
+    let fixture = Fixture::new("album-ribbon");
+    std::fs::write(
+        fixture.dir.join(".picasa.ini"),
+        "[.album:aa11]\r\nname=Trip\r\ntoken=aa11\r\n[.album:bb22]\r\nname=Home\r\ntoken=bb22\r\n\
+         [a.png]\r\nalbums=aa11\r\n[b.png]\r\nalbums=aa11,bb22\r\n[c.png]\r\nalbums=bb22\r\n",
+    )
+    .unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().open_album("Trip");
+    harness.step();
+    harness.step();
+    // Both albums are in the grid in list order, each under its header; b
+    // is in both.
+    let trip = harness.get_by_label("Trip, 2 photos  ·  October 2026").rect();
+    let home = harness.get_by_label("Home, 2 photos  ·  October 2026").rect();
+    assert!(home.top() < trip.top(), "{home:?} {trip:?}");
+    assert_eq!(harness.get_all_by_label("b.png").count(), 2);
+    screenshot(&mut harness, "album-ribbon");
+
+    // Clicking a photo of another album makes that album current.
+    harness.get_by_label("c.png").click();
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["b.png", "c.png"]);
+
+    // Photos are arranged within their own album only.
+    let a = harness.get_by_label("a.png").rect();
+    let home_b =
+        harness.get_all_by_label("b.png").map(|n| n.rect()).min_by(|x, y| x.top().total_cmp(&y.top())).unwrap();
+    drag_to(&mut harness, a.center(), home_b.left_center() - egui::vec2(2.0, 0.0));
+    assert!(!harness.state().album_file_text("bb22").contains("a.png"), "{}", harness.state().album_file_text("bb22"));
+    let c = harness.get_by_label("c.png").rect();
+    drag_to(&mut harness, c.center(), home_b.left_center() - egui::vec2(2.0, 0.0));
+    let text = harness.state().album_file_text("bb22");
+    let at = |name: &str| text.find(&format!(">{}</filename>", fixture.dir.join(name).display())).unwrap_or(usize::MAX);
+    assert!(at("c.png") < at("b.png"), "{text}");
+    harness.state_mut().open_album("Trip");
+    harness.state_mut().sort("custom", false);
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["a.png", "b.png"], "Trip keeps its order");
+}
+
+#[test]
 fn albums_keep_a_custom_order() {
     let fixture = Fixture::new("custom-order");
     std::fs::write(
@@ -714,6 +779,7 @@ fn photo_tray_holds_photos_across_folders() {
     std::fs::create_dir_all(fixture.dir.join("more")).unwrap();
     RgbImage::from_pixel(60, 40, Rgb([200, 200, 0])).save(fixture.dir.join("more/d.png")).unwrap();
     let mut harness = harness(&fixture.dir);
+    harness.state_mut().show_tray(true);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 2);
     harness.get_by_label("Holiday  (3)").click();
     harness.step();
@@ -770,6 +836,7 @@ fn tray_thumbnails_open_the_viewer_and_unhold() {
         .with_step_dt(0.05)
         .build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![dir], false));
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().show_tray(true);
     harness.get_by_label("a.png").click();
     harness.step();
     harness.get_by_label("c.png").click_modifiers(Modifiers::COMMAND);
@@ -826,9 +893,10 @@ fn tray_thumbnails_open_the_viewer_and_unhold() {
 }
 
 #[test]
-fn thumbnail_size_by_slider_and_ctrl_wheel() {
+fn thumbnail_size_by_ctrl_wheel() {
     let fixture = Fixture::new("thumb-size");
     let mut harness = harness(&fixture.dir);
+    harness.state_mut().show_tray(true);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
     assert_eq!(harness.state().thumbnail_size(), 160.0);
     harness.hover_at(harness.get_by_label("b.png").rect().center());
@@ -838,7 +906,8 @@ fn thumbnail_size_by_slider_and_ctrl_wheel() {
     harness.event(egui::Event::Zoom(4.0));
     harness.step();
     assert_eq!(harness.state().thumbnail_size(), 256.0, "no bigger than the largest size");
-    harness.get_by_label("Thumbnail size (Ctrl+wheel over the photos)");
+    // The size is in the View menu only, even with the tray shown.
+    assert!(harness.query_by_role(egui::accesskit::Role::Slider).is_none());
     screenshot(&mut harness, "thumb-size");
 }
 
@@ -894,6 +963,7 @@ fn drag_photos_to_folders_and_the_tray_and_drop_folders_in() {
     std::fs::create_dir_all(fixture.dir.join("more")).unwrap();
     RgbImage::from_pixel(60, 40, Rgb([200, 200, 0])).save(fixture.dir.join("more/d.png")).unwrap();
     let mut harness = harness(&fixture.dir);
+    harness.state_mut().show_tray(true);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 2);
     harness.get_by_label("Holiday  (3)").click();
     harness.step();
@@ -1231,6 +1301,7 @@ fn settings_come_back_next_time() {
 fn keyboard_shortcuts_window() {
     let fixture = Fixture::new("shortcuts");
     let mut harness = harness(&fixture.dir);
+    harness.state_mut().show_tray(true);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
     harness.get_by_label("Help").click();
     harness.step();
@@ -1464,7 +1535,9 @@ fn crop_tool_drag_on_rotated_photo_and_straighten() {
     wait_until(&mut harness, "the rotated photo", |app| app.viewer_loaded());
 
     harness.get_by_label("Crop").click();
-    harness.step();
+    // The bar loses its zoom controls and may take fewer rows; the photo
+    // settles a few frames later.
+    harness.run_steps(4);
     let photo = harness.get_by_label("Photo").rect();
     // Select the top-left quarter of the photo as shown (rotated clockwise).
     harness.drag_at(photo.min + egui::vec2(1.0, 1.0));
@@ -1896,7 +1969,7 @@ fn jpeg_with_metadata(path: &Path, description: &str) {
         t.extend_from_slice(&n.to_le_bytes());
         t.extend_from_slice(&value.to_le_bytes());
     };
-    let gps_at = exif_at + 2 + 12 + 4;
+    let gps_at = exif_at + 2 + 2 * 12 + 4;
     tiff.extend_from_slice(&4u16.to_le_bytes());
     entry(&mut tiff, 0x010e, 2, description.len() as u32, text_at as u32);
     entry(&mut tiff, 0x013b, 2, artist.len() as u32, (text_at + description.len()) as u32);
@@ -1905,9 +1978,10 @@ fn jpeg_with_metadata(path: &Path, description: &str) {
     tiff.extend_from_slice(&0u32.to_le_bytes());
     tiff.extend_from_slice(description.as_bytes());
     tiff.extend_from_slice(artist.as_bytes());
-    // The EXIF directory: Exposure Program 1, manual.
-    tiff.extend_from_slice(&1u16.to_le_bytes());
+    // The EXIF directory: Exposure Program 1, manual; the flash fired.
+    tiff.extend_from_slice(&2u16.to_le_bytes());
     entry(&mut tiff, 0x8822, 3, 1, 1);
+    entry(&mut tiff, 0x9209, 3, 1, 1);
     tiff.extend_from_slice(&0u32.to_le_bytes());
     // The GPS directory: 59° 26' N, 24° 45' E.
     let rationals = gps_at + 2 + 4 * 12 + 4;
@@ -1967,9 +2041,15 @@ fn properties_show_every_field_without_widening() {
     harness.get_by_label(name).click();
     harness.step();
     harness.step();
+    // The histogram comes from the background; the sections settle under it.
+    wait_for_label(&mut harness, "Histogram");
+    harness.run_steps(2);
     // The sections start closed; opened ones stay open, also after a restart.
     assert!(harness.query_by_label("Exposure Program").is_none(), "closed at first");
     for section in ["EXIF", "XMP", "IPTC", "JPEG"] {
+        // Lower ones may be out of sight, under the histogram and EXIF.
+        harness.get_by_label(section).scroll_to_me();
+        harness.run();
         harness.get_by_label(section).click();
         // Let the section finish opening, so the next header stands still.
         harness.run();
@@ -2093,7 +2173,7 @@ fn albums_create_open_add_and_remove() {
     assert_eq!(harness.state().listing_names(), ["a.png", "c.png"]);
     harness.get_by_label("a.png").click();
     harness.step();
-    harness.get_by_label("Picture").click();
+    harness.get_by_label("File").click();
     harness.step();
     harness.step();
     harness.get_by_label("Remove from Album").click();
@@ -2168,10 +2248,10 @@ fn tools_duplicates_folder_manager_and_options() {
     harness.get_by_label("Clear Thumbnail Cache");
     screenshot(&mut harness, "options");
 
-    harness.get_by_label("Tools").click();
+    harness.get_by_label("File").click();
     harness.step();
     harness.step();
-    harness.get_by_label("Folder Manager…").click();
+    harness.get_by_label("Add Folder to Pico…").click();
     harness.step();
     harness.step();
     // The manager opens on the watched folder; typing extends its path.
@@ -2192,10 +2272,10 @@ fn tools_duplicates_folder_manager_and_options() {
     wait_until(&mut harness, "the rescan", |app| app.folder_count() == 1);
     assert_eq!(harness.state().watched_count(), 1);
 
-    harness.get_by_label("Tools").click();
+    harness.get_by_label("File").click();
     harness.step();
     harness.step();
-    harness.get_by_label("Folder Manager…").click();
+    harness.get_by_label("Add Folder to Pico…").click();
     harness.step();
     harness.step();
     harness.get_by_label("Leave out of Pico").click();
@@ -2227,6 +2307,14 @@ fn timeline_groups_by_month() {
     harness.get_by_label("March 2021  (2)").click();
     harness.step();
     assert_eq!(harness.state().listing_names(), ["c.png", "a.png"], "in the order they were taken");
+    // The months follow one another in one ribbon, newest first.
+    let june = harness.get_by_label("June 2021, 1 photo").rect();
+    let march = harness.get_by_label("March 2021, 2 photos").rect();
+    assert!(june.top() < march.top(), "{june:?} {march:?}");
+    // Clicking a photo of another month makes that month current.
+    harness.get_by_label("b.png").click();
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["b.png"]);
     harness.state_mut().open_month("2021:06");
     assert_eq!(harness.state().listing_names(), ["b.png"]);
     assert!(harness.state().place_keys().is_empty(), "no GPS, no places");
@@ -2306,4 +2394,151 @@ fn picture_collage_previews_saves_and_files_into_album() {
     harness.key_press(Key::Escape);
     harness.step();
     assert!(!harness.state().in_collage());
+}
+
+#[test]
+fn speaks_russian() {
+    let fixture = Fixture::new("russian");
+    jpeg_with_metadata(&fixture.dir.join("meta.jpg"), "Sea");
+    // Back to English for the other tests, also when this one fails.
+    struct English;
+    impl Drop for English {
+        fn drop(&mut self) {
+            crate::i18n::set_language(Some("en"));
+        }
+    }
+    let _english = English;
+    crate::i18n::set_language(Some("ru_RU.UTF-8"));
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("Библиотека");
+    harness.get_by_label("Holiday, 4 фотографии  ·  Октябрь 2026");
+    harness.get_by_label("Файл").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Добавить папку в Pico…");
+    screenshot(&mut harness, "russian");
+
+    // Properties: what the metadata says, in Russian too.
+    harness.key_press(Key::Escape);
+    harness.step();
+    harness.get_by_label("meta.jpg").click();
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    harness.run_steps(3);
+    harness.get_by_label("Вспышка");
+    harness.get_by_label("Сработала");
+    harness.get_by_label("Размер файла");
+}
+
+#[test]
+fn options_switch_animations_and_language() {
+    let fixture = Fixture::new("options");
+    struct English;
+    impl Drop for English {
+        fn drop(&mut self) {
+            crate::i18n::set_language(Some("en"));
+        }
+    }
+    let _english = English;
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("Tools").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Options…").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Animations").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Settings saved and written down. All in order!");
+    let ctx = harness.ctx.clone();
+    let settings = harness.state().settings_for_test(&ctx);
+    assert_eq!(settings.get("animations").map(String::as_str), Some("false"));
+    assert_eq!(settings.get("language").map(String::as_str), Some("auto"));
+
+    // Another language speaks at once, and is remembered.
+    harness.get_by_role(egui::accesskit::Role::ComboBox).click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Русский").click();
+    // The window's title is new, so it is a new window: unseen for a frame.
+    for _ in 0..3 {
+        harness.step();
+    }
+    harness.get_by_label("Язык");
+    screenshot(&mut harness, "options-russian");
+    // Each change is kept at once and said in turn three ways.
+    harness.get_by_label("Записал. Pico не забудет.");
+    let settings = harness.state().settings_for_test(&ctx);
+    assert_eq!(settings.get("language").map(String::as_str), Some("ru"));
+}
+
+#[test]
+fn photo_tray_is_hidden_until_shown() {
+    let fixture = Fixture::new("tray-hidden");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    assert!(harness.query_by_label("Hold").is_none(), "no tray");
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::H);
+    harness.step();
+    assert_eq!(harness.state().tray_len(), 0, "Ctrl+H does nothing");
+
+    harness.get_by_label("View").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Photo Tray").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Hold");
+    let ctx = harness.ctx.clone();
+    let settings = harness.state().settings_for_test(&ctx);
+    assert_eq!(settings.get("tray").map(String::as_str), Some("true"));
+}
+
+#[test]
+fn viewer_bar_never_runs_under_the_properties_panel() {
+    let fixture = Fixture::new("viewer-bar-fit");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    harness.run_steps(6);
+    let edge = harness.get_by_label("Properties").rect().left();
+    let slider = harness.get_by_role(egui::accesskit::Role::Slider).rect();
+    assert!(slider.right() < edge, "the zoom slider reaches {}, the panel starts at {edge}", slider.right());
+    // The caption field, not the tag field in the panel.
+    let caption = harness
+        .get_all_by(|n| n.role() == egui::accesskit::Role::TextInput)
+        .map(|n| n.rect())
+        .find(|r| r.left() < edge)
+        .expect("the caption field");
+    assert!(caption.right() < edge + 1.0, "the caption reaches {}, the panel starts at {edge}", caption.right());
+    screenshot(&mut harness, "viewer-bar-fit");
+}
+
+#[test]
+fn filmstrip_stays_put_at_the_last_photos() {
+    let fixture = Fixture::new("filmstrip-end");
+    for k in 0..40 {
+        RgbImage::from_pixel(30, 20, Rgb([k * 6, 90, 90])).save(fixture.dir.join(format!("f{k:02}.png"))).unwrap();
+    }
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().open_file_named("f36.png");
+    harness.run_steps(3);
+    for _ in 0..3 {
+        harness.key_press(Key::ArrowRight);
+        // Where the last thumbnail sits, frame after frame: it never moves.
+        let mut seen = Vec::new();
+        for _ in 0..4 {
+            harness.step();
+            seen.push(harness.get_by_label("f39.png").rect().left());
+        }
+        assert!(seen.windows(2).all(|w| w[0] == w[1]), "the strip jerks: {seen:?}");
+    }
 }

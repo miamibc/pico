@@ -11,14 +11,13 @@ use crate::tools::{self, CropTool, Tool, ToolAction};
 use eframe::egui;
 use pico_core::adjust;
 use pico_core::effects::{self, Group, ParamValue};
-use pico_core::exif;
 use pico_core::filters::{Filter, FilterStack, Value};
 use pico_core::image::DynamicImage;
 use pico_core::image::imageops::FilterType;
-use pico_core::library::{self, MediaFile};
+use pico_core::library::MediaFile;
 use pico_core::media::MediaKind;
 use pico_core::meta::PhotoMeta;
-use pico_core::render::{self, Histogram};
+use pico_core::render;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, channel};
@@ -53,14 +52,17 @@ pub enum ViewerAction {
 /// A decoded working copy and its scale, or why decoding failed.
 type BaseResult = Result<(DynamicImage, f32), String>;
 
-/// A rendered picture and its levels.
-type Rendered = (egui::ColorImage, Box<Histogram>);
+/// A rendered picture.
+type Rendered = egui::ColorImage;
 
 /// Width and height in pixels.
 type Size = (u32, u32);
 
 /// What a texture shows: the file plus the edits it was rendered with.
 type RenderKey = (PathBuf, String);
+
+/// Room Fit, 1:1 and the zoom slider with its value take in the bar.
+const ZOOM_CONTROLS_WIDTH: f32 = 280.0;
 
 #[derive(Default)]
 pub struct Viewer {
@@ -69,19 +71,12 @@ pub struct Viewer {
     base_loading: Option<(PathBuf, Receiver<BaseResult>)>,
     texture: Option<(RenderKey, egui::TextureHandle)>,
     rendering: Option<(RenderKey, Receiver<Rendered>)>,
-    /// Levels of the picture on screen, edits included.
-    histogram: Option<(RenderKey, Box<Histogram>)>,
-    /// Camera details from EXIF, read when the photo opens.
-    camera: Option<(PathBuf, Vec<(&'static str, String)>)>,
     error: Option<String>,
     caption: String,
     caption_for: Option<PathBuf>,
     /// Uncommitted edits while a slider is being dragged.
     draft: Option<(PathBuf, FilterStack)>,
     show_edit_panel: bool,
-    /// Histogram and camera settings over the photo, as Picasa's "Histogram &
-    /// Camera Information".
-    show_camera_info: bool,
     /// The open Crop or Straighten tool and the file it belongs to.
     tool: Option<(PathBuf, Tool)>,
     player: Player,
@@ -119,6 +114,8 @@ pub struct Viewer {
     star_puff: Option<star::Puff>,
     /// The space the photo or video is shown in.
     photo_area: Option<egui::Rect>,
+    /// Starring shows no flying star (Options > Animations off).
+    pub still: bool,
 }
 
 impl Viewer {
@@ -127,7 +124,7 @@ impl Viewer {
         let action = self.show_photo(ui, file, position);
         let now = ui.input(|i| i.time);
         let Some(area) = self.photo_area else { return action };
-        if matches!(action, Some(ViewerAction::ToggleStar)) {
+        if matches!(action, Some(ViewerAction::ToggleStar)) && !self.still {
             if file.meta.star {
                 self.star_flight = None;
                 self.star_puff = Some(star::Puff::new(now));
@@ -195,10 +192,6 @@ impl Viewer {
             let size =
                 (file.kind == MediaKind::Photo).then(|| pico_core::image::image_dimensions(&file.path).ok()).flatten();
             self.header_size = Some((file.path.clone(), size));
-            const CAMERA_FIELDS: [&str; 5] = ["Camera", "Exposure", "Aperture", "ISO", "Focal length"];
-            let fields = exif::read(&file.path).map_or_else(Vec::new, |e| e.fields);
-            let fields = fields.into_iter().filter(|(label, _)| CAMERA_FIELDS.contains(label)).collect();
-            self.camera = Some((file.path.clone(), fields));
         }
         if self.caption_for.as_ref() != Some(&file.path) {
             self.caption = file.meta.caption.clone().unwrap_or_default();
@@ -238,9 +231,6 @@ impl Viewer {
         self.update_rendering(ui.ctx(), file, &meta);
         self.update_original(ui.ctx(), file);
         let picture_action = egui::CentralPanel::no_frame().show(ui, |ui| self.picture(ui, &meta)).inner;
-        if self.show_camera_info {
-            self.camera_info(ui.ctx(), file);
-        }
         self.update_detail(ui.ctx(), file, &meta);
         if action.is_none() && picture_action.is_some() {
             return picture_action;
@@ -322,67 +312,78 @@ impl Viewer {
 
     fn toolbar(&mut self, ui: &mut egui::Ui, file: &MediaFile, position: (usize, usize)) -> Option<ViewerAction> {
         let mut action = None;
-        ui.horizontal(|ui| {
-            if ui.button("⬅ Back to Library").on_hover_text("Esc").clicked() {
+        // Wraps onto a second row where the window is too narrow for it all,
+        // rather than running under the Properties panel.
+        ui.horizontal_wrapped(|ui| {
+            if ui.button(tr!("⬅ Back to Library")).on_hover_text("Esc").clicked() {
                 action = Some(ViewerAction::Close);
             }
             if file.kind != MediaKind::Video {
-                ui.toggle_value(&mut self.show_edit_panel, "Edit").on_hover_text("Show the edit panel");
-                ui.toggle_value(&mut self.show_camera_info, "Info").on_hover_text("Histogram & Camera Information");
+                ui.toggle_value(&mut self.show_edit_panel, tr!("Edit")).on_hover_text(tr!("Show the edit panel"));
             }
-            if ui.button("▶ Slideshow").on_hover_text("Ctrl+4").clicked() {
+            if ui.button(tr!("▶ Slideshow")).on_hover_text("Ctrl+4").clicked() {
                 action = Some(ViewerAction::Slideshow);
             }
-            if ui.button("⛶").on_hover_text("Full screen (F11; Esc to leave)").clicked() {
+            if ui.button("⛶").on_hover_text(tr!("Full screen (F11; Esc to leave)")).clicked() {
                 action = Some(ViewerAction::FullScreen(true));
             }
             ui.separator();
-            if ui.button("◀").on_hover_text("Previous (Left arrow; Home for the first)").clicked() {
+            if ui.button("◀").on_hover_text(tr!("Previous (Left arrow; Home for the first)")).clicked() {
                 action = Some(ViewerAction::Previous);
             }
             ui.label(format!("{} / {}", position.0 + 1, position.1));
-            if ui.button("▶").on_hover_text("Next (Right arrow; End for the last)").clicked() {
+            if ui.button("▶").on_hover_text(tr!("Next (Right arrow; End for the last)")).clicked() {
                 action = Some(ViewerAction::Next);
             }
             ui.separator();
-            let star = if file.meta.star { "★ Starred" } else { "☆ Star" };
+            let star = if file.meta.star { tr!("★ Starred") } else { tr!("☆ Star") };
             let button = ui.button(star).on_hover_text("S");
             self.star_button = Some(button.rect);
             if button.clicked() {
                 action = Some(ViewerAction::ToggleStar);
             }
-            if ui.button("⟲").on_hover_text("Rotate counterclockwise (Ctrl+Shift+R)").clicked() {
+            if ui.button("⟲").on_hover_text(tr!("Rotate counterclockwise (Ctrl+Shift+R)")).clicked() {
                 action = Some(ViewerAction::Rotate(-1));
             }
-            if ui.button("⟳").on_hover_text("Rotate clockwise (Ctrl+R)").clicked() {
+            if ui.button("⟳").on_hover_text(tr!("Rotate clockwise (Ctrl+R)")).clicked() {
                 action = Some(ViewerAction::Rotate(1));
             }
-            if file.kind != MediaKind::Video && self.tool.is_none() && self.texture.is_some() {
-                let edited = !file.meta.filters.0.is_empty();
+            // Shown before the photo is ready too, so the bar keeps its rows.
+            if file.kind != MediaKind::Video && self.tool.is_none() {
+                let ready = self.texture.is_some();
+                let edited = ready && !file.meta.filters.0.is_empty();
                 let button = ui
-                    .add_enabled(edited, egui::Button::new("Original"))
-                    .on_hover_text("Hold to see the photo without its edits (or hold \\)")
-                    .on_disabled_hover_text("No edits to compare with");
+                    .add_enabled(edited, egui::Button::new(tr!("Original")))
+                    .on_hover_text(tr!("Hold to see the photo without its edits (or hold \\)"))
+                    .on_disabled_hover_text(tr!("No edits to compare with"));
                 let key_held = !ui.ctx().egui_wants_keyboard_input() && ui.input(|i| i.key_down(egui::Key::Backslash));
                 self.show_original = edited && (button.is_pointer_button_down_on() || key_held);
                 ui.separator();
-                self.zoom_controls(ui);
+                // Fit, 1:1 and the slider stay together on one row.
+                if ui.available_size_before_wrap().x < ZOOM_CONTROLS_WIDTH {
+                    ui.end_row();
+                }
+                self.zoom_controls(ui, ready);
             } else {
                 self.show_original = false;
             }
             if file.kind == MediaKind::Video
                 && ui
-                    .button("Save Frame as Photo")
-                    .on_hover_text("Save the frame on screen next to the video")
+                    .button(tr!("Save Frame as Photo"))
+                    .on_hover_text(tr!("Save the frame on screen next to the video"))
                     .clicked()
             {
                 action = self.player.save_frame().map(from_player);
             }
             ui.separator();
+            // The caption takes the rest of the row, else a row of its own.
+            if ui.available_size_before_wrap().x < 200.0 {
+                ui.end_row();
+            }
             let edit = ui.add(
                 egui::TextEdit::singleline(&mut self.caption)
-                    .hint_text("Add a caption. Future you will thank you.")
-                    .desired_width(f32::INFINITY),
+                    .hint_text(tr!("Add a caption. Future you will thank you."))
+                    .desired_width(ui.available_size_before_wrap().x),
             );
             let committed = edit.lost_focus() || (edit.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
             let caption = Some(self.caption.trim().to_owned()).filter(|c| !c.is_empty());
@@ -398,8 +399,8 @@ impl Viewer {
     fn info_line(&self, ui: &mut egui::Ui, file: &MediaFile) {
         let mut parts = vec![file.name()];
         parts.push(match &file.taken {
-            Some(taken) => library::date_label(taken),
-            None => format!("file date {}", library::date_label(&file.sort_date())),
+            Some(taken) => crate::i18n::date_label(taken),
+            None => tr!("file date {date}", date = crate::i18n::date_label(&file.sort_date())),
         });
         if file.kind == MediaKind::Video {
             if let Some(video) = self.player.info() {
@@ -409,7 +410,9 @@ impl Viewer {
             }
         } else if let Some(((w, h), original)) = self.pixel_size(file) {
             parts.push(match original {
-                Some((ow, oh)) => format!("{w} × {h} (original {ow} × {oh})"),
+                Some((ow, oh)) => {
+                    tr!("{size} (original {original})", size = format!("{w} × {h}"), original = format!("{ow} × {oh}"))
+                }
                 None => format!("{w} × {h}"),
             });
         }
@@ -441,66 +444,21 @@ impl Viewer {
         Some(if near(edited.0, same.0) && near(edited.1, same.1) { (same, None) } else { (edited, Some(same)) })
     }
 
-    /// A see-through box in the photo's top right corner with its levels and
-    /// camera settings.
-    fn camera_info(&self, ctx: &egui::Context, file: &MediaFile) {
-        let Some(area) = self.photo_area else { return };
-        egui::Area::new(egui::Id::unique("camera info"))
-            .pivot(egui::Align2::RIGHT_TOP)
-            .fixed_pos(area.right_top() + egui::vec2(-10.0, 10.0))
-            .interactable(false)
-            .show(ctx, |ui| {
-                egui::Frame::new()
-                    .fill(egui::Color32::from_black_alpha(170))
-                    .corner_radius(6.0)
-                    .inner_margin(10.0)
-                    .show(ui, |ui| {
-                        ui.set_width(220.0);
-                        ui.visuals_mut().override_text_color = Some(egui::Color32::from_gray(230));
-                        self.levels_and_camera(ui, file);
-                    });
-            });
-    }
-
-    /// The histogram of the picture as edited, and the camera settings, one
-    /// to a line as in Picasa.
-    fn levels_and_camera(&self, ui: &mut egui::Ui, file: &MediaFile) {
-        let shown = self.texture.as_ref().map(|(key, _)| key);
-        if let Some((_, histogram)) = self.histogram.as_ref().filter(|(key, _)| Some(key) == shown) {
-            paint_histogram(ui, histogram);
-        }
-        let fields = self.camera.as_ref().filter(|(path, _)| path == &file.path).map(|(_, f)| f.as_slice());
-        let value = |label: &str| fields.unwrap_or_default().iter().find(|(l, _)| *l == label).map(|(_, v)| v.clone());
-        if let Some(camera) = value("Camera") {
-            ui.label(camera);
-        }
-        let settings: Vec<String> = ["Focal length", "Exposure", "Aperture", "ISO"]
-            .iter()
-            .filter_map(|label| {
-                value(label).map(|v| match *label {
-                    "ISO" => format!("ISO {v}"),
-                    "Focal length" => format!("Focal length: {v}"),
-                    _ => v,
-                })
-            })
-            .collect();
-        if settings.is_empty() && value("Camera").is_none() {
-            ui.label("No camera details. A screenshot, perhaps?");
-        }
-        for setting in settings {
-            ui.label(setting);
-        }
-    }
-
-    fn zoom_controls(&mut self, ui: &mut egui::Ui) {
+    /// Fit, 1:1 and the zoom slider; greyed out until the photo is `ready`.
+    /// About [`ZOOM_CONTROLS_WIDTH`] wide.
+    fn zoom_controls(&mut self, ui: &mut egui::Ui, ready: bool) {
         let fit = self.fit_zoom.max(0.01);
-        if ui.selectable_label(self.zoom.is_none(), "Fit").on_hover_text("Fit the photo in the window").clicked() {
+        if ui
+            .add_enabled(ready, egui::Button::selectable(self.zoom.is_none(), "Fit"))
+            .on_hover_text(tr!("Fit the photo in the window"))
+            .clicked()
+        {
             self.zoom = None;
             self.pan = egui::Vec2::ZERO;
         }
         if ui
-            .selectable_label(self.zoom == Some(1.0), "1:1")
-            .on_hover_text("One photo pixel per screen pixel")
+            .add_enabled(ready, egui::Button::selectable(self.zoom == Some(1.0), "1:1"))
+            .on_hover_text(tr!("One photo pixel per screen pixel"))
             .clicked()
         {
             self.set_zoom(1.0);
@@ -512,7 +470,11 @@ impl Viewer {
             .suffix("%")
             .fixed_decimals(0)
             .show_value(true);
-        if ui.add(slider).on_hover_text("Zoom (Ctrl+wheel; drag the photo to look around)").changed() {
+        if ui
+            .add_enabled(ready, slider)
+            .on_hover_text(tr!("Zoom (Ctrl+wheel; drag the photo to look around)"))
+            .changed()
+        {
             self.set_zoom(percent / 100.0);
         }
     }
@@ -577,19 +539,21 @@ impl Viewer {
         let mut stack = self.draft.as_ref().map_or_else(|| committed.clone(), |(_, s)| s.clone());
         let mut commit = false;
 
-        ui.heading("Basic Fixes");
+        ui.heading(tr!("Basic Fixes"));
         ui.horizontal_wrapped(|ui| {
-            if ui.button("Crop").clicked() {
+            if ui.button(tr!("Crop")).clicked() {
                 self.draft = None;
                 self.tool = Some((file.path.clone(), Tool::Crop(CropTool::default())));
             }
-            if ui.button("Straighten").clicked() {
+            if ui.button(tr!("Straighten")).clicked() {
                 self.draft = None;
                 self.tool = Some((file.path.clone(), Tool::Straighten { amount: 0.0 }));
             }
-            for (label, id) in
-                [("I'm Feeling Lucky", "enhance"), ("Auto Contrast", "autolight"), ("Auto Color", "autocolor")]
-            {
+            for (label, id) in [
+                (tr!("I'm Feeling Lucky"), "enhance"),
+                (tr!("Auto Contrast"), "autolight"),
+                (tr!("Auto Color"), "autocolor"),
+            ] {
                 if ui.button(label).clicked() {
                     stack.0.push(Filter::effect(id, []));
                     commit = true;
@@ -598,7 +562,7 @@ impl Viewer {
         });
 
         ui.separator();
-        ui.heading("Tuning");
+        ui.heading(tr!("Tuning"));
         // The sliders edit the newest Tuning edit while it is on top of the
         // stack; after any other edit they start a new one, as Picasa does.
         let on_top = stack.0.last().is_some_and(|f| f.id == "finetune2");
@@ -607,10 +571,10 @@ impl Viewer {
         let neutral = current.and_then(|f| f.color(3)).unwrap_or(0);
         let mut changed = false;
         for (value, (label, range)) in values.iter_mut().zip([
-            ("Fill Light", 0.0..=1.0),
-            ("Highlights", 0.0..=0.48),
-            ("Shadows", 0.0..=0.48),
-            ("Color Temperature", -1.0..=1.0),
+            (tr!("Fill Light"), 0.0..=1.0),
+            (tr!("Highlights"), 0.0..=0.48),
+            (tr!("Shadows"), 0.0..=0.48),
+            (tr!("Color Temperature"), -1.0..=1.0),
         ]) {
             let response = ui.add(egui::Slider::new(value, range).text(label).show_value(false));
             changed |= response.changed();
@@ -636,20 +600,20 @@ impl Viewer {
         }
 
         ui.separator();
-        ui.heading("Effects");
+        ui.heading(tr!("Effects"));
         let mut open_effect = None;
         ui.horizontal_wrapped(|ui| {
             for spec in effects::SPECS.iter().filter(|s| s.group == Group::Picasa) {
-                if ui.button(spec.label).clicked() {
+                if ui.button(crate::i18n::tr(spec.label)).clicked() {
                     open_effect = Some(spec);
                 }
             }
         });
-        egui::CollapsingHeader::new("Creative Kit").default_open(false).show(ui, |ui| {
+        egui::CollapsingHeader::new(tr!("Creative Kit")).default_open(false).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 for spec in effects::SPECS.iter().filter(|s| s.group == Group::Creative && s.id != "ReanimatedEyeColor")
                 {
-                    if ui.button(spec.label).clicked() {
+                    if ui.button(crate::i18n::tr(spec.label)).clicked() {
                         open_effect = Some(spec);
                     }
                 }
@@ -674,26 +638,25 @@ impl Viewer {
             .filter(|f| !adjust::is_supported(&f.id) && !matches!(f.id.as_str(), "moviestart" | "movieend"));
         let hidden = hidden.count();
         ui.label(match count {
-            0 => "No edits yet. The photo is perfect, apparently.".to_owned(),
-            1 => "1 edit".to_owned(),
-            n => format!("{n} edits"),
+            0 => tr!("No edits yet. The photo is perfect, apparently.").to_owned(),
+            n => trn!("{n} edit", "{n} edits", n),
         });
         if hidden > 0 {
-            ui.label(egui::RichText::new(format!("{hidden} not shown yet (kept in the file)")).weak())
-                .on_hover_text("Pico keeps edits it cannot draw yet, so Picasa still sees them.");
+            ui.label(egui::RichText::new(tr!("{n} not shown yet (kept in the file)", n = hidden)).weak())
+                .on_hover_text(tr!("Pico keeps edits it cannot draw yet, so Picasa still sees them."));
         }
         let mut history = None;
         ui.horizontal(|ui| {
-            let undo = ui.add_enabled(!committed.0.is_empty(), egui::Button::new("Undo"));
-            if undo.on_hover_text("Remove the last edit (Ctrl+Z)").clicked() {
+            let undo = ui.add_enabled(!committed.0.is_empty(), egui::Button::new(tr!("Undo")));
+            if undo.on_hover_text(tr!("Remove the last edit (Ctrl+Z)")).clicked() {
                 history = self.undo(file);
             }
-            let redo = ui.add_enabled(!self.redo.is_empty(), egui::Button::new("Redo"));
-            if redo.on_hover_text("Bring the edit back (Ctrl+Y)").clicked() {
+            let redo = ui.add_enabled(!self.redo.is_empty(), egui::Button::new(tr!("Redo")));
+            if redo.on_hover_text(tr!("Bring the edit back (Ctrl+Y)")).clicked() {
                 history = self.redo(file);
             }
         });
-        if ui.add_enabled(count > 0, egui::Button::new("Undo All Edits")).clicked() {
+        if ui.add_enabled(count > 0, egui::Button::new(tr!("Undo All Edits"))).clicked() {
             // Redo brings them back one by one, oldest first.
             self.redo.extend(committed.0.iter().rev().cloned());
             self.draft = None;
@@ -796,7 +759,7 @@ impl Viewer {
                     ui.painter().with_clip_rect(area).image(original.id(), rect, grid::full_uv(), egui::Color32::WHITE);
                     let at = area.left_top() + egui::vec2(12.0, 10.0);
                     let font = egui::FontId::proportional(16.0);
-                    let galley = ui.painter().layout_no_wrap("Original".to_owned(), font, egui::Color32::WHITE);
+                    let galley = ui.painter().layout_no_wrap(tr!("Original").to_owned(), font, egui::Color32::WHITE);
                     ui.painter().rect_filled(
                         egui::Rect::from_min_size(at, galley.size()).expand(6.0),
                         4.0,
@@ -845,7 +808,9 @@ impl Viewer {
                 None => {}
             }
         } else if let Some(error) = &self.error {
-            ui.centered_and_justified(|ui| ui.label(format!("Pico squinted at this file and gave up:\n{error}")));
+            ui.centered_and_justified(|ui| {
+                ui.label(tr!("Pico squinted at this file and gave up:\n{error}", error = error))
+            });
         } else {
             ui.centered_and_justified(|ui| ui.spinner());
         }
@@ -979,11 +944,10 @@ impl Viewer {
         }
 
         if let Some((key, rx)) = &self.rendering
-            && let Ok((image, histogram)) = rx.try_recv()
+            && let Ok(image) = rx.try_recv()
         {
             let texture = ctx.load_texture("viewer", image, egui::TextureOptions::LINEAR);
             self.texture = Some((key.clone(), texture));
-            self.histogram = Some((key.clone(), histogram));
             self.rendering = None;
         }
 
@@ -1001,8 +965,7 @@ impl Viewer {
         std::thread::spawn(move || {
             let rgba = render::apply_edits_scaled((*base).clone(), &meta, scale).to_rgba8();
             let size = [rgba.width() as usize, rgba.height() as usize];
-            let histogram = render::histogram(&rgba);
-            let _ = tx.send((egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()), histogram));
+            let _ = tx.send(egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()));
             ctx.request_repaint();
         });
         self.rendering = Some((wanted, rx));
@@ -1066,33 +1029,5 @@ fn from_player(action: PlayerAction) -> ViewerAction {
         PlayerAction::SavedFrame(path) => ViewerAction::FileAdded(path),
         PlayerAction::Error(message) => ViewerAction::Status(message),
         PlayerAction::Close => ViewerAction::Close,
-    }
-}
-
-/// Red, green and blue levels drawn over each other on a dark strip.
-fn paint_histogram(ui: &mut egui::Ui, histogram: &Histogram) {
-    let width = ui.available_width().min(256.0);
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, 64.0), egui::Sense::hover());
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, "Histogram"));
-    let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 2.0, egui::Color32::from_gray(20));
-    // Pure black and white often spike; scale to the levels in between.
-    let peak = histogram.iter().flat_map(|c| c[1..255].iter()).copied().max().unwrap_or(0).max(1) as f32;
-    let colors = [
-        egui::Color32::from_rgba_unmultiplied(255, 70, 70, 140),
-        egui::Color32::from_rgba_unmultiplied(70, 220, 70, 140),
-        egui::Color32::from_rgba_unmultiplied(80, 120, 255, 140),
-    ];
-    let bar = rect.width() / 256.0;
-    for (counts, color) in histogram.iter().zip(colors) {
-        for (level, &count) in counts.iter().enumerate() {
-            if count == 0 {
-                continue;
-            }
-            let height = (count as f32 / peak).min(1.0) * rect.height();
-            let x = rect.left() + (level as f32 + 0.5) * bar;
-            let stroke = egui::Stroke::new(bar.max(1.0), color);
-            painter.line_segment([egui::pos2(x, rect.bottom()), egui::pos2(x, rect.bottom() - height)], stroke);
-        }
     }
 }

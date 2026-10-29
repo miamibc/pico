@@ -2,7 +2,7 @@
 //! "Creative Kit" effects Picasa 3 offered.
 //!
 //! Each effect has a [`Spec`] listing its parameters in the order they are
-//! written into `filters=` (see `docs/research/picasa-filter-layout.tsv`;
+//! written into `filters=` (see `docs/research/picasa3/picasa-filter-layout.tsv`;
 //! for Picnik effects numbers come first, then colors). The UI builds its
 //! controls from these specs.
 //!

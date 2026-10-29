@@ -247,7 +247,7 @@ impl Player {
         let info = match playback.info() {
             Ok(info) => info,
             Err(e) => {
-                ui.centered_and_justified(|ui| ui.label(format!("This video is shy: {e}")));
+                ui.centered_and_justified(|ui| ui.label(tr!("This video is shy: {e}", e = e)));
                 return None;
             }
         };
@@ -256,13 +256,13 @@ impl Player {
 
         egui::Panel::bottom("player_controls").show(ui, |ui| {
             ui.horizontal(|ui| {
-                let label = if playback.is_playing() { "⏸ Pause" } else { "▶ Play" };
-                if ui.button(label).on_hover_text("/ or Space").clicked() {
+                let label = if playback.is_playing() { tr!("⏸ Pause") } else { tr!("▶ Play") };
+                if ui.button(label).on_hover_text(tr!("/ or Space")).clicked() {
                     playback.toggle(now);
                 }
                 // The position bar takes all the room between Play and Mute.
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if video::ffplay().is_some() && ui.toggle_value(&mut self.muted, "Mute").changed() {
+                    if video::ffplay().is_some() && ui.toggle_value(&mut self.muted, tr!("Mute")).changed() {
                         playback.set_muted(self.muted, now);
                     }
                     ui.label(format!("{} / {}", clock(playback.position), clock(info.duration)));
@@ -344,7 +344,7 @@ impl Player {
         });
         Some(match saved {
             Ok(path) => PlayerAction::SavedFrame(path),
-            Err(e) => PlayerAction::Error(format!("Could not save the frame: {e}")),
+            Err(e) => PlayerAction::Error(tr!("Could not save the frame: {e}", e = e)),
         })
     }
 

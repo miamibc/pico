@@ -2870,7 +2870,7 @@ dependencies = [
 
 [[package]]
 name = "pico"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "arboard",
  "eframe",
@@ -2878,12 +2878,13 @@ dependencies = [
  "egui_kittest",
  "pico-core",
  "rfd",
+ "sys-locale",
  "zbus",
 ]
 
 [[package]]
 name = "pico-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ab_glyph",
  "epaint_default_fonts",

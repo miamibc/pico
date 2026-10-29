@@ -1,138 +1,199 @@
-# Обновление редко меняющихся данных
+# Updating rarely changing data
 
-Часть данных Pico берёт не из кода, а из внешних справочников: названия мест,
-список тегов EXIF, лицензии зависимостей. Справочники меняются медленно, так
-что обновлять их достаточно примерно раз в год или перед крупным релизом.
-Программа при работе в сеть не ходит: всё скачивается здесь, на машине
-разработчика, и попадает в репозиторий готовыми файлами.
+**English** · [Русский](data-updates.ru.md)
 
-Нужны `curl`, `unzip` и Python 3 (только стандартная библиотека). Скачанное
-складывается в `target/data-download/` и в git не попадает.
+Some of Pico's data comes not from the code but from external references:
+place names, the list of EXIF tags, dependency licenses. These references
+change slowly, so updating them about once a year or before a big release is
+enough. The program never goes online while running: everything is downloaded
+here, on the developer's machine, and lands in the repository as ready-made
+files.
 
-## Названия мест (Places)
+You need `curl`, `unzip` and Python 3 (standard library only). Downloads go
+into `target/data-download/` and stay out of git.
+
+## Place names (Places)
 
 ```sh
 make places
 ```
 
-Что делает: скачивает с GeoNames `cities1000.zip` (все населённые пункты от
-1000 жителей) и `countryInfo.txt` (названия стран), с Natural Earth — контуры
-стран, морей и океанов, континентов (`ne_50m_admin_0_countries`,
-`ne_10m_geography_marine_polys`, `ne_50m_geography_regions_polys`), и
-упаковывает всё скриптом `crates/pico-core/data/make_places.py` в
-`crates/pico-core/data/places.bin`. Файл встраивается в программу при сборке
-(`crates/pico-core/src/geo.rs`). Формат файла описан в начале скрипта.
+What it does: downloads `cities1000.zip` (every populated place with at least
+1000 inhabitants) and `countryInfo.txt` (country names) from GeoNames, and the
+outlines of countries, seas and oceans, and continents
+(`ne_50m_admin_0_countries`, `ne_10m_geography_marine_polys`,
+`ne_50m_geography_regions_polys`) from Natural Earth, then packs everything
+with `crates/pico-core/data/make_places.py` into
+`crates/pico-core/data/places.bin`. The file is embedded into the program at
+build time (`crates/pico-core/src/geo.rs`). The file format is described at the
+top of the script.
 
-Потом:
+Then:
 
-1. Скрипт пишет, сколько городов вышло и какой размер. Сейчас это около
-   162 000 городов и 3,5 МБ; заметно больше или меньше — повод разобраться,
-   не поменялся ли формат источников.
-2. `make check` — тесты `geo.rs` проверяют, что файл читается и известные
-   точки находятся (город, страна, море, континент).
-3. Запустить Pico и открыть раздел **Places** на фото с GPS.
-4. Если сменились источник или лицензия — поправить шапку
-   `crates/pico/assets/make_licenses.py` (раздел DATA AND RECIPES), выполнить
-   `make licenses` и поправить абзац о данных в `README.md`.
-5. Закоммитить `places.bin` (и скрипт, если менялся).
+1. The script prints how many cities came out and the size. Right now it is
+   about 162,000 cities and 3.5 MB; noticeably more or less is a reason to check
+   whether the source format has changed.
+2. `make check` — the `geo.rs` tests check that the file loads and that known
+   points are found (city, country, sea, continent).
+3. Run Pico and open the **Places** section on photos with GPS.
+4. If a source or a license has changed, fix the header of
+   `crates/pico/assets/make_licenses.py` (the DATA AND RECIPES section), run
+   `make licenses` and fix the paragraph about data in `README.md` and `README.ru.md`.
+5. Commit `places.bin` (and the script, if it changed).
 
-Если Natural Earth переименует поля в GeoJSON (`ISO_A2_EH`, `NAME_EN`, `name`,
-`FEATURECLA`), скрипт упадёт с `KeyError` — нужно поправить имена полей в
-`main()` скрипта.
+If Natural Earth renames fields in the GeoJSON (`ISO_A2_EH`, `NAME_EN`, `name`,
+`FEATURECLA`), the script fails with a `KeyError` — fix the field names in the
+script's `main()`.
 
-## Теги EXIF (панель Properties)
+## EXIF tags (the Properties panel)
 
 ```sh
 make exif-tags
 ```
 
-Что делает: скачивает справочник тегов exiv2 (<https://exiv2.org/tags.html>,
-группы Image, Photo, Iop) и таблицу GPS-тегов ExifTool
-(<https://exiftool.org/TagNames/GPS.html>) и пишет скриптом
-`crates/pico-core/data/make_exif_tags.py` файл
-`crates/pico-core/src/exif_tags.rs`: номер тега, имя как в XMP
-(`ExposureTime`) и название для людей (`Exposure Time`). GPS-теги хранятся как
-0x1_0000 + номер, Interoperability — как 0x2_0000 + номер. Руками этот файл не
-правят.
+What it does: downloads the exiv2 tag reference (<https://exiv2.org/tags.html>,
+groups Image, Photo, Iop) and the ExifTool GPS tag table
+(<https://exiftool.org/TagNames/GPS.html>), and
+`crates/pico-core/data/make_exif_tags.py` writes
+`crates/pico-core/src/exif_tags.rs`: the tag number, the name as in XMP
+(`ExposureTime`) and a human-readable title (`Exposure Time`). GPS tags are
+stored as 0x1_0000 + number, Interoperability tags as 0x2_0000 + number. This
+file is not edited by hand.
 
-Потом:
+Then:
 
-1. `git diff crates/pico-core/src/exif_tags.rs` — обычно добавляется несколько
-   новых тегов (новые версии DNG, EXIF). Если пропало много строк — скорее
-   всего поменялась вёрстка страницы, и регулярные выражения в
-   `exiv2_tags()`/`gps_tags()` надо подогнать.
-2. Названия разбиваются на слова автоматически (`ExposureTime` →
-   `Exposure Time`). Если вышло неудачно (`T4Options` → `T 4 Options`), добавить
-   исключение в словарь `WORDS` скрипта. Теги, которых нет в exiv2, — в список
-   `EXTRA`.
-3. `make check` и посмотреть **Properties** на нескольких фото.
-4. Закоммитить `exif_tags.rs` и скрипт, если менялся.
+1. `git diff crates/pico-core/src/exif_tags.rs` — usually a few new tags are
+   added (new DNG or EXIF versions). If many lines disappeared, the page layout
+   most likely changed, and the regular expressions in
+   `exiv2_tags()`/`gps_tags()` need adjusting.
+2. Names are split into words automatically (`ExposureTime` →
+   `Exposure Time`). If the result is poor (`T4Options` → `T 4 Options`), add an
+   exception to the script's `WORDS` dictionary. Tags that exiv2 lacks go into
+   the `EXTRA` list.
+3. `make check` and look at **Properties** on a few photos.
+4. Commit `exif_tags.rs`, and the script if it changed.
 
-Не генерируются, а написаны руками в `crates/pico-core/src/exif.rs`:
+Not generated but written by hand in `crates/pico-core/src/exif.rs`:
 
-- `tag_name()` — более привычные названия самых частых тегов (они главнее
-  таблицы из `exif_tags.rs`);
-- `choice()` — расшифровка кодов (Exposure Program, Metering Mode, Light
-  Source, Scene Type…), по [таблице EXIF ExifTool](https://exiftool.org/TagNames/EXIF.html);
-- `describe()` — единицы и форматы (выдержка, диафрагма, фокусное, вспышка).
+- `tag_name()` — more familiar names for the most common tags (they win over
+  the table in `exif_tags.rs`);
+- `choice()` — the meaning of codes (Exposure Program, Metering Mode, Light
+  Source, Scene Type…), from the [ExifTool EXIF table](https://exiftool.org/TagNames/EXIF.html);
+- `describe()` — units and formats (shutter speed, aperture, focal length,
+  flash).
 
-Их стоит сверить с таблицей ExifTool, когда выходит новая версия стандарта
-EXIF (CIPA DC-008) — в ней могут появиться новые значения кодов.
+Check them against the ExifTool table when a new version of the EXIF standard
+(CIPA DC-008) comes out — it may add new code values.
 
-Остальные форматы (XMP, IPTC, ICC, PNG, WebP) разбираются по спецификациям,
-ссылки на них — в разделе «Для разработчиков» `README.md`. Они почти не
-меняются, отдельного обновления не требуют.
+The other formats (XMP, IPTC, ICC, PNG, WebP) are parsed according to their
+specifications, linked in the "For developers" section of `README.md`. They
+hardly ever change and need no separate updates.
 
-## Лицензии
+## Camera makers' notes (MakerNote)
+
+```sh
+make maker-tags
+```
+
+What it does: downloads ExifRead (a Python EXIF reader under BSD-3-Clause,
+<https://github.com/ianare/exif-py>; the version is `EXIFREAD` in the
+`Makefile`) and `crates/pico-core/data/make_maker_tags.py` reads its makers'
+tables (Canon, Nikon, Olympus, Fujifilm, Sony, Casio, Apple, DJI) into
+`crates/pico-core/src/maker_tags.rs`: entry names and what their values mean.
+The tables are Python dict literals and are read with `ast`, never run.
+
+Pico reads the notes in `crates/pico-core/src/maker_notes.rs`. What is
+written there by hand comes first: names of the entries compared with EXIF,
+and values that take arithmetic (Canon's EV, ISO and times, Nikon's clock and
+time zone, Olympus's directories). The generated tables fill in the rest.
+
+Then:
+
+1. `git diff crates/pico-core/src/maker_tags.rs` — new cameras in Canon's
+   Model ID, new entries.
+2. ExifRead is not ExifTool: where a table disagrees with what cameras
+   write (Canon's AF Info 2 is one place off), leave it out or cut it in
+   `TABLES` / `LAST_FIXED` of the script.
+3. `make check`, and look at **Properties** on photos from those makers.
+4. Commit `maker_tags.rs` and the script, if it changed.
+
+## Licenses
 
 ```sh
 make licenses
 ```
 
-Пересобирает `crates/pico/assets/licenses.txt` (список в **Help → About**)
-из `cargo metadata`. Запускать после любой смены зависимостей в `Cargo.toml`
-или `cargo update`, затем закоммитить `licenses.txt`.
+Rebuilds `crates/pico/assets/licenses.txt` (the list in **Help → About**) from
+`cargo metadata`. Run it after any change of dependencies in `Cargo.toml` or a
+`cargo update`, then commit `licenses.txt`.
 
-## Совпадение полей из разных метаданных (значок «!»)
+## Agreement of fields across metadata kinds (the "!" badge)
 
-Одно и то же — название, автора, дату — фото может хранить сразу в EXIF, XMP,
-IPTC и текстовых блоках PNG. Когда эти поля есть в нескольких местах и
-расходятся, панель **Properties** ставит у каждого значок «!», а подсказка
-показывает, что написано в каждом. Правила — в `crates/pico-core/src/agree.rs`
-(`GROUPS`).
+A photo can store the same thing — a title, an author, a date — in EXIF, XMP,
+IPTC and PNG text chunks at once. When such fields exist in several places and
+disagree, the **Properties** panel puts a "!" badge next to each of them, and
+the tooltip shows what each one says. The rules are in
+`crates/pico-core/src/agree.rs` (`GROUPS`).
 
-Группы полей, которые должны совпадать:
+Groups of fields that must agree:
 
-| Что | EXIF | XMP | IPTC | PNG | Как сравнивается |
+| What | EXIF | XMP | IPTC | PNG | Compared as |
 |---|---|---|---|---|---|
-| Название | Title, Image Title | Title | Title | — | текст |
-| Описание | Description | Description | Caption/Abstract | Description | текст |
-| Автор | Artist, Author, Photographer | Creator | By-line | Author | текст |
-| Права | Copyright | Rights | Copyright Notice | Copyright | текст |
-| Ключевые слова | Keywords | Subject | Keywords | — | набор слов |
-| Дата съёмки | Date Taken | Date Taken, Date Created | Date Created | — | дата |
-| Дата оцифровки | Date Digitized | Create Date, Date Digitized | — | — | дата |
-| Дата изменения | Date Modified | Modify Date | — | Modified | дата |
-| Программа | Software | Creator Tool | Originating Program | Software | текст |
-| Оценка | Rating | Rating | — | — | число |
-| Объектив | Lens Model | Lens Model, Lens | — | — | текст |
+| Title | Title, Image Title | Title | Title | — | text |
+| Description | Description | Description | Caption/Abstract | Description | text |
+| Author | Artist, Author, Photographer | Creator | By-line | Author | text |
+| Rights | Copyright | Rights | Copyright Notice | Copyright | text |
+| Keywords | Keywords | Subject | Keywords | — | set of words |
+| Date taken | Date Taken | Date Taken, Date Created | Date Created | — | date |
+| Date digitized | Date Digitized | Create Date, Date Digitized | — | — | date |
+| Date modified | Date Modified | Modify Date | — | Modified | date |
+| Software | Software | Creator Tool | Originating Program | Software | text |
+| Rating | Rating | Rating | — | — | number |
+| Lens | Lens Model | Lens Model, Lens | — | — | text |
 
-Кроме того, каждое свойство XMP из пространств `exif:` и `tiff:` — копия
-одноимённого тега EXIF (`exif:ExposureTime` ↔ Exposure Time) и сравнивается с
-ним: как дата, если название начинается с «Date», иначе как текст. Исключение —
-широта и долгота GPS (`NOT_ALIKE`): EXIF и XMP записывают их по-разному.
+The camera maker's notes (MakerNote, read in `crates/pico-core/src/maker_notes.rs`)
+show in the EXIF section under the maker's name and are checked against EXIF:
 
-Как сравнивается:
+| What | EXIF | Maker's notes | Compared as |
+|---|---|---|---|
+| Exposure time | Exposure Time, Shutter Speed Value | Canon Exposure Time | within 1/3 stop |
+| Aperture | F Number, Aperture Value | Canon F-Number | within 1/3 stop |
+| ISO | ISO | Canon ISO, NIKON ISO | within 15% |
+| Focal length | Focal Length | Canon Focal Length | within 3% |
+| Exposure compensation | Exposure Compensation | Canon Exposure Compensation | within 0.2 EV |
+| Serial number | Body Serial Number | Canon, NIKON, OLYMPUS Serial Number | digits |
+| Owner | Camera Owner | Canon Owner Name | text |
+| Lens | Lens Model | Canon Lens Model, OLYMPUS Lens Model | text |
+| Camera | Model | Canon Image Type | one name in the other |
+| Clock | Date Taken | NIKON Power Up Time | switched on before the shot |
 
-- **текст** — без учёта регистра и лишних пробелов;
-- **набор слов** — слова через запятую или точку с запятой, порядок и повторы
-  не важны;
-- **дата** — по цифрам до секунды и только насколько точны обе записи
-  (`2018:02:09 19:17:10` = `2018-02-09T19:17:10.57+02:00`; часовой пояс не
-  учитывается);
-- **число** — оценка звёздочками или цифрой (`★★★☆☆ (3)` = `3`).
+Canon's lists start with their own length; when they do not, an editor moved
+the notes without fixing their offsets, and the Maker Note row says so.
 
-Сравниваются только поля, которые есть; одно поле без пары значка не получает.
-Чтобы добавить группу, допишите её в `GROUPS` — подписи должны совпадать с
-теми, что видны в Properties, — и, по желанию, случай в тест
-`finds_fields_that_disagree_across_kinds`.
+Adobe's tools copy what the notes say into XMP's `aux:` properties: Serial
+Number, Lens Serial Number, Owner Name and Firmware are checked against the
+notes and EXIF too (serial numbers by their letters and digits, firmware by
+its version number). XMP's other copies of EXIF tags may be written their own
+way ("2.20" and "220", "Inches" and "Inch") and still agree.
+
+Besides that, every XMP property from the `exif:` and `tiff:` namespaces is a
+copy of the EXIF tag of the same name (`exif:ExposureTime` ↔ Exposure Time) and
+is compared with it: as a date if the name starts with "Date", otherwise as
+text. The exception is GPS latitude and longitude (`NOT_ALIKE`): EXIF and XMP
+write them differently.
+
+How values are compared:
+
+- **text** — ignoring case and extra spaces;
+- **set of words** — words separated by commas or semicolons; order and
+  repeats don't matter;
+- **date** — by digits down to the second, and only as precisely as both
+  values go (`2018:02:09 19:17:10` = `2018-02-09T19:17:10.57+02:00`; the time
+  zone is ignored);
+- **number** — a rating as stars or a digit (`★★★☆☆ (3)` = `3`);
+- **within** — numbers, as far apart as the camera's own rounding allows.
+
+Only fields that are present are compared; a field without a pair gets no
+badge. To add a group, append it to `GROUPS` — the labels must match the ones
+shown in Properties — and, if you like, a case to the
+`finds_fields_that_disagree_across_kinds` test.

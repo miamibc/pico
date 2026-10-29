@@ -151,7 +151,7 @@ impl Slideshow {
         }
         let file = &files[self.index];
         let caption = file.meta.caption.clone().unwrap_or_else(|| file.name());
-        let status = if self.playing { format!("{}s", self.seconds) } else { "paused".into() };
+        let status = if self.playing { tr!("{n}s", n = self.seconds) } else { tr!("paused").into() };
         painter.text(
             area.center_bottom() + egui::vec2(0.0, -24.0),
             egui::Align2::CENTER_BOTTOM,
@@ -163,9 +163,10 @@ impl Slideshow {
             area.right_bottom() + egui::vec2(-16.0, -12.0),
             egui::Align2::RIGHT_BOTTOM,
             format!(
-                "{} / {}  ·  {status}  ·  Space pause, arrows move, -/+ speed, Esc exit",
+                "{} / {}  ·  {status}  ·  {}",
                 self.index + 1,
-                files.len()
+                files.len(),
+                tr!("Space pause, arrows move, -/+ speed, Esc exit")
             ),
             egui::FontId::proportional(13.0),
             egui::Color32::from_white_alpha(120),

@@ -113,31 +113,34 @@ impl CollageView {
 
     fn settings(&mut self, ui: &mut egui::Ui) -> Option<CollageAction> {
         let mut action = None;
-        ui.heading("Picture Collage");
-        egui::ComboBox::from_label("Layout").selected_text(layout_name(self.options.layout)).show_ui(ui, |ui| {
-            for (layout, name) in Layout::ALL {
-                ui.selectable_value(&mut self.options.layout, layout, name);
-            }
-        });
-        ui.label(egui::RichText::new(layout_hint(self.options.layout)).weak());
+        ui.heading(tr!("Picture Collage"));
+        egui::ComboBox::from_label(tr!("Layout"))
+            .selected_text(crate::i18n::tr(layout_name(self.options.layout)))
+            .show_ui(ui, |ui| {
+                for (layout, name) in Layout::ALL {
+                    ui.selectable_value(&mut self.options.layout, layout, crate::i18n::tr(name));
+                }
+            });
+        ui.label(egui::RichText::new(crate::i18n::tr(layout_hint(self.options.layout))).weak());
         ui.separator();
-        ui.label("Page Format");
+        ui.label(tr!("Page Format"));
         ui.horizontal_wrapped(|ui| {
             for (i, (name, _)) in ASPECTS.iter().enumerate() {
                 ui.selectable_value(&mut self.aspect, i, *name);
             }
         });
-        ui.checkbox(&mut self.portrait, "Portrait");
+        ui.checkbox(&mut self.portrait, tr!("Portrait"));
         let ratio = ASPECTS[self.aspect].1;
         self.options.aspect = if self.portrait { 1.0 / ratio } else { ratio };
         ui.separator();
-        ui.label("Background");
+        ui.label(tr!("Background"));
         ui.horizontal(|ui| {
-            ui.radio_value(&mut self.background_photo, false, "Solid color");
+            ui.radio_value(&mut self.background_photo, false, tr!("Solid color"));
             ui.color_edit_button_srgb(&mut self.background_color);
         });
         let can_use_photo = self.picked.is_some() || matches!(self.options.background, Background::Photo(_));
-        if ui.add_enabled(can_use_photo, egui::RadioButton::new(self.background_photo, "Picked picture")).clicked() {
+        if ui.add_enabled(can_use_photo, egui::RadioButton::new(self.background_photo, tr!("Picked picture"))).clicked()
+        {
             self.background_photo = true;
         }
         let [r, g, b] = self.background_color;
@@ -147,44 +150,46 @@ impl CollageView {
             (false, _) => Background::Color((r as u32) << 16 | (g as u32) << 8 | b as u32),
         };
         ui.separator();
-        ui.label("Picture Borders");
+        ui.label(tr!("Picture Borders"));
         ui.horizontal(|ui| {
-            ui.radio_value(&mut self.options.border, Border::None, "None");
-            ui.radio_value(&mut self.options.border, Border::White, "White");
-            ui.radio_value(&mut self.options.border, Border::InstantCamera, "Instant");
+            ui.radio_value(&mut self.options.border, Border::None, tr!("None"));
+            ui.radio_value(&mut self.options.border, Border::White, tr!("White"));
+            ui.radio_value(&mut self.options.border, Border::InstantCamera, tr!("Instant"));
         });
-        ui.checkbox(&mut self.options.shadows, "Draw Shadows");
-        ui.checkbox(&mut self.options.captions, "Show Captions").on_hover_text("On the Instant camera border");
+        ui.checkbox(&mut self.options.shadows, tr!("Draw Shadows"));
+        ui.checkbox(&mut self.options.captions, tr!("Show Captions"))
+            .on_hover_text(tr!("On the Instant camera border"));
         let mut spacing = self.options.spacing * 1000.0;
-        ui.add(egui::Slider::new(&mut spacing, 0.0..=50.0).text("Grid Spacing"));
+        ui.add(egui::Slider::new(&mut spacing, 0.0..=50.0).text(tr!("Grid Spacing")));
         self.options.spacing = spacing / 1000.0;
         if self.options.layout == Layout::ContactSheet {
-            ui.label("Title");
+            ui.label(tr!("Title"));
             ui.text_edit_singleline(&mut self.options.title);
         }
         ui.separator();
         ui.horizontal(|ui| {
-            if ui.button("Shuffle Pictures").on_hover_text("Randomize the order of the pictures").clicked() {
+            if ui.button(tr!("Shuffle Pictures")).on_hover_text(tr!("Randomize the order of the pictures")).clicked() {
                 self.order = collage::shuffled(&self.order, self.options.seed.wrapping_add(self.order.len() as u64));
                 self.options.seed = self.options.seed.wrapping_add(1);
             }
         });
         ui.separator();
         let ready = self.items.is_some() && self.saving.is_none() && !self.order.is_empty();
-        if ui.add_enabled(ready, egui::Button::new("Create Collage")).on_hover_text("Save as a JPG").clicked() {
+        if ui.add_enabled(ready, egui::Button::new(tr!("Create Collage"))).on_hover_text(tr!("Save as a JPG")).clicked()
+        {
             self.save(ui.ctx(), false);
         }
         if ui
-            .add_enabled(ready, egui::Button::new("Desktop Background"))
-            .on_hover_text("Save, then use as wallpaper")
+            .add_enabled(ready, egui::Button::new(tr!("Desktop Background")))
+            .on_hover_text(tr!("Save, then use as wallpaper"))
             .clicked()
         {
             self.save(ui.ctx(), true);
         }
         if self.saving.is_some() {
-            crate::app::progress_window(ui.ctx(), "Saving the Collage", "Gluing pictures…", None);
+            crate::app::progress_window(ui.ctx(), tr!("Saving the Collage"), tr!("Gluing pictures…"), None);
         }
-        if ui.button("Close").on_hover_text("Esc").clicked() {
+        if ui.button(tr!("Close")).on_hover_text("Esc").clicked() {
             action = Some(CollageAction::Close);
         }
         if let Some(rx) = &self.saving
@@ -193,7 +198,7 @@ impl CollageView {
             self.saving = None;
             action = Some(match result {
                 Ok((path, wallpaper)) => CollageAction::Saved { path, wallpaper },
-                Err(e) => CollageAction::Status(format!("Could not save the collage: {e}")),
+                Err(e) => CollageAction::Status(tr!("Could not save the collage: {e}", e = e)),
             });
         }
         action
@@ -201,21 +206,21 @@ impl CollageView {
 
     fn tray(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.label(format!("Clips ({})", self.order.len()));
+            ui.label(tr!("Clips ({n})", n = self.order.len()));
             let picked = self.picked;
-            if ui.add_enabled(picked.is_some(), egui::Button::new("Remove")).clicked()
+            if ui.add_enabled(picked.is_some(), egui::Button::new(tr!("Remove"))).clicked()
                 && let Some(p) = picked
             {
                 self.order.remove(p);
                 self.picked = None;
             }
-            if ui.add_enabled(picked.is_some(), egui::Button::new("Set as Background")).clicked()
+            if ui.add_enabled(picked.is_some(), egui::Button::new(tr!("Set as Background"))).clicked()
                 && let Some(p) = picked
             {
                 self.background_photo = true;
                 self.options.background = Background::Photo(self.order[p]);
             }
-            if ui.add_enabled(picked.is_some(), egui::Button::new("Set as Frame Center")).clicked()
+            if ui.add_enabled(picked.is_some(), egui::Button::new(tr!("Set as Frame Center"))).clicked()
                 && let Some(p) = picked
             {
                 self.options.layout = Layout::FrameMosaic;
@@ -329,10 +334,10 @@ fn layout_name(layout: Layout) -> &'static str {
 
 fn layout_hint(layout: Layout) -> &'static str {
     match layout {
-        Layout::Mosaic => "Pictures fitted edge to edge",
-        Layout::FrameMosaic => "A mosaic around one big picture",
-        Layout::Grid => "Neat rows and columns",
-        Layout::ContactSheet => "Thumbnails with names and a header",
-        Layout::MultipleExposure => "Pictures laid over one another",
+        Layout::Mosaic => tr_mark!("Pictures fitted edge to edge"),
+        Layout::FrameMosaic => tr_mark!("A mosaic around one big picture"),
+        Layout::Grid => tr_mark!("Neat rows and columns"),
+        Layout::ContactSheet => tr_mark!("Thumbnails with names and a header"),
+        Layout::MultipleExposure => tr_mark!("Pictures laid over one another"),
     }
 }

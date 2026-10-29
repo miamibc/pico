@@ -1,7 +1,7 @@
 //! Pixel implementations of Picasa's edit filters.
 //!
 //! Parameter meanings and ranges come from Picasa's `filterdesc.xml` (see
-//! `docs/research/picasa-filter-layout.tsv`); the algorithms are Pico's own,
+//! `docs/research/picasa3/picasa-filter-layout.tsv`); the algorithms are Pico's own,
 //! aiming for the same intent rather than bit-identical output. Filters Pico
 //! does not implement yet return the image unchanged, and stay in the INI.
 

@@ -1,7 +1,7 @@
 //! Core of Pico: everything that does not need a window.
 //!
 //! Formats follow Picasa 3 so existing libraries keep their captions, stars and
-//! edits. See `docs/research/picasa3-analysis.md` for where each detail comes from.
+//! edits. See `docs/research/picasa3/picasa3-analysis.md` for where each detail comes from.
 
 pub mod adjust;
 pub mod agree;
@@ -18,6 +18,8 @@ pub mod folders;
 pub mod geo;
 pub mod ini;
 pub mod library;
+mod maker_notes;
+mod maker_tags;
 pub mod media;
 pub mod meta;
 pub mod metadata;
