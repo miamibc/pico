@@ -2614,3 +2614,56 @@ fn fit_stays_on_when_the_orientation_changes() {
         assert_eq!(harness.state().zoom_state().0, None, "still fits after {key:?}");
     }
 }
+
+#[test]
+fn unstarring_under_starred_steps_on_to_the_next_starred() {
+    let fixture = Fixture::new("unstar-step");
+    let ini = "[Picasa]\r\nname=Holiday\r\n[a.png]\r\nstar=yes\r\n[b.png]\r\nstar=yes\r\n[c.png]\r\nstar=yes\r\n";
+    std::fs::write(fixture.dir.join(".picasa.ini"), ini).unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().show_starred();
+    harness.step();
+    harness.get_by_label("b.png").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    wait_until(&mut harness, "the photo to load", |app| app.is_viewing() && app.viewer_loaded());
+
+    harness.key_press(Key::S);
+    harness.step();
+    assert!(!fixture.ini().contains("[b.png]\r\nstar=yes"), "{}", fixture.ini());
+    harness.key_press(Key::ArrowRight);
+    harness.step();
+    assert_eq!(harness.state().selected_file(), Some(2), "the next starred photo, not the first");
+    // Gone from Starred once left: back is the one before it.
+    harness.key_press(Key::ArrowLeft);
+    harness.step();
+    assert_eq!(harness.state().selected_file(), Some(0));
+    harness.key_press(Key::Escape);
+    harness.step();
+    assert_eq!(harness.state().listing_names(), ["a.png", "c.png"]);
+}
+
+#[test]
+fn stepping_stays_in_the_photos_folder_after_the_ribbon_scrolled_on() {
+    let fixture = Fixture::new("ribbon-step");
+    let other = fixture.dir.join("zz other");
+    std::fs::create_dir_all(&other).unwrap();
+    for name in ["x.png", "y.png"] {
+        RgbImage::from_pixel(60, 40, Rgb([90, 90, 90])).save(other.join(name)).unwrap();
+    }
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 2);
+    harness.get_by_label("a.png").click();
+    harness.step();
+    let index = harness.state().folder_names().iter().position(|n| n == "zz other").unwrap();
+    harness.state_mut().scroll_ribbon_to_folder(index);
+    harness.step();
+    harness.key_press(Key::Enter);
+    wait_until(&mut harness, "the photo to load", |app| app.is_viewing() && app.viewer_loaded());
+    harness.get_by_label("1 / 3");
+    harness.key_press(Key::ArrowRight);
+    harness.step();
+    assert_eq!(harness.state().selected_file(), Some(1), "b.png, in the photo's own folder");
+    assert_eq!(harness.state().current_folder_name().as_deref(), Some("Holiday"));
+}
