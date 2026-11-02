@@ -1715,8 +1715,18 @@ fn video_plays_saves_a_frame_and_plays_in_slideshows() {
     harness.key_press(Key::Enter);
     wait_until(&mut harness, "the first frame", |app| app.player_state().2);
     assert!(!harness.state().player_state().0, "videos open paused");
+    assert!(harness.get_all_by_label("Edit").any(|n| n.accesskit_node().is_disabled()), "kept in the bar, greyed out");
+    // The play button spins in over the middle of the picture.
+    for _ in 0..6 {
+        harness.step();
+    }
+    screenshot(&mut harness, "video-paused");
 
-    harness.key_press(Key::Slash);
+    harness.get_by_label("Play").click();
+    harness.step();
+    assert!(harness.state().player_state().0, "the play button plays at once");
+    harness.step();
+    assert!(harness.query_by_label("Play").is_none(), "and goes while playing");
     wait_until(&mut harness, "playback", |app| app.player_state().1 >= Duration::from_millis(800));
     screenshot(&mut harness, "video");
     harness.key_press(Key::Slash);
@@ -1797,7 +1807,18 @@ fn video_shows_every_frame_while_playing() {
     // a double-click goes back to the library, as for photos.
     harness.key_press(Key::ArrowRight);
     wait_until(&mut harness, "the first frame", |app| app.player_state().2);
-    harness.get_by_label("Video").click();
+    // Off the play button in the middle, which plays at once.
+    let corner = harness.get_by_label("Video").rect().left_top() + egui::vec2(12.0, 12.0);
+    harness.hover_at(corner);
+    harness.step();
+    for pressed in [true, false] {
+        harness.event(egui::Event::PointerButton {
+            pos: corner,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+    }
     harness.step();
     assert!(!harness.state().player_state().0, "waits for a second click");
     for _ in 0..8 {

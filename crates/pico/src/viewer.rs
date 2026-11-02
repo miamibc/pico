@@ -225,6 +225,7 @@ impl Viewer {
         }
         if file.kind == MediaKind::Video {
             // Videos get the player instead of the photo editor.
+            self.player.still = self.still;
             let player_action = self.player.show(ui, file);
             self.photo_area = self.player.area();
             if let Some(area) = self.photo_area {
@@ -334,8 +335,15 @@ impl Viewer {
             if ui.button(tr!("⬅ Back to Library")).on_hover_text("Esc").clicked() {
                 action = Some(ViewerAction::Close);
             }
-            if file.kind != MediaKind::Video {
-                ui.toggle_value(&mut self.show_edit_panel, tr!("Edit")).on_hover_text(tr!("Show the edit panel"));
+            // Greyed out for videos rather than hidden, so the bar does not jump.
+            let photo = file.kind != MediaKind::Video;
+            if ui
+                .add_enabled(photo, egui::Button::selectable(photo && self.show_edit_panel, tr!("Edit")))
+                .on_hover_text(tr!("Show the edit panel"))
+                .on_disabled_hover_text(tr!("Videos are not edited in Pico"))
+                .clicked()
+            {
+                self.show_edit_panel = !self.show_edit_panel;
             }
             if ui.button(tr!("▶ Slideshow")).on_hover_text("Ctrl+4").clicked() {
                 action = Some(ViewerAction::Slideshow);

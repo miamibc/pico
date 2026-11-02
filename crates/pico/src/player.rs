@@ -219,6 +219,11 @@ pub struct Player {
     /// A click on the picture, which pauses or plays unless it turns out to
     /// be the first half of a double-click.
     click_at: Option<f64>,
+    /// Whether the video was playing last frame, and since when (egui
+    /// time), for the play button's animation.
+    playing_since: (bool, f64),
+    /// No animations (Options > Animations off).
+    pub still: bool,
 }
 
 impl Player {
@@ -242,6 +247,7 @@ impl Player {
         if self.playback.as_ref().is_none_or(|p| p.path() != file.path) {
             self.stop();
             self.playback = Some(Playback::open(&file.path, self.muted));
+            self.playing_since = (false, ui.input(|i| i.time));
         }
         let playback = self.playback.as_mut()?;
         let info = match playback.info() {
@@ -307,6 +313,11 @@ impl Player {
         }
 
         playback.advance(ui.ctx(), now);
+        if playback.is_playing() != self.playing_since.0 {
+            self.playing_since = (playback.is_playing(), now);
+        }
+        let (playing, since) = self.playing_since;
+        let since = if self.still { f64::INFINITY } else { now - since };
         egui::CentralPanel::no_frame().show(ui, |ui| {
             let area = ui.max_rect();
             self.area = Some(area);
@@ -323,6 +334,23 @@ impl Player {
                     action = Some(PlayerAction::Close);
                 } else if response.clicked() {
                     self.click_at = Some(now);
+                }
+                // Over the picture, so it takes the click: plays at once.
+                let radius = (area.width().min(area.height()) * 0.12).clamp(36.0, 96.0);
+                let button = egui::Rect::from_center_size(area.center(), egui::Vec2::splat(radius * 2.4));
+                let hovered = if playing {
+                    false
+                } else {
+                    let response = ui.interact(button, ui.scope_id().with("play"), egui::Sense::click());
+                    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Play"));
+                    if response.clicked() {
+                        self.click_at = None;
+                        playback.play(now);
+                    }
+                    response.on_hover_text(tr!("/ or Space")).hovered()
+                };
+                if crate::star::play_button(ui.painter(), area.center(), radius, playing, since, hovered) {
+                    ui.ctx().request_repaint();
                 }
             } else {
                 ui.centered_and_justified(|ui| ui.spinner());
