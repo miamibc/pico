@@ -209,6 +209,37 @@ impl Playback {
     }
 }
 
+/// Paints `texture` turned `turns` quarter turns clockwise (a video rotated
+/// in Pico, as its thumbnail is), as large as fits `area`, centred; returns
+/// where it went. Turned by its corners' texture coordinates, so frames need
+/// no re-encoding.
+pub fn paint_turned(
+    painter: &egui::Painter,
+    area: egui::Rect,
+    texture: &egui::TextureHandle,
+    turns: u8,
+    tint: egui::Color32,
+) -> egui::Rect {
+    let mut size = texture.size_vec2();
+    if turns % 2 == 1 {
+        size = egui::vec2(size.y, size.x);
+    }
+    let scale = (area.width() / size.x).min(area.height() / size.y);
+    let rect = egui::Rect::from_center_size(area.center(), size * scale);
+    // Texture corners in screen order (top left, top right, bottom right,
+    // bottom left), each turn moving them on by one.
+    let uv = [egui::pos2(0.0, 0.0), egui::pos2(1.0, 0.0), egui::pos2(1.0, 1.0), egui::pos2(0.0, 1.0)];
+    let corners = [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()];
+    let mut mesh = egui::Mesh::with_texture(texture.id());
+    for (i, corner) in corners.into_iter().enumerate() {
+        mesh.vertices.push(egui::epaint::Vertex { pos: corner, uv: uv[(i + 4 - turns as usize % 4) % 4], color: tint });
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    painter.add(egui::Shape::mesh(mesh));
+    rect
+}
+
 /// The photo view's video player: the picture and a row of controls.
 #[derive(Default)]
 pub struct Player {
@@ -219,6 +250,11 @@ pub struct Player {
     /// A click on the picture, which pauses or plays unless it turns out to
     /// be the first half of a double-click.
     click_at: Option<f64>,
+    /// Whether the video was playing last frame, and since when (egui
+    /// time), for the play button's animation.
+    playing_since: (bool, f64),
+    /// No animations (Options > Animations off).
+    pub still: bool,
 }
 
 impl Player {
@@ -242,6 +278,7 @@ impl Player {
         if self.playback.as_ref().is_none_or(|p| p.path() != file.path) {
             self.stop();
             self.playback = Some(Playback::open(&file.path, self.muted));
+            self.playing_since = (false, ui.input(|i| i.time));
         }
         let playback = self.playback.as_mut()?;
         let info = match playback.info() {
@@ -307,15 +344,17 @@ impl Player {
         }
 
         playback.advance(ui.ctx(), now);
+        if playback.is_playing() != self.playing_since.0 {
+            self.playing_since = (playback.is_playing(), now);
+        }
+        let (playing, since) = self.playing_since;
+        let since = if self.still { f64::INFINITY } else { now - since };
         egui::CentralPanel::no_frame().show(ui, |ui| {
             let area = ui.max_rect();
             self.area = Some(area);
             ui.painter().rect_filled(area, 0.0, egui::Color32::BLACK);
             if let Some(texture) = playback.texture() {
-                let size = texture.size_vec2();
-                let scale = (area.width() / size.x).min(area.height() / size.y);
-                let rect = egui::Rect::from_center_size(area.center(), size * scale);
-                ui.painter().image(texture.id(), rect, crate::grid::full_uv(), egui::Color32::WHITE);
+                let rect = paint_turned(ui.painter(), area, texture, file.meta.rotate, egui::Color32::WHITE);
                 let response = ui.interact(rect, ui.scope_id().with("video"), egui::Sense::click());
                 response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Video, true, "Video"));
                 if response.double_clicked() {
@@ -323,6 +362,23 @@ impl Player {
                     action = Some(PlayerAction::Close);
                 } else if response.clicked() {
                     self.click_at = Some(now);
+                }
+                // Over the picture, so it takes the click: plays at once.
+                let radius = (area.width().min(area.height()) * 0.12).clamp(36.0, 96.0);
+                let button = egui::Rect::from_center_size(area.center(), egui::Vec2::splat(radius * 2.4));
+                let hovered = if playing {
+                    false
+                } else {
+                    let response = ui.interact(button, ui.scope_id().with("play"), egui::Sense::click());
+                    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Play"));
+                    if response.clicked() {
+                        self.click_at = None;
+                        playback.play(now);
+                    }
+                    response.on_hover_text(tr!("/ or Space")).hovered()
+                };
+                if crate::star::play_button(ui.painter(), area.center(), radius, playing, since, hovered) {
+                    ui.ctx().request_repaint();
                 }
             } else {
                 ui.centered_and_justified(|ui| ui.spinner());
@@ -333,10 +389,17 @@ impl Player {
 
     /// Saves the frame on screen as `<video name>.<milliseconds>.jpg` next to
     /// the video, the way Picasa named its snapshots.
-    pub fn save_frame(&self) -> Option<PlayerAction> {
+    /// The frame is turned `turns` quarter turns, as the video is shown.
+    pub fn save_frame(&self, turns: u8) -> Option<PlayerAction> {
         let playback = self.playback.as_ref()?;
         let (path, at) = (playback.path(), playback.position);
         let saved = video::extract_frame(path, at, None).and_then(|frame| {
+            let frame = match turns % 4 {
+                1 => pico_core::image::imageops::rotate90(&frame),
+                2 => pico_core::image::imageops::rotate180(&frame),
+                3 => pico_core::image::imageops::rotate270(&frame),
+                _ => frame,
+            };
             let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
             let target = path.with_file_name(format!("{stem}.{}.jpg", at.as_millis()));
             pico_core::image::DynamicImage::ImageRgba8(frame).to_rgb8().save(&target).map_err(std::io::Error::other)?;

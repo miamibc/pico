@@ -49,8 +49,19 @@ pub enum ViewerAction {
     Status(String),
 }
 
-/// A decoded working copy and its scale, or why decoding failed.
-type BaseResult = Result<(DynamicImage, f32), String>;
+/// Photos prepared ahead on each side of the one on screen.
+pub const AHEAD: usize = 2;
+
+/// A photo decoded and rendered with its edits, ready to show.
+struct Prepared {
+    base: Arc<DynamicImage>,
+    /// Working-copy pixels per photo pixel.
+    scale: f32,
+    texture: (RenderKey, egui::TextureHandle),
+}
+
+/// A decoded working copy, its scale and its picture, or why decoding failed.
+type PreparedResult = Result<(DynamicImage, f32, egui::ColorImage), String>;
 
 /// A rendered picture.
 type Rendered = egui::ColorImage;
@@ -68,7 +79,12 @@ const ZOOM_CONTROLS_WIDTH: f32 = 280.0;
 pub struct Viewer {
     /// Working copy and its size relative to the original photo.
     base: Option<(PathBuf, Arc<DynamicImage>, f32)>,
-    base_loading: Option<(PathBuf, Receiver<BaseResult>)>,
+    /// The working copy and picture being made for the photo on screen.
+    base_loading: Option<(RenderKey, Receiver<PreparedResult>)>,
+    /// Neighbours of the photo on screen (and the one just left), prepared
+    /// so paging through shows each at once, without a blank frame.
+    ahead: std::collections::HashMap<PathBuf, Result<Prepared, String>>,
+    ahead_jobs: std::collections::HashMap<PathBuf, (RenderKey, Receiver<PreparedResult>)>,
     texture: Option<(RenderKey, egui::TextureHandle)>,
     rendering: Option<(RenderKey, Receiver<Rendered>)>,
     error: Option<String>,
@@ -209,6 +225,7 @@ impl Viewer {
         }
         if file.kind == MediaKind::Video {
             // Videos get the player instead of the photo editor.
+            self.player.still = self.still;
             let player_action = self.player.show(ui, file);
             self.photo_area = self.player.area();
             if let Some(area) = self.photo_area {
@@ -318,8 +335,15 @@ impl Viewer {
             if ui.button(tr!("⬅ Back to Library")).on_hover_text("Esc").clicked() {
                 action = Some(ViewerAction::Close);
             }
-            if file.kind != MediaKind::Video {
-                ui.toggle_value(&mut self.show_edit_panel, tr!("Edit")).on_hover_text(tr!("Show the edit panel"));
+            // Greyed out for videos rather than hidden, so the bar does not jump.
+            let photo = file.kind != MediaKind::Video;
+            if ui
+                .add_enabled(photo, egui::Button::selectable(photo && self.show_edit_panel, tr!("Edit")))
+                .on_hover_text(tr!("Show the edit panel"))
+                .on_disabled_hover_text(tr!("Videos are not edited in Pico"))
+                .clicked()
+            {
+                self.show_edit_panel = !self.show_edit_panel;
             }
             if ui.button(tr!("▶ Slideshow")).on_hover_text("Ctrl+4").clicked() {
                 action = Some(ViewerAction::Slideshow);
@@ -373,7 +397,7 @@ impl Viewer {
                     .on_hover_text(tr!("Save the frame on screen next to the video"))
                     .clicked()
             {
-                action = self.player.save_frame().map(from_player);
+                action = self.player.save_frame(file.meta.rotate).map(from_player);
             }
             ui.separator();
             // The caption takes the rest of the row, else a row of its own.
@@ -470,10 +494,14 @@ impl Viewer {
             .suffix("%")
             .fixed_decimals(0)
             .show_value(true);
+        // The slider rounds to whole percents; a change smaller than that is
+        // its rounding (e.g. of a fit of 36.9%), not the user, and must not
+        // turn Fit off.
         if ui
             .add_enabled(ready, slider)
             .on_hover_text(tr!("Zoom (Ctrl+wheel; drag the photo to look around)"))
             .changed()
+            && (percent - current * 100.0).abs() >= 0.5
         {
             self.set_zoom(percent / 100.0);
         }
@@ -904,43 +932,28 @@ impl Viewer {
     /// the wanted edits differ from the picture on screen. At most one render
     /// runs at a time; the newest wanted state is picked up when it finishes.
     fn update_rendering(&mut self, ctx: &egui::Context, file: &MediaFile, meta: &PhotoMeta) {
+        self.poll_ahead(ctx);
         let have_base = self.base.as_ref().is_some_and(|(path, ..)| path == &file.path);
-        let loading_base = self.base_loading.as_ref().is_some_and(|(path, _)| path == &file.path);
+        let loading_base = self.base_loading.as_ref().is_some_and(|((path, _), _)| path == &file.path);
         if !have_base && !loading_base {
+            self.keep_for_return();
             self.texture = None;
             self.error = None;
-            let (tx, rx) = channel();
-            let (path, kind, meta) = (file.path.clone(), file.kind, file.meta.clone());
-            // Some GPUs take no textures over 2048 pixels.
-            let working_side = WORKING_SIDE.min(ctx.input(|i| i.max_texture_side) as u32);
-            let ctx = ctx.clone();
-            std::thread::spawn(move || {
-                let result = render::decode(&path, kind, &meta)
-                    .map(|img| {
-                        let side = img.width().max(img.height());
-                        if side > working_side {
-                            (
-                                img.resize(working_side, working_side, FilterType::Triangle),
-                                working_side as f32 / side as f32,
-                            )
-                        } else {
-                            (img, 1.0)
-                        }
-                    })
-                    .map_err(|e| e.to_string());
-                let _ = tx.send(result);
-                ctx.request_repaint();
-            });
-            self.base_loading = Some((file.path.clone(), rx));
+            if let Some(prepared) = self.ahead.remove(&file.path) {
+                self.adopt(&file.path, prepared);
+            } else if let Some(job) = self.ahead_jobs.remove(&file.path) {
+                self.base_loading = Some(job);
+            } else {
+                self.base_loading = Some(prepare(ctx, file));
+            }
         }
-        if let Some((path, rx)) = &self.base_loading
+        if let Some((key, rx)) = &self.base_loading
             && let Ok(result) = rx.try_recv()
         {
-            match result {
-                Ok((img, scale)) => self.base = Some((path.clone(), Arc::new(img), scale)),
-                Err(e) => self.error = Some(e),
-            }
+            let prepared = into_prepared(ctx, key.clone(), result);
+            let path = key.0.clone();
             self.base_loading = None;
+            self.adopt(&path, prepared);
         }
 
         if let Some((key, rx)) = &self.rendering
@@ -955,7 +968,7 @@ impl Viewer {
         if base_path != &file.path || self.rendering.is_some() {
             return;
         }
-        let wanted: RenderKey = (file.path.clone(), format!("{}|{}", meta.rotate, meta.filters));
+        let wanted = render_key(file, meta);
         if self.texture.as_ref().is_some_and(|(key, _)| key == &wanted) {
             return;
         }
@@ -969,6 +982,78 @@ impl Viewer {
             ctx.request_repaint();
         });
         self.rendering = Some((wanted, rx));
+    }
+
+    /// Puts a prepared photo on screen.
+    fn adopt(&mut self, path: &std::path::Path, prepared: Result<Prepared, String>) {
+        match prepared {
+            Ok(Prepared { base, scale, texture }) => {
+                self.base = Some((path.to_path_buf(), base, scale));
+                self.texture = Some(texture);
+            }
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    /// Keeps the photo being left (or still being made) among those ahead,
+    /// so going back to it is instant.
+    fn keep_for_return(&mut self) {
+        if let Some((key, rx)) = self.base_loading.take() {
+            self.ahead_jobs.insert(key.0.clone(), (key, rx));
+        }
+        // Its edits being rendered would land on the next photo.
+        self.rendering = None;
+        if let (Some((path, base, scale)), Some(texture)) = (self.base.take(), self.texture.take())
+            && texture.0.0 == path
+        {
+            self.ahead.insert(path, Ok(Prepared { base, scale, texture }));
+        }
+    }
+
+    fn poll_ahead(&mut self, ctx: &egui::Context) {
+        let done: Vec<PathBuf> = self
+            .ahead_jobs
+            .iter()
+            .filter_map(|(path, (key, rx))| Some((path, into_prepared(ctx, key.clone(), rx.try_recv().ok()?))))
+            .map(|(path, prepared)| {
+                self.ahead.insert(path.clone(), prepared);
+                path.clone()
+            })
+            .collect();
+        for path in done {
+            self.ahead_jobs.remove(&path);
+        }
+    }
+
+    /// Prepares the photos around the one on screen, `neighbours` nearest
+    /// first, once that one is ready; lets go of the rest.
+    pub fn prepare_ahead(&mut self, ctx: &egui::Context, current: &MediaFile, neighbours: &[&MediaFile]) {
+        self.poll_ahead(ctx);
+        let wanted = |path: &PathBuf| path == &current.path || neighbours.iter().any(|f| &f.path == path);
+        self.ahead_jobs.retain(|path, _| wanted(path));
+        self.ahead.retain(|path, prepared| match neighbours.iter().find(|f| &f.path == path) {
+            // Edited since it was prepared: made again.
+            Some(file) => prepared.as_ref().map_or(true, |p| p.texture.0 == render_key(file, &file.meta)),
+            None => path == &current.path,
+        });
+        if self.base_loading.is_some() || self.rendering.is_some() || current.kind != MediaKind::Photo {
+            return;
+        }
+        // Two at a time, so the photo opened next is not kept waiting.
+        for file in neighbours.iter().filter(|f| f.kind == MediaKind::Photo) {
+            if self.ahead_jobs.len() >= 2 {
+                break;
+            }
+            if !self.ahead.contains_key(&file.path) && !self.ahead_jobs.contains_key(&file.path) {
+                self.ahead_jobs.insert(file.path.clone(), prepare(ctx, file));
+            }
+        }
+    }
+
+    /// Photos prepared ahead, ready to show.
+    #[cfg(test)]
+    pub fn prepared_ahead(&self) -> usize {
+        self.ahead.values().filter(|p| p.is_ok()).count()
     }
 
     /// True once the picture for this file and its saved edits is on screen.
@@ -1022,6 +1107,45 @@ impl Viewer {
     pub fn open_edit_panel(&mut self) {
         self.show_edit_panel = true;
     }
+}
+
+/// What a texture of `file` with edits `meta` shows.
+fn render_key(file: &MediaFile, meta: &PhotoMeta) -> RenderKey {
+    (file.path.clone(), format!("{}|{}", meta.rotate, meta.filters))
+}
+
+/// Decodes the working copy of `file` and renders its saved edits, in the
+/// background.
+fn prepare(ctx: &egui::Context, file: &MediaFile) -> (RenderKey, Receiver<PreparedResult>) {
+    let (tx, rx) = channel();
+    let (path, kind, meta) = (file.path.clone(), file.kind, file.meta.clone());
+    // Some GPUs take no textures over 2048 pixels.
+    let working_side = WORKING_SIDE.min(ctx.input(|i| i.max_texture_side) as u32);
+    let ctx = ctx.clone();
+    std::thread::spawn(move || {
+        let result = render::decode(&path, kind, &meta)
+            .map(|img| {
+                let side = img.width().max(img.height());
+                let (img, scale) = if side > working_side {
+                    (img.resize(working_side, working_side, FilterType::Triangle), working_side as f32 / side as f32)
+                } else {
+                    (img, 1.0)
+                };
+                let rgba = render::apply_edits_scaled(img.clone(), &meta, scale).to_rgba8();
+                let size = [rgba.width() as usize, rgba.height() as usize];
+                (img, scale, egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()))
+            })
+            .map_err(|e| e.to_string());
+        let _ = tx.send(result);
+        ctx.request_repaint();
+    });
+    (render_key(file, &file.meta), rx)
+}
+
+fn into_prepared(ctx: &egui::Context, key: RenderKey, result: PreparedResult) -> Result<Prepared, String> {
+    let (base, scale, image) = result?;
+    let texture = ctx.load_texture("viewer", image, egui::TextureOptions::LINEAR);
+    Ok(Prepared { base: Arc::new(base), scale, texture: (key, texture) })
 }
 
 fn from_player(action: PlayerAction) -> ViewerAction {

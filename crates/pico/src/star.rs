@@ -5,6 +5,9 @@
 //! It strikes the middle with sparks and a puff of smoke. Unstarring makes
 //! the badge vanish in a puff of smoke.
 //!
+//! The play button on a paused video is made the same way: it spins in when
+//! the video stops and bursts into smoke when it plays.
+//!
 //! The star is a faceted solid (two cushions on a five-pointed outline with rounded points)
 //! lit from the upper left, with a soft shadow beneath so it shows on light
 //! and dark photos alike.
@@ -36,6 +39,9 @@ const ROUND_INNER: f32 = 0.05;
 const ROUND_STEPS: usize = 6;
 /// Camera distance, in star radii, for the perspective.
 const CAMERA: f32 = 5.0;
+/// Seconds the play button takes to spin in, and to burst when played.
+const PLAY_IN: f64 = 0.45;
+const PLAY_OUT: f64 = 0.5;
 
 pub struct Flight {
     start: f64,
@@ -125,6 +131,40 @@ impl Puff {
     }
 }
 
+/// The play button over a video, `radius` from its middle to its tip,
+/// `since` seconds after the video stopped (`playing` false: it spins in) or
+/// started (it bursts into smoke and is gone). True while it still moves.
+pub fn play_button(
+    painter: &egui::Painter,
+    centre: Pos2,
+    radius: f32,
+    playing: bool,
+    since: f64,
+    hovered: bool,
+) -> bool {
+    let outline = play_outline();
+    if playing {
+        let k = (since / PLAY_OUT) as f32;
+        if !(0.0..1.0).contains(&k) {
+            return false;
+        }
+        let fade = (1.0 - k / 0.4).max(0.0);
+        if fade > 0.0 {
+            paint_solid(painter, &outline, centre, radius * (1.0 + 0.5 * ease_out(k)), 0.0, 0.0, 0.3, fade);
+        }
+        smoke(painter, centre, radius * 2.0, k, 3);
+        return true;
+    }
+    let k = ((since / PLAY_IN) as f32).clamp(0.0, 1.0);
+    // Spins in from edge-on, as the star does, and grows a little when hovered.
+    let yaw = PI * 1.5 * (1.0 - ease_out(k));
+    let tilt = 0.3 * (1.0 - k);
+    let grow = (0.6 + 0.4 * ease_out(k)) * if hovered { 1.08 } else { 1.0 };
+    let fade = (k / 0.3).min(1.0);
+    paint_solid(painter, &outline, centre, radius * grow, yaw, tilt, 0.3, fade);
+    k < 1.0
+}
+
 fn ease_out(k: f32) -> f32 {
     1.0 - (1.0 - k).powi(3)
 }
@@ -155,6 +195,22 @@ fn normalize(a: V3) -> V3 {
 /// The star turned by `yaw` about the vertical and `tilt` about the
 /// horizontal, `height` (0 on the photo, 1 high above it) setting the shadow.
 fn paint_star(painter: &egui::Painter, centre: Pos2, radius: f32, yaw: f32, tilt: f32, height: f32, fade: f32) {
+    paint_solid(painter, &star_outline(), centre, radius, yaw, tilt, height, fade);
+}
+
+/// A golden solid on `outline` (star-shaped around the origin, radius
+/// about 1), turned and shadowed as for `paint_star`.
+#[allow(clippy::too_many_arguments)]
+fn paint_solid(
+    painter: &egui::Painter,
+    outline: &[Pos2],
+    centre: Pos2,
+    radius: f32,
+    yaw: f32,
+    tilt: f32,
+    height: f32,
+    fade: f32,
+) {
     let turn = |[x, y, z]: V3| {
         let (x, z) = (x * yaw.cos() + z * yaw.sin(), z * yaw.cos() - x * yaw.sin());
         let (y, z) = (y * tilt.cos() - z * tilt.sin(), z * tilt.cos() + y * tilt.sin());
@@ -162,7 +218,6 @@ fn paint_star(painter: &egui::Painter, centre: Pos2, radius: f32, yaw: f32, tilt
     };
     // Model y points down, as on screen; z towards the viewer.
     let project = |p: V3| centre + Vec2::new(p[0], p[1]) * radius * CAMERA / (CAMERA - p[2]);
-    let outline = rounded_outline();
     let n = outline.len();
     let rim: Vec<V3> = outline.iter().map(|p| turn([p.x, p.y, 0.0])).collect();
 
@@ -241,18 +296,31 @@ fn paint_star(painter: &egui::Painter, centre: Pos2, radius: f32, yaw: f32, tilt
 }
 
 /// The five-pointed outline with its points and inner corners rounded off.
-fn rounded_outline() -> Vec<Pos2> {
-    let corners: Vec<Pos2> = (0..10)
+fn star_outline() -> Vec<Pos2> {
+    let corners: Vec<(Pos2, f32)> = (0..10)
         .map(|i| {
             let angle = -PI / 2.0 + i as f32 * PI / 5.0;
             let r = if i % 2 == 0 { 1.0 } else { INNER };
-            Pos2::new(r * angle.cos(), r * angle.sin())
+            let cut = if i % 2 == 0 { ROUND_POINT } else { ROUND_INNER };
+            (Pos2::new(r * angle.cos(), r * angle.sin()), cut)
         })
         .collect();
+    rounded(&corners)
+}
+
+/// A triangle pointing right, its middle at the origin, corners well rounded.
+fn play_outline() -> Vec<Pos2> {
+    // Its centroid is at the origin, so it spins about its middle.
+    let corners = [(-0.55, -0.9), (1.1, 0.0), (-0.55, 0.9)];
+    rounded(&corners.map(|(x, y)| (Pos2::new(x, y), 0.3)))
+}
+
+/// The polygon through `corners`, each rounded off `cut` along its edges.
+fn rounded(corners: &[(Pos2, f32)]) -> Vec<Pos2> {
+    let count = corners.len();
     let mut out = Vec::new();
-    for i in 0..10 {
-        let (prev, corner, next) = (corners[(i + 9) % 10], corners[i], corners[(i + 1) % 10]);
-        let cut = if i % 2 == 0 { ROUND_POINT } else { ROUND_INNER };
+    for i in 0..count {
+        let (prev, (corner, cut), next) = (corners[(i + count - 1) % count].0, corners[i], corners[(i + 1) % count].0);
         let a = corner + (prev - corner).normalized() * cut;
         let b = corner + (next - corner).normalized() * cut;
         // A quadratic curve from edge to edge, bent by the corner.

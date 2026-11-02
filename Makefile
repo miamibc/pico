@@ -3,7 +3,7 @@
 
 PICTURES ?= $(HOME)/Pictures
 
-.PHONY: all build release windows run test lint fmt check testdata tour logo licenses po places exif-tags maker-tags install clean
+.PHONY: all build release windows run test lint fmt check testdata tour screenshots logo licenses po places exif-tags maker-tags install clean
 
 all: release
 
@@ -49,6 +49,19 @@ testdata:
 # Screenshots of every test-library folder in target/ui-shots/.
 tour: testdata
 	cargo test -p pico testdata_tour -- --ignored
+
+# README and website screenshots in docs/screenshots, dark and light, of a demo
+# library of CC0 photos from Wikimedia Commons (needs Python with Pillow and the
+# internet the first time). The library sits in /tmp, so the Properties panel
+# shows a short path.
+DEMO ?= /tmp/Photos
+
+screenshots:
+	python3 -I docs/screenshots/make_screenshots.py library $(DEMO)
+	rm -rf target/screenshots
+	PICO_DEMO=$(DEMO) PICO_SHOTS=$(CURDIR)/target/screenshots cargo test -p pico website_shots -- --ignored
+	PICO_DEMO=$(DEMO) PICO_SHOTS=$(CURDIR)/target/screenshots PICO_SUFFIX=-light cargo test -p pico website_shots -- --ignored
+	python3 -I docs/screenshots/make_screenshots.py webp target/screenshots docs/screenshots
 
 # Draws the logos for the window and Help → About, and for README the title
 # logo with its text turned into outlines, light and dark (needs Inkscape and

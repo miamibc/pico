@@ -18,22 +18,23 @@ pub struct MediaFile {
     pub meta: PhotoMeta,
     pub size: u64,
     pub modified: Option<std::time::SystemTime>,
-    /// EXIF "date taken" (`YYYY:MM:DD HH:MM:SS`), for JPEG photos that have it.
+    /// When it was taken (`YYYY:MM:DD HH:MM:SS`): EXIF for photos, the
+    /// recording date for MP4 and QuickTime videos, where the file has one.
     pub taken: Option<String>,
     /// Where the photo was taken, from EXIF GPS: (latitude, longitude).
     pub gps: Option<(f64, f64)>,
 }
 
 impl MediaFile {
-    /// Reads the file's size, modification time and, for JPEGs, the EXIF date.
+    /// Reads the file's size, modification time and when it was taken: the
+    /// EXIF date of a photo, the recording date of an MP4 or QuickTime video.
     pub fn new(path: PathBuf, kind: MediaKind) -> Self {
         let stat = std::fs::metadata(&path).ok();
-        let is_jpeg = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "jpg" | "jpeg" | "jpe" | "jfif"));
-        let exif = if is_jpeg { crate::exif::read(&path) } else { None };
-        let (taken, gps) = exif.map_or((None, None), |e| (e.taken, e.gps));
+        let (taken, gps) = match kind {
+            MediaKind::Video => (crate::video::recorded(&path), None),
+            _ => crate::exif::read_quick(&path).map_or((None, None), |e| (e.taken, e.gps)),
+        };
+        let taken = taken.filter(|t| plausible_date(t));
         Self {
             path,
             kind,
@@ -58,6 +59,13 @@ impl MediaFile {
     pub fn name(&self) -> String {
         Folder::file_name(&self.path)
     }
+}
+
+/// Whether `date` (`YYYY:MM:DD HH:MM:SS`) is a real one: cameras write
+/// zeros or blanks when their clock was not set.
+fn plausible_date(date: &str) -> bool {
+    let number = |range: std::ops::Range<usize>| date.get(range).and_then(|s| s.parse::<u32>().ok());
+    matches!((number(0..4), number(5..7), number(8..10)), (Some(1800..), Some(1..=12), Some(1..=31)))
 }
 
 #[derive(Debug, Clone)]
@@ -637,6 +645,37 @@ pub fn date_label(date: &str) -> String {
 #[cfg(test)]
 mod place_tests {
     use super::*;
+
+    #[test]
+    fn dates_come_from_png_exif_and_mp4_recordings() {
+        let dir = std::env::temp_dir().join(format!("pico-test-dates-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let chunk = |kind: &[u8], data: &[u8]| [&(data.len() as u32).to_be_bytes()[..], kind, data, &[0; 4]].concat();
+        let png =
+            [&b"\x89PNG\r\n\x1a\n"[..], &chunk(b"eXIf", &crate::exif::read_tests::sample_tiff()), &chunk(b"IEND", &[])]
+                .concat();
+        std::fs::write(dir.join("a.png"), png).unwrap();
+        let mp4_box = |kind: &[u8], body: &[u8]| [&((body.len() + 8) as u32).to_be_bytes()[..], kind, body].concat();
+        // Recorded 2021-03-14 09:05:59 UTC: seconds since 1904, after version and flags.
+        let mut mvhd = vec![0; 100];
+        mvhd[4..8].copy_from_slice(&3_698_557_559u32.to_be_bytes());
+        // `moov` after the media data, as cameras write it.
+        let mp4 =
+            [mp4_box(b"ftyp", b"isom\0\0\0\0"), mp4_box(b"mdat", &[7; 64]), mp4_box(b"moov", &mp4_box(b"mvhd", &mvhd))]
+                .concat();
+        std::fs::write(dir.join("clip.mp4"), mp4).unwrap();
+
+        let png = MediaFile::new(dir.join("a.png"), MediaKind::Photo);
+        assert_eq!(png.taken.as_deref(), Some("2009:07:14 18:30:05"));
+        let clip = MediaFile::new(dir.join("clip.mp4"), MediaKind::Video);
+        assert_eq!(clip.taken.as_deref(), Some("2021:03:14 09:05:59"));
+        assert_eq!(clip.sort_date(), "2021:03:14 09:05:59");
+        // A camera without its clock set: not a date to sort by.
+        assert!(!plausible_date("0000:00:00 00:00:00") && !plausible_date("    :  :     :  :  "));
+        assert!(plausible_date("2009:07:14 18:30:05"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn keys_and_labels() {

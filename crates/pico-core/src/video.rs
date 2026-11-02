@@ -325,9 +325,88 @@ impl Drop for SoundPlayer {
     }
 }
 
+/// When an MP4 or QuickTime video (MOV, M4V, 3GP) was recorded, from its
+/// `mvhd` box, as `YYYY:MM:DD HH:MM:SS` in UTC as the file keeps it. Read
+/// without ffmpeg, a few small reads per file, so scanning stays quick.
+pub fn recorded(path: &Path) -> Option<String> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = std::fs::File::open(path).ok()?;
+    let len = file.metadata().ok()?.len();
+    // Top-level boxes, skipped by their sizes, up to `moov` (often at the end).
+    let mut at = 0u64;
+    let mut moov = None;
+    for _ in 0..64 {
+        if at + 8 > len {
+            break;
+        }
+        file.seek(SeekFrom::Start(at)).ok()?;
+        let mut header = [0u8; 16];
+        file.read_exact(&mut header[..8]).ok()?;
+        let (size, header_len) = match u32::from_be_bytes(header[..4].try_into().ok()?) {
+            1 => {
+                file.read_exact(&mut header[8..]).ok()?;
+                (u64::from_be_bytes(header[8..].try_into().ok()?), 16)
+            }
+            0 => (len - at, 8),
+            size => (u64::from(size), 8),
+        };
+        if size < header_len {
+            break;
+        }
+        if &header[4..8] == b"moov" {
+            moov = Some(size - header_len);
+            break;
+        }
+        at += size;
+    }
+    // `mvhd` comes first in `moov`, near enough.
+    let mut data = Vec::new();
+    file.take(moov?.min(4096)).read_to_end(&mut data).ok()?;
+    let mut rest = data.as_slice();
+    while rest.len() >= 8 {
+        let size = (u32::from_be_bytes(rest[..4].try_into().ok()?) as usize).min(rest.len());
+        if &rest[4..8] == b"mvhd" {
+            let body = rest.get(8..size)?;
+            // Seconds since 1904, after the version and flags.
+            let created = match body.first()? {
+                1 => u64::from_be_bytes(body.get(4..12)?.try_into().ok()?),
+                _ => u64::from(u32::from_be_bytes(body.get(4..8)?.try_into().ok()?)),
+            };
+            // Zero (or nonsense before 1970) means the camera did not say.
+            let secs = created.checked_sub(2_082_844_800).filter(|&s| s > 0)?;
+            return Some(crate::fileops::exif_style_date(secs));
+        }
+        if size < 8 {
+            break;
+        }
+        rest = &rest[size..];
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recording_date_of_a_real_mp4_and_mov() {
+        let Some(ffmpeg) = ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("pico-test-recorded-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in ["clip.mp4", "clip.mov"] {
+            let path = dir.join(name);
+            let made = Command::new(ffmpeg)
+                .args(["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=64x48:rate=5:duration=1"])
+                .args(["-pix_fmt", "yuv420p", "-metadata", "creation_time=2019-08-03T17:20:11Z"])
+                .arg(&path)
+                .status()
+                .unwrap();
+            assert!(made.success());
+            assert_eq!(recorded(&path).as_deref(), Some("2019:08:03 17:20:11"), "{name}");
+        }
+        assert_eq!(recorded(&dir.join("missing.mp4")), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn describes_container_streams_and_tags() {

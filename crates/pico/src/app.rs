@@ -7,7 +7,7 @@ use crate::grid::{
 use crate::info::{InfoPanel, TagAction};
 use crate::slideshow::{Slideshow, SlideshowAction};
 use crate::thumbs::ThumbCache;
-use crate::viewer::{Viewer, ViewerAction};
+use crate::viewer::{self, Viewer, ViewerAction};
 use eframe::egui;
 use pico_core::album_file::{self, Album, Entry};
 use pico_core::export::{self, ExportOptions};
@@ -792,11 +792,38 @@ impl PicoApp {
     /// while searching or showing starred photos), minus hidden photos and,
     /// optionally, unstarred ones.
     fn listing(&self) -> Vec<FileRef> {
-        self.listing_of(self.source.as_ref())
+        self.listing_of(self.source.as_ref(), None)
     }
 
-    /// What `source` lists, with the search, filters and sort order applied.
-    fn listing_of(&self, source: Option<&Source>) -> Vec<FileRef> {
+    /// The listing to move through photo by photo (the viewer, the
+    /// slideshow, arrow keys): the current photo stays in it, in its place,
+    /// even once it no longer passes the filters (unstarred under Starred,
+    /// hidden, its caption changed while searching), so the next photo is
+    /// the one after it rather than the first.
+    ///
+    /// When the current photo is not in the source at all (the ribbon was
+    /// scrolled on to another folder or album after it was picked), the
+    /// source goes back to the photo's own, so stepping does not jump into
+    /// the other one.
+    fn stepping_listing(&mut self) -> Vec<FileRef> {
+        let listing = self.listing_of(self.source.as_ref(), self.current);
+        let Some(current) = self.current.filter(|c| !listing.contains(c)) else { return listing };
+        let own = match self.source {
+            Some(Source::Folder(_)) => Some(Source::Folder(current.0)),
+            _ => self.ribbon().into_iter().flatten().find(|(_, _, refs)| refs.contains(&current)).map(|(s, ..)| s),
+        };
+        match own {
+            Some(source) => {
+                self.source = Some(source);
+                self.listing_of(self.source.as_ref(), self.current)
+            }
+            None => listing,
+        }
+    }
+
+    /// What `source` lists, with the search, filters and sort order applied;
+    /// `keep` is listed whatever the filters say.
+    fn listing_of(&self, source: Option<&Source>, keep: Option<FileRef>) -> Vec<FileRef> {
         let query = self.search.trim().to_lowercase();
         let album = match source {
             Some(Source::Album(token)) if query.is_empty() => Some(token.as_str()),
@@ -842,7 +869,8 @@ impl PicoApp {
                         && (!starred || f.meta.star)
                         && (!self.videos_only || f.kind == pico_core::media::MediaKind::Video);
                     let matches = query.is_empty() || matches_query(folder, f, query);
-                    (visible && matches).then_some((fi, i))
+                    let kept = keep == Some((fi, i)) && in_album && in_month && in_place;
+                    (visible && matches || kept).then_some((fi, i))
                 })
             })
             .collect();
@@ -962,7 +990,7 @@ impl PicoApp {
     fn move_in_album(&mut self, token: &str, photos: &[FileRef], missing: &[usize], to: usize) {
         self.sync_album_files();
         // The tiles as on screen: the photos, and the missing ones among them.
-        let listing = self.listing_of(Some(&Source::Album(token.to_owned())));
+        let listing = self.listing_of(Some(&Source::Album(token.to_owned())), None);
         let mut tiles: Vec<Entry> = listing
             .iter()
             .filter_map(|&at| self.file(at))
@@ -1637,7 +1665,7 @@ impl PicoApp {
     }
 
     fn start_slideshow(&mut self, ctx: &egui::Context) {
-        let listing = self.listing();
+        let listing = self.stepping_listing();
         if listing.is_empty() {
             return;
         }
@@ -1649,12 +1677,17 @@ impl PicoApp {
     }
 
     fn slideshow(&mut self, ui: &mut egui::Ui, back: ReturnTo) {
-        let listing = self.listing();
+        let listing = self.stepping_listing();
         let files: Vec<MediaFile> = listing.iter().filter_map(|&at| self.file(at).cloned()).collect();
         let Some(show) = self.slideshow.as_mut() else {
             self.view = View::Library;
             return;
         };
+        // The show follows the photo, not a place in a listing that may have
+        // changed since (a rescan, a filter).
+        if let Some(index) = self.current.and_then(|c| listing.iter().position(|&r| r == c)) {
+            show.index = index;
+        }
         let action = show.show(ui, &files);
         // Leaving the slideshow selects the photo it stopped on.
         self.current = listing.get(show.index).copied();
@@ -1686,7 +1719,7 @@ impl PicoApp {
 
     /// Moves the current photo by `delta` within the listing.
     fn step(&mut self, delta: isize) {
-        let listing = self.listing();
+        let listing = self.stepping_listing();
         if delta == 0 || listing.is_empty() {
             return;
         }
@@ -1703,15 +1736,20 @@ impl PicoApp {
 
     fn click(&mut self, at: FileRef, toggle: bool, range: bool) {
         if range && let Some(anchor) = self.current {
-            let listing = self.listing();
+            // In order on screen: across the folders or albums of the ribbon.
+            let listing: Vec<FileRef> = match self.ribbon() {
+                Some(ribbon) => ribbon.into_iter().flat_map(|(_, _, refs)| refs).collect(),
+                None => self.listing(),
+            };
             let (a, b) = (listing.iter().position(|&r| r == anchor), listing.iter().position(|&r| r == at));
             if let (Some(a), Some(b)) = (a, b) {
                 if !toggle {
                     self.selection.clear();
                 }
                 self.selection.extend(&listing[a.min(b)..=a.max(b)]);
+                return;
             }
-            return;
+            // No run from a photo no longer listed: a plain click.
         }
         if toggle {
             if !self.selection.remove(&at) {
@@ -2497,7 +2535,7 @@ impl PicoApp {
                 .into_iter()
                 .map(|fi| {
                     let source = Source::Folder(fi);
-                    let refs = self.listing_of(Some(&source));
+                    let refs = self.listing_of(Some(&source), None);
                     (source, self.folders[fi].name.clone(), refs)
                 })
                 .collect(),
@@ -2506,7 +2544,7 @@ impl PicoApp {
                 .into_iter()
                 .map(|(token, name, _)| {
                     let source = Source::Album(token);
-                    let refs = self.listing_of(Some(&source));
+                    let refs = self.listing_of(Some(&source), None);
                     (source, name, refs)
                 })
                 .collect(),
@@ -2546,7 +2584,7 @@ impl PicoApp {
     /// Every photo, filtered and sorted as Timeline and Places list theirs
     /// (every date starts with the empty month).
     fn dated_listing(&self) -> Vec<FileRef> {
-        self.listing_of(Some(&Source::Month(String::new())))
+        self.listing_of(Some(&Source::Month(String::new())), None)
     }
 
     /// When the folder's first photo was taken (or its file date).
@@ -2966,7 +3004,7 @@ impl PicoApp {
     }
 
     fn photo(&mut self, ui: &mut egui::Ui) {
-        let listing = self.listing();
+        let listing = self.stepping_listing();
         let Some(file) = self.current.and_then(|at| self.folders.get(at.0)?.files.get(at.1)) else {
             // The photo went away (trashed, renamed, rescanned).
             self.set_full_screen(ui.ctx(), false);
@@ -2990,7 +3028,16 @@ impl PicoApp {
             }
         }
         self.viewer.still = !self.animations;
-        match self.viewer.show(ui, file, (position, listing.len().max(1))) {
+        let action = self.viewer.show(ui, file, (position, listing.len().max(1)));
+        // Next, previous, the one after next and so on.
+        let neighbours: Vec<&MediaFile> = (1..=viewer::AHEAD)
+            .flat_map(|d| [position.checked_add(d), position.checked_sub(d)])
+            .flatten()
+            .filter_map(|i| listing.get(i))
+            .filter_map(|r| self.folders.get(r.0)?.files.get(r.1))
+            .collect();
+        self.viewer.prepare_ahead(ui.ctx(), file, &neighbours);
+        match action {
             Some(ViewerAction::Close) => {
                 self.set_full_screen(ui.ctx(), false);
                 self.view = View::Library;
@@ -3615,6 +3662,13 @@ impl PicoApp {
         self.selection.len()
     }
 
+    /// The selected photos' names, sorted.
+    pub fn selected_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.selection.iter().filter_map(|&at| self.file(at)).map(|f| f.name()).collect();
+        names.sort();
+        names
+    }
+
     pub fn listing_names(&self) -> Vec<String> {
         self.listing().into_iter().filter_map(|at| self.file(at)).map(|f| f.name()).collect()
     }
@@ -3666,6 +3720,10 @@ impl PicoApp {
 
     pub fn viewer_loaded(&self) -> bool {
         self.current.and_then(|at| self.file(at)).is_some_and(|file| self.viewer.is_loaded(file))
+    }
+
+    pub fn viewer_prepared_ahead(&self) -> usize {
+        self.viewer.prepared_ahead()
     }
 
     pub fn open_file_named(&mut self, name: &str) {
@@ -3811,6 +3869,10 @@ impl PicoApp {
         self.search = text.to_owned();
     }
 
+    pub fn open_place(&mut self, key: &str) {
+        self.select_source(Source::Place(key.to_owned()));
+    }
+
     pub fn open_month(&mut self, key: &str) {
         self.select_source(Source::Month(key.to_owned()));
     }
@@ -3881,6 +3943,12 @@ impl PicoApp {
 
     pub fn watched_count(&self) -> usize {
         self.rules.watched.len()
+    }
+
+    /// The ribbon scrolled by hand to folder `index`: the source moves on,
+    /// the current photo stays.
+    pub fn scroll_ribbon_to_folder(&mut self, index: usize) {
+        self.source = Some(Source::Folder(index));
     }
 
     pub fn show_starred(&mut self) {

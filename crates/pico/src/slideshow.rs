@@ -25,7 +25,9 @@ pub struct Slideshow {
     pub seconds: f64,
     /// When the current slide appeared (egui time).
     shown_at: Option<f64>,
-    previous: Option<egui::TextureHandle>,
+    /// The slide before, with its quarter turns (videos are turned when
+    /// painted), fading out.
+    previous: Option<(egui::TextureHandle, u8)>,
     slides: HashMap<PathBuf, Slide>,
     /// The current slide when it is a video: it plays, and the show moves on
     /// when it ends.
@@ -74,8 +76,10 @@ impl Slideshow {
         }
         // A video that ffprobe cannot read shows its still like a photo.
         let video = self.video.as_mut().filter(|v| v.info().is_ok());
+        // Stills come rendered with their rotation; video frames are turned
+        // when painted.
         let mut current = match self.slides.get(&file.path) {
-            Some(Slide::Ready(texture)) => Some(texture.clone()),
+            Some(Slide::Ready(texture)) => Some((texture.clone(), 0)),
             _ => None,
         };
         let ready = current.is_some() || matches!(self.slides.get(&files[self.index].path), Some(Slide::Failed));
@@ -110,7 +114,7 @@ impl Slideshow {
             }
             video.advance(&ctx, now);
             if let Some(texture) = video.texture() {
-                current = Some(texture.clone());
+                current = Some((texture.clone(), file.meta.rotate));
             }
             video_ended = video.finished();
         }
@@ -133,13 +137,13 @@ impl Slideshow {
         let painter = ui.painter();
         painter.rect_filled(area, 0.0, egui::Color32::BLACK);
         let fade = (elapsed / FADE_SECONDS).clamp(0.0, 1.0) as f32;
-        if let Some(previous) = &self.previous
+        if let Some((previous, turns)) = &self.previous
             && fade < 1.0
         {
-            paint_fit(painter, area, previous, 1.0 - fade);
+            paint_fit(painter, area, previous, *turns, 1.0 - fade);
         }
-        if let Some(texture) = &current {
-            paint_fit(painter, area, texture, if self.previous.is_some() { fade } else { 1.0 });
+        if let Some((texture, turns)) = &current {
+            paint_fit(painter, area, texture, *turns, if self.previous.is_some() { fade } else { 1.0 });
         } else if !ready {
             painter.text(
                 area.center(),
@@ -184,7 +188,7 @@ impl Slideshow {
         self.video.as_ref().is_some_and(Playback::is_playing)
     }
 
-    fn step(&mut self, len: usize, delta: isize, current: Option<egui::TextureHandle>) {
+    fn step(&mut self, len: usize, delta: isize, current: Option<(egui::TextureHandle, u8)>) {
         self.index = (self.index as isize + delta).rem_euclid(len as isize) as usize;
         self.previous = current;
         self.shown_at = None;
@@ -236,10 +240,7 @@ impl Slideshow {
     }
 }
 
-fn paint_fit(painter: &egui::Painter, area: egui::Rect, texture: &egui::TextureHandle, opacity: f32) {
-    let size = texture.size_vec2();
-    let scale = (area.width() / size.x).min(area.height() / size.y);
-    let rect = egui::Rect::from_center_size(area.center(), size * scale);
+fn paint_fit(painter: &egui::Painter, area: egui::Rect, texture: &egui::TextureHandle, turns: u8, opacity: f32) {
     let tint = egui::Color32::from_white_alpha((opacity.clamp(0.0, 1.0) * 255.0) as u8);
-    painter.image(texture.id(), rect, crate::grid::full_uv(), tint);
+    crate::player::paint_turned(painter, area, texture, turns, tint);
 }

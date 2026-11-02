@@ -363,6 +363,7 @@ pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> G
                 cells.push((at, response));
             }
         }
+        prefetch(&view, &layout, viewport, thumbs);
         if view.reorder
             && let Some(drag) = egui::DragAndDrop::payload::<PhotoDrag>(ui.ctx())
             && let Some(pos) = ui.ctx().pointer_latest_pos().filter(|&p| ui.clip_rect().contains(p))
@@ -445,6 +446,47 @@ pub fn show(ui: &mut egui::Ui, view: GridView<'_>, thumbs: &mut ThumbCache) -> G
         }
     }
     GridOutput { action, action_section, cells, top_section, offset, programmatic, hovered, add_folder }
+}
+
+/// Rows decoded ahead above and below the view.
+const NEAR_ROWS: f32 = 2.0;
+
+/// Hands the thumbnail cache the rows just off screen, nearest first (below
+/// before above at the same distance), and how many thumbnails to keep:
+/// twice those on and near the screen, so a short scroll back finds them.
+fn prefetch(view: &GridView<'_>, layout: &Layout, viewport: egui::Rect, thumbs: &mut ThumbCache) {
+    let reach = NEAR_ROWS * layout.step.y;
+    let mut rows = Vec::new();
+    let mut keep = 0;
+    for (s, section) in view.sections.iter().enumerate() {
+        let rows_top = layout.tops[s].1;
+        if rows_top > viewport.bottom() + reach {
+            break;
+        }
+        for row in 0..section.len().div_ceil(layout.columns) {
+            let top = rows_top + row as f32 * layout.step.y;
+            let above = top + layout.cell.y < viewport.top();
+            let gap = if above { viewport.top() - top - layout.cell.y } else { top - viewport.bottom() };
+            if gap > reach {
+                if above {
+                    continue;
+                }
+                break;
+            }
+            keep += layout.columns;
+            // Rows on screen were drawn and asked for already.
+            if gap > 0.0 {
+                rows.push((gap, above, s, row));
+            }
+        }
+    }
+    rows.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    let near = rows.into_iter().flat_map(|(_, _, s, row)| {
+        let section = &view.sections[s];
+        let slots = row * layout.columns..((row + 1) * layout.columns).min(section.len());
+        slots.filter_map(move |slot| section.slot(slot).ok().map(|i| section.items[i].1))
+    });
+    thumbs.prefetch(near, keep * 2);
 }
 
 /// The wheel this frame, in points the content moves down: (from a mouse
