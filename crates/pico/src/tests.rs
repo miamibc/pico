@@ -2543,3 +2543,29 @@ fn filmstrip_stays_put_at_the_last_photos() {
         assert!(seen.windows(2).all(|w| w[0] == w[1]), "the strip jerks: {seen:?}");
     }
 }
+
+#[test]
+fn paging_shows_the_prepared_neighbour_at_once() {
+    let fixture = Fixture::new("ahead");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("b.png").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    wait_until(&mut harness, "the photo to load", |app| app.is_viewing() && app.viewer_loaded());
+    wait_until(&mut harness, "both neighbours", |app| app.viewer_prepared_ahead() == 2);
+
+    // No blank frame: the next photo is on screen in the very first one
+    // (the key is handled in one frame, the photo drawn in the next).
+    harness.key_press(Key::ArrowRight);
+    harness.step();
+    assert_eq!(harness.state().selected_file(), Some(2));
+    harness.step();
+    assert!(harness.state().viewer_loaded());
+    // And back: the photo just left was kept.
+    harness.key_press(Key::ArrowLeft);
+    harness.step();
+    harness.step();
+    assert_eq!(harness.state().selected_file(), Some(1));
+    assert!(harness.state().viewer_loaded());
+}

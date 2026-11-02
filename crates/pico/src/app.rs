@@ -7,7 +7,7 @@ use crate::grid::{
 use crate::info::{InfoPanel, TagAction};
 use crate::slideshow::{Slideshow, SlideshowAction};
 use crate::thumbs::ThumbCache;
-use crate::viewer::{Viewer, ViewerAction};
+use crate::viewer::{self, Viewer, ViewerAction};
 use eframe::egui;
 use pico_core::album_file::{self, Album, Entry};
 use pico_core::export::{self, ExportOptions};
@@ -2990,7 +2990,16 @@ impl PicoApp {
             }
         }
         self.viewer.still = !self.animations;
-        match self.viewer.show(ui, file, (position, listing.len().max(1))) {
+        let action = self.viewer.show(ui, file, (position, listing.len().max(1)));
+        // Next, previous, the one after next and so on.
+        let neighbours: Vec<&MediaFile> = (1..=viewer::AHEAD)
+            .flat_map(|d| [position.checked_add(d), position.checked_sub(d)])
+            .flatten()
+            .filter_map(|i| listing.get(i))
+            .filter_map(|r| self.folders.get(r.0)?.files.get(r.1))
+            .collect();
+        self.viewer.prepare_ahead(ui.ctx(), file, &neighbours);
+        match action {
             Some(ViewerAction::Close) => {
                 self.set_full_screen(ui.ctx(), false);
                 self.view = View::Library;
@@ -3666,6 +3675,10 @@ impl PicoApp {
 
     pub fn viewer_loaded(&self) -> bool {
         self.current.and_then(|at| self.file(at)).is_some_and(|file| self.viewer.is_loaded(file))
+    }
+
+    pub fn viewer_prepared_ahead(&self) -> usize {
+        self.viewer.prepared_ahead()
     }
 
     pub fn open_file_named(&mut self, name: &str) {
