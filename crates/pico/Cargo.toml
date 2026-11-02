@@ -22,3 +22,4 @@ zbus = { version = "5", default-features = false, features = ["async-io", "block
 
 [dev-dependencies]
 egui_kittest = { version = "0.37.0", features = ["eframe", "wgpu", "snapshot"] }
+egui_system_font_provider = "0.37.0"

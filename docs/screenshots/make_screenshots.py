@@ -124,9 +124,6 @@ PHOTOS = {
     ],
 }
 
-# GPS dropped: the place name has a letter the interface font lacks.
-DROP_GPS = {"Sunsets/206.jpg"}
-
 DESCRIPTIONS = {
     "Mountain Lakes": "Still water, high peaks and a lot of walking",
     "Cats": "The real owners of the house",
@@ -176,8 +173,8 @@ def download(url):
     raise last
 
 
-def without_gps(image, exif, drop):
-    """Drops GPS that is asked to go or that is all zeros (no fix)."""
+def without_zero_gps(exif):
+    """Drops GPS that is all zeros: the camera had no fix."""
     gps = exif.get_ifd(0x8825)
     if not gps:
         return False
@@ -190,7 +187,7 @@ def without_gps(image, exif, drop):
 
     lat, lon = gps.get(2), gps.get(4)
     zero = lat is None or lon is None or all(value(x) == 0 for x in (*lat, *lon))
-    if not (drop or zero):
+    if not zero:
         return False
     exif.get_ifd(0x8769)  # load the Exif IFD so it is written back
     del exif[0x8825]
@@ -211,7 +208,7 @@ def library(root):
                 continue
             image = Image.open(io.BytesIO(download(found[title])))
             exif = image.getexif()
-            without_gps(image, exif, f"{folder}/{name}" in DROP_GPS)
+            without_zero_gps(exif)
             image.thumbnail((2048, 2048))
             image.convert("RGB").save(out, quality=90, exif=exif.tobytes())
             print("got", folder, name, flush=True)

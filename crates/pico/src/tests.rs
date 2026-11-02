@@ -2789,8 +2789,11 @@ fn website_shots() {
         .with_pixels_per_point(1.5)
         .with_max_steps(64)
         .with_render_cursor(false)
-        // Some place names have letters the interface font lacks.
-        .allow_missing_glyphs()
+        // As eframe does: letters the built-in fonts lack (in place names, say)
+        // come from the system fonts.
+        .with_context_setup(|ctx| {
+            ctx.add_font_provider(std::sync::Arc::new(egui_system_font_provider::SystemFontProvider::new()))
+        })
         .build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![library], false));
     let ctx = harness.ctx.clone();
     harness.state_mut().set_system_dark(&ctx, dark);

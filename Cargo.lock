@@ -2876,6 +2876,7 @@ dependencies = [
  "eframe",
  "egui",
  "egui_kittest",
+ "egui_system_font_provider",
  "pico-core",
  "rfd",
  "sys-locale",
