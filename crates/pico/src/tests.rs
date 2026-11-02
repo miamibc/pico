@@ -2667,3 +2667,46 @@ fn stepping_stays_in_the_photos_folder_after_the_ribbon_scrolled_on() {
     assert_eq!(harness.state().selected_file(), Some(1), "b.png, in the photo's own folder");
     assert_eq!(harness.state().current_folder_name().as_deref(), Some("Holiday"));
 }
+
+#[test]
+fn ctrl_and_shift_clicks_select_in_the_grid() {
+    let fixture = Fixture::new("multi-select");
+    let other = fixture.dir.join("zz other");
+    std::fs::create_dir_all(&other).unwrap();
+    for name in ["x.png", "y.png"] {
+        RgbImage::from_pixel(60, 40, Rgb([90, 90, 90])).save(other.join(name)).unwrap();
+    }
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 2);
+    let click = |harness: &mut Harness<'_, PicoApp>, name: &str, modifiers: Modifiers| {
+        harness.get_by_label(name).click_modifiers(modifiers);
+        harness.step();
+    };
+    let selected = |harness: &Harness<'_, PicoApp>| harness.state().selected_names();
+
+    // Ctrl adds and takes away, one by one.
+    click(&mut harness, "a.png", Modifiers::NONE);
+    click(&mut harness, "c.png", Modifiers::COMMAND);
+    assert_eq!(selected(&harness), ["a.png", "c.png"]);
+    click(&mut harness, "a.png", Modifiers::COMMAND);
+    assert_eq!(selected(&harness), ["c.png"]);
+
+    // Shift selects a run from the photo clicked last without it.
+    click(&mut harness, "a.png", Modifiers::NONE);
+    click(&mut harness, "c.png", Modifiers::SHIFT);
+    assert_eq!(selected(&harness), ["a.png", "b.png", "c.png"]);
+    click(&mut harness, "b.png", Modifiers::SHIFT);
+    assert_eq!(selected(&harness), ["a.png", "b.png"], "the run starts where it did");
+
+    // Ctrl+Shift adds a run to what is selected.
+    click(&mut harness, "x.png", Modifiers::NONE);
+    click(&mut harness, "y.png", Modifiers::COMMAND);
+    click(&mut harness, "b.png", Modifiers::COMMAND);
+    click(&mut harness, "c.png", Modifiers::COMMAND | Modifiers::SHIFT);
+    assert_eq!(selected(&harness), ["b.png", "c.png", "x.png", "y.png"]);
+
+    // A run goes on across folders, in the order the ribbon shows them.
+    click(&mut harness, "b.png", Modifiers::NONE);
+    click(&mut harness, "x.png", Modifiers::SHIFT);
+    assert_eq!(selected(&harness), ["b.png", "c.png", "x.png"]);
+}

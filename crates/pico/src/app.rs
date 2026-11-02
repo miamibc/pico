@@ -1736,15 +1736,20 @@ impl PicoApp {
 
     fn click(&mut self, at: FileRef, toggle: bool, range: bool) {
         if range && let Some(anchor) = self.current {
-            let listing = self.listing();
+            // In order on screen: across the folders or albums of the ribbon.
+            let listing: Vec<FileRef> = match self.ribbon() {
+                Some(ribbon) => ribbon.into_iter().flat_map(|(_, _, refs)| refs).collect(),
+                None => self.listing(),
+            };
             let (a, b) = (listing.iter().position(|&r| r == anchor), listing.iter().position(|&r| r == at));
             if let (Some(a), Some(b)) = (a, b) {
                 if !toggle {
                     self.selection.clear();
                 }
                 self.selection.extend(&listing[a.min(b)..=a.max(b)]);
+                return;
             }
-            return;
+            // No run from a photo no longer listed: a plain click.
         }
         if toggle {
             if !self.selection.remove(&at) {
@@ -3655,6 +3660,13 @@ impl PicoApp {
 
     pub fn selected_count(&self) -> usize {
         self.selection.len()
+    }
+
+    /// The selected photos' names, sorted.
+    pub fn selected_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.selection.iter().filter_map(|&at| self.file(at)).map(|f| f.name()).collect();
+        names.sort();
+        names
     }
 
     pub fn listing_names(&self) -> Vec<String> {
