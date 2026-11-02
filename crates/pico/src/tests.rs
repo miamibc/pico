@@ -2569,3 +2569,27 @@ fn paging_shows_the_prepared_neighbour_at_once() {
     assert_eq!(harness.state().selected_file(), Some(1));
     assert!(harness.state().viewer_loaded());
 }
+
+#[test]
+fn fit_stays_on_when_the_orientation_changes() {
+    let fixture = Fixture::new("orientation");
+    RgbImage::from_pixel(1600, 1000, Rgb([90, 90, 90])).save(fixture.dir.join("d.png")).unwrap();
+    RgbImage::from_pixel(1000, 1600, Rgb([60, 60, 60])).save(fixture.dir.join("e.png")).unwrap();
+    RgbImage::from_pixel(1600, 1000, Rgb([30, 30, 30])).save(fixture.dir.join("f.png")).unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("d.png").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    wait_until(&mut harness, "the photo to load", |app| app.viewer_loaded());
+    assert_eq!(harness.state().zoom_state().0, None, "fits the window");
+    for key in [Key::ArrowRight, Key::ArrowRight, Key::ArrowLeft, Key::ArrowLeft] {
+        harness.key_press(key);
+        for _ in 0..3 {
+            harness.step();
+            assert_eq!(harness.state().zoom_state().0, None, "still fits after {key:?}");
+        }
+        wait_until(&mut harness, "the photo to load", |app| app.viewer_loaded());
+        assert_eq!(harness.state().zoom_state().0, None, "still fits after {key:?}");
+    }
+}

@@ -486,10 +486,14 @@ impl Viewer {
             .suffix("%")
             .fixed_decimals(0)
             .show_value(true);
+        // The slider rounds to whole percents; a change smaller than that is
+        // its rounding (e.g. of a fit of 36.9%), not the user, and must not
+        // turn Fit off.
         if ui
             .add_enabled(ready, slider)
             .on_hover_text(tr!("Zoom (Ctrl+wheel; drag the photo to look around)"))
             .changed()
+            && (percent - current * 100.0).abs() >= 0.5
         {
             self.set_zoom(percent / 100.0);
         }
