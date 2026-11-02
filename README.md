@@ -386,7 +386,7 @@ language is in `crates/pico/po/README.md`.
   description, date and photos in album order.
 - `~/.cache/pico/thumbs/` — the thumbnail cache, safe to delete.
 
-## For developers
+## For developers 
 
 - `crates/pico-core` — everything without a UI: `.picasa.ini` (`ini`, `meta`),
   collages (`collage`), the edit stack (`filters`, `rect64`), effects
