@@ -2747,3 +2747,92 @@ fn a_video_rotated_in_pico_plays_rotated() {
     let (width, height) = pico_core::image::image_dimensions(&saved).unwrap();
     assert_eq!((width, height), (120, 160));
 }
+
+/// The README and website screenshots, taken by `make screenshots` of the demo
+/// library made by `docs/screenshots/make_screenshots.py`. `PICO_DEMO` is the
+/// library, `PICO_SHOTS` where the PNGs go; `PICO_SUFFIX=-light` takes them in
+/// the light theme.
+#[test]
+#[ignore = "needs the demo library; run by make screenshots"]
+fn website_shots() {
+    let _gpu = gpu_turn();
+    let library = PathBuf::from(std::env::var("PICO_DEMO").expect("PICO_DEMO"));
+    let out = PathBuf::from(std::env::var("PICO_SHOTS").expect("PICO_SHOTS"));
+    std::fs::create_dir_all(&out).unwrap();
+    let suffix = std::env::var("PICO_SUFFIX").unwrap_or_default();
+    let dark = suffix.is_empty();
+    let shot = |harness: &mut Harness<'_, PicoApp>, name: &str| {
+        harness.run_steps(40);
+        let image = harness.render().expect("render");
+        image.save(out.join(format!("{name}{suffix}.png"))).unwrap();
+    };
+    let mut harness = Harness::builder()
+        .with_size([1280.0, 800.0])
+        .with_pixels_per_point(1.5)
+        .with_max_steps(64)
+        .with_render_cursor(false)
+        // Some place names have letters the interface font lacks.
+        .allow_missing_glyphs()
+        .build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![library], false));
+    let ctx = harness.ctx.clone();
+    harness.state_mut().set_system_dark(&ctx, dark);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() >= 8);
+    let names = harness.state().folder_names();
+    let index = |name: &str| names.iter().position(|n| n == name).expect(name);
+
+    // The library.
+    harness.state_mut().select_folder(index("Mountain Lakes"));
+    harness.step();
+    wait_until(&mut harness, "thumbnails", |app| app.thumbnails_pending() == 0);
+    shot(&mut harness, "pico-1");
+
+    // Properties of a photo with camera data and GPS.
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    harness.run_steps(4);
+    // The panel takes a column; scroll back to the folder's start.
+    harness.state_mut().select_folder(index("Mountain Lakes"));
+    harness.run_steps(40);
+    wait_until(&mut harness, "thumbnails", |app| app.thumbnails_pending() == 0);
+    harness.get_by_label("080.jpg").click();
+    harness.step();
+    wait_for_label(&mut harness, "Histogram");
+    harness.run_steps(2);
+    harness.get_by_label("EXIF").click();
+    harness.run();
+    shot(&mut harness, "pico-3");
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    harness.step();
+
+    // The viewer with the edit panel.
+    harness.state_mut().open_file_named("088.jpg");
+    wait_until(&mut harness, "the photo", |app| app.viewer_loaded());
+    harness.state_mut().open_edit_panel();
+    harness.step();
+    wait_until(&mut harness, "filmstrip", |app| app.thumbnails_pending() == 0);
+    shot(&mut harness, "pico-2");
+    harness.key_press(Key::Escape);
+    harness.step();
+
+    // Places.
+    let key = harness.state().place_keys()[0].clone();
+    harness.state_mut().open_place(&key);
+    harness.step();
+    harness.get_by_label("Places").click();
+    harness.run();
+    wait_until(&mut harness, "thumbnails", |app| app.thumbnails_pending() == 0);
+    shot(&mut harness, "pico-4");
+
+    // A collage of cats.
+    harness.state_mut().select_folder(index("Cats"));
+    harness.step();
+    wait_until(&mut harness, "thumbnails", |app| app.thumbnails_pending() == 0);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    harness.step();
+    harness.get_by_label("Create").click();
+    harness.step();
+    harness.step();
+    harness.get_by_label("Picture Collage…").click();
+    harness.step();
+    wait_until(&mut harness, "the collage preview", |app| app.collage_ready());
+    shot(&mut harness, "pico-5");
+}

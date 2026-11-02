@@ -3869,6 +3869,10 @@ impl PicoApp {
         self.search = text.to_owned();
     }
 
+    pub fn open_place(&mut self, key: &str) {
+        self.select_source(Source::Place(key.to_owned()));
+    }
+
     pub fn open_month(&mut self, key: &str) {
         self.select_source(Source::Month(key.to_owned()));
     }

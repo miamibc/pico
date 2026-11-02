@@ -3,13 +3,93 @@
 
 **English** · [Русский](README.ru.md)
 
-A small local photo organizer in the spirit of Picasa 3. Written in Rust
-and egui, runs on Linux, Windows and macOS.
+A photo organizer in the spirit of Picasa 3: small, fast and fully offline.
+For Linux, Windows and macOS.
 
-Pico reads and writes the `.picasa.ini` files that Picasa left in photo
-folders. Stars, captions, keywords, rotations and edits made in Picasa show up
-in Pico, and the other way round. Pico never changes your original photos
-until you explicitly press **Save**. Nothing is sent to the internet.
+Google retired Picasa in 2016, but its `.picasa.ini` files still sit in
+countless photo folders, holding the stars, captions, albums and edits people
+spent years on. Pico is a new organizer, written from scratch in Rust, that
+reads and writes those same files. A library built in Picasa opens in Pico just
+as you left it, and what you change in Pico, Picasa still understands.
+
+Pico is a single file with nothing to install. Nothing leaves your computer,
+and your originals stay untouched until you press **Save**.
+
+<img src="docs/screenshots/pico-1.webp#gh-dark-mode-only" width="100%" alt="The library: every folder in one continuous ribbon">
+<img src="docs/screenshots/pico-1-light.webp#gh-light-mode-only" width="100%" alt="The library: every folder in one continuous ribbon">
+
+## What it does
+
+### Library
+
+- **Folders, albums, the timeline and places** flow as one continuous ribbon,
+  as in Picasa: where one folder ends, the next begins, with its own title and
+  description.
+- **Places without the internet.** Photos with GPS are grouped by the nearest
+  town, or else by country, sea or continent. The place names (GeoNames,
+  Natural Earth) are built in.
+- **Dates from the camera**: from EXIF in every photo format, and the
+  recording time of MP4 and MOV videos.
+- Stars, captions, tags, albums in your own order, search, *starred only* and
+  *videos only* filters, a duplicate finder.
+- Drag and drop between folders and albums, selecting with a rectangle or with
+  Shift+click across folders, context menus, scrolling with a little weight to
+  it.
+
+<img src="docs/screenshots/pico-4.webp#gh-dark-mode-only" width="100%" alt="Places: photos grouped by where they were taken">
+<img src="docs/screenshots/pico-4-light.webp#gh-light-mode-only" width="100%" alt="Places: photos grouped by where they were taken">
+
+### Viewing and editing
+
+- **Paging without a blank frame**: Pico prepares two photos on each side of
+  the one you are looking at.
+- Zoom up to 800% around the pointer, real pixels at 1:1, a filmstrip of the
+  neighbouring shots, full screen on **F11**.
+- **Basic fixes**: crop with ready-made proportions, straighten, *I'm Feeling
+  Lucky*, auto contrast and auto color.
+- **Tuning**: fill light, highlights, shadows, color temperature, with a live
+  histogram.
+- **Effects** from Picasa and from Picnik's **Creative Kit**: sepia, B&W,
+  warmify, film grain, soft focus, glow, Lomo, Holga, HDR-ish, Polaroid, pencil
+  sketch and more.
+- Edits never touch the file and are stored the way Picasa stored them; hold
+  **Original** to see the photo without them.
+- **Videos** play in the same viewer, turned if you rotated them, and any frame
+  can be saved as a photo.
+
+<img src="docs/screenshots/pico-2.webp#gh-dark-mode-only" width="100%" alt="Editing: basic fixes, tuning and effects">
+<img src="docs/screenshots/pico-2-light.webp#gh-light-mode-only" width="100%" alt="Editing: basic fixes, tuning and effects">
+
+### Properties for the curious
+
+Pico shows **every** metadata field: EXIF, XMP, IPTC, ICC, PNG, WebP, video
+streams, and the **camera makers' notes** of Canon, Nikon, Olympus, Fujifilm,
+Sony, Apple, DJI and others. Fields that should agree across metadata kinds
+but don't get a **!** mark: an easy way to tell an edited file from one
+straight out of the camera.
+
+<img src="docs/screenshots/pico-3.webp#gh-dark-mode-only" width="100%" alt="Properties: every metadata field, checked against each other">
+<img src="docs/screenshots/pico-3-light.webp#gh-light-mode-only" width="100%" alt="Properties: every metadata field, checked against each other">
+
+### Create
+
+- **Collages**: mosaic, frame mosaic, grid, contact sheet, multiple exposure.
+- **Movies** from photos: MP4 in 720p or 1080p with smooth transitions and
+  music (with FFmpeg installed).
+- **Slideshows** that play videos too, and **export** with downsizing and a
+  choice of JPEG quality.
+
+<img src="docs/screenshots/pico-5.webp#gh-dark-mode-only" width="100%" alt="A collage of the selected photos">
+<img src="docs/screenshots/pico-5-light.webp#gh-light-mode-only" width="100%" alt="A collage of the selected photos">
+
+### And also
+
+- Light and dark themes that follow the system; English and Russian, ready for
+  more languages.
+- Open source under the Apache 2.0 license.
+
+*The photos in the screenshots are from Wikimedia Commons, released into the
+public domain (CC0).*
 
 ## Downloads
 
@@ -113,7 +193,9 @@ tests), `make testdata` (a test library in `testdata/library`, see
   has a header with its name, photo count, months taken and description.
   Clicking a folder on the left scrolls the ribbon to it, and while scrolling
   the folder at the top is highlighted. Arrow keys, the viewer and the
-  slideshow stay within one folder. Albums, months of the **Timeline** and
+  slideshow stay within one folder; the open photo stays in it even when it no
+  longer matches a filter (say, unstarred while only starred ones are shown).
+  Albums, months of the **Timeline** and
   **Places** follow one another in a ribbon of their own the same way; a photo
   clicked in the next one makes that one current.
 - On the right are the thumbnails. Double click or **Enter** opens a photo;
@@ -125,9 +207,10 @@ tests), `make testdata` (a test library in `testdata/library`, see
   pinch on a touchpad) zooms around the pointer. At the bottom are **Fit**,
   **1:1** and a slider up to 800%; a zoomed photo can be dragged with the
   mouse. When you zoom into a large shot, Pico loads it at full resolution, so
-  1:1 shows real pixels.
-- Above the photo is a line about it: name, date taken (or the file date if
-  the camera did not record one), size in pixels (after a crop — the original
+  1:1 shows real pixels. Two photos on each side are prepared in advance, so
+  paging shows no blank frame.
+- Above the photo is a line about it: name, date taken (from EXIF; for MP4 and
+  MOV videos, when they were recorded; otherwise the file date), size in pixels (after a crop — the original
   one too) and file size; for a video — frame size and duration.
 - **Original** at the bottom (or the **\\** key): while the button is held, you
   see the photo without edits — handy for comparing before and after.
@@ -187,7 +270,7 @@ with an **Add Folder** button. Right click on an album on the left — **Rename
 Album…** and **Delete Album…** (the photos stay where they are).
 
 Selection: click — one photo, **Ctrl+click** — add/remove, **Shift+click** —
-a range, **Ctrl+A / Ctrl+I / Ctrl+D** — select all / invert / select none.
+a range (across the folders and albums of the ribbon, too), **Ctrl+A / Ctrl+I / Ctrl+D** — select all / invert / select none.
 The **Picture** and **File** menu commands work on all selected photos.
 
 ### Viewing and editing photos
@@ -216,10 +299,13 @@ them into the file, use **File → Save** (the original is kept in
 
 ### Video
 
-Videos open the same way as photos. **/** or **Space** — play/pause (or click
-the picture), **,** and **.** — 5 seconds back/forward, the slider seeks,
+Videos open the same way as photos. **/** or **Space** — play/pause (or the
+golden ▶ over a paused video, or a click on the picture), **,** and **.** — 5 seconds back/forward, the slider seeks,
 **Mute** turns the sound off. **Save Frame as Photo** in the bottom bar saves
 the current frame next to the video. In a slideshow a video plays to the end.
+A video turned with the rotate buttons plays turned, in slideshows too, and
+its saved frames are turned the same way. Videos are not edited in Pico:
+**Edit** is greyed out for them.
 
 ### Movie from photos
 
