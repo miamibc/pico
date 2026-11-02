@@ -1289,6 +1289,7 @@ fn settings_come_back_next_time() {
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 2);
     assert_eq!(harness.state().current_folder_name().as_deref(), Some("more"));
     assert_eq!(harness.state().thumbnail_size(), 200.0);
+    wait_until(&mut harness, "the thumbnails", |app| app.thumbnails_pending() == 0);
     harness.run();
     let again = harness.state().settings_for_test(&harness.ctx.clone());
     assert_eq!(again.get("sidebar_width").map(String::as_str), Some("400"));
