@@ -53,6 +53,20 @@ fn harness(dir: &Path) -> Harness<'static, PicoApp> {
     Harness::builder().with_size([1000.0, 800.0]).build_eframe(move |cc| PicoApp::new(&cc.egui_ctx, vec![dir], false))
 }
 
+/// Dates every file under `dir` 15 October 2026, so ribbon headers name the
+/// same month whenever the test runs.
+fn fixed_dates(dir: &Path) {
+    let october = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_792_065_600);
+    for entry in std::fs::read_dir(dir).unwrap().flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            fixed_dates(&path);
+        } else {
+            std::fs::File::options().write(true).open(&path).unwrap().set_modified(october).unwrap();
+        }
+    }
+}
+
 /// Steps the UI until background work (scanning, decoding) satisfies `done`.
 fn wait_until(harness: &mut Harness<'_, PicoApp>, what: &str, done: impl Fn(&PicoApp) -> bool) {
     let deadline = Instant::now() + Duration::from_secs(20);
@@ -603,6 +617,7 @@ fn albums_follow_one_another_in_one_ribbon() {
          [a.png]\r\nalbums=aa11\r\n[b.png]\r\nalbums=aa11,bb22\r\n[c.png]\r\nalbums=bb22\r\n",
     )
     .unwrap();
+    fixed_dates(&fixture.dir);
     let mut harness = harness(&fixture.dir);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
     harness.state_mut().open_album("Trip");
@@ -1031,6 +1046,7 @@ fn ribbon_of_folders_follows_the_list_and_the_scroll() {
             RgbImage::from_pixel(60, 40, Rgb([40 * n, 30 * k, 90])).save(dir.join(format!("t{n}-{k}.png"))).unwrap();
         }
     }
+    fixed_dates(&fixture.dir);
     let mut harness = harness(&fixture.dir);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 6);
     harness.get_by_label("Holiday  (3)").click();
@@ -1115,6 +1131,7 @@ fn only_videos_filter() {
     let fixture = Fixture::new("videos-only");
     // Only the name matters for the filter; ffmpeg need not understand it.
     std::fs::write(fixture.dir.join("clip.mp4"), b"not really a video").unwrap();
+    fixed_dates(&fixture.dir);
     let mut harness = harness(&fixture.dir);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
     harness.state_mut().select_folder(0);
@@ -2431,6 +2448,7 @@ fn speaks_russian() {
     }
     let _english = English;
     crate::i18n::set_language(Some("ru_RU.UTF-8"));
+    fixed_dates(&fixture.dir);
     let mut harness = harness(&fixture.dir);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
     harness.get_by_label("Библиотека");
