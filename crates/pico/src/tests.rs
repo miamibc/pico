@@ -2710,3 +2710,40 @@ fn ctrl_and_shift_clicks_select_in_the_grid() {
     click(&mut harness, "x.png", Modifiers::SHIFT);
     assert_eq!(selected(&harness), ["b.png", "c.png", "x.png"]);
 }
+
+#[test]
+fn a_video_rotated_in_pico_plays_rotated() {
+    let Some(ffmpeg) = pico_core::video::ffmpeg() else { return };
+    let fixture = Fixture::new("video-rotated");
+    let made = std::process::Command::new(ffmpeg)
+        .args(["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=160x120:rate=10:duration=2"])
+        .args(["-pix_fmt", "yuv420p"])
+        .arg(fixture.dir.join("clip.mp4"))
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("clip.mp4").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    wait_until(&mut harness, "the first frame", |app| app.player_state().2);
+    let video = harness.get_by_label("Video").rect();
+    assert!(video.width() > video.height(), "landscape as recorded: {video:?}");
+
+    // Turned in the viewer, as its thumbnail is.
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::R);
+    harness.step();
+    harness.step();
+    assert!(fixture.ini().contains("[clip.mp4]\r\nrotate=rotate(1)"), "{}", fixture.ini());
+    let video = harness.get_by_label("Video").rect();
+    assert!(video.height() > video.width(), "portrait once turned: {video:?}");
+    screenshot(&mut harness, "video-rotated");
+
+    // A frame saved from it is turned too.
+    harness.get_by_label("Save Frame as Photo").click();
+    harness.step();
+    let saved = fixture.dir.join("clip.0.jpg");
+    let (width, height) = pico_core::image::image_dimensions(&saved).unwrap();
+    assert_eq!((width, height), (120, 160));
+}

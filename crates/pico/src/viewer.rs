@@ -397,7 +397,7 @@ impl Viewer {
                     .on_hover_text(tr!("Save the frame on screen next to the video"))
                     .clicked()
             {
-                action = self.player.save_frame().map(from_player);
+                action = self.player.save_frame(file.meta.rotate).map(from_player);
             }
             ui.separator();
             // The caption takes the rest of the row, else a row of its own.
