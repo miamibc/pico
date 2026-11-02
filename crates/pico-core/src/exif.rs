@@ -166,6 +166,16 @@ pub struct Exif {
 /// files built like it, and wherever else an `Exif` block shows near the
 /// start (HEIC, AVIF).
 pub fn read(path: &std::path::Path) -> Option<Exif> {
+    read_within(path, 16 * 1024 * 1024)
+}
+
+/// As `read`, but reading at most the first MiB of a TIFF or RAW file:
+/// enough for its dates and GPS, quick enough for scanning a library.
+pub fn read_quick(path: &std::path::Path) -> Option<Exif> {
+    read_within(path, 1024 * 1024)
+}
+
+fn read_within(path: &std::path::Path, tiff_limit: u64) -> Option<Exif> {
     use std::io::Read;
     let mut head = Vec::new();
     // EXIF sits at the start; 256 KiB covers it even with large previews.
@@ -188,7 +198,7 @@ pub fn read(path: &std::path::Path) -> Option<Exif> {
     if head.starts_with(b"II*\0") || head.starts_with(b"MM\0*") {
         // TIFF and RAW: the whole file is the block, with values further in.
         head.clear();
-        std::fs::File::open(path).ok()?.take(16 * 1024 * 1024).read_to_end(&mut head).ok()?;
+        std::fs::File::open(path).ok()?.take(tiff_limit).read_to_end(&mut head).ok()?;
         return parse(&head);
     }
     parse(&tiff_block(&head)?)
@@ -394,7 +404,9 @@ pub fn parse(tiff: &[u8]) -> Option<Exif> {
         Some(Value::Numbers(n)) => n.first().copied(),
         _ => None,
     };
-    let mut exif = Exif { taken: text(0x9003).or_else(|| text(0x0132)), gps: None, fields: Vec::new(), all };
+    // Date taken, else when it was digitized (scans), else last written.
+    let taken = text(0x9003).or_else(|| text(0x9004)).or_else(|| text(0x0132));
+    let mut exif = Exif { taken, gps: None, fields: Vec::new(), all };
     let mut push = |label: &'static str, value: Option<String>| {
         if let Some(v) = value.filter(|v| !v.trim().is_empty()) {
             exif.fields.push((label, v.trim().to_owned()));
