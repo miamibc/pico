@@ -3,90 +3,79 @@
 
 **English** · [Русский](README.ru.md)
 
-A photo organizer in the spirit of Picasa 3: small, fast and fully offline.
-For Linux, Windows and macOS.
+A small, fast, offline photo organizer for Linux, Windows and macOS that keeps
+your Picasa library alive.
 
-Google retired Picasa in 2016, but its `.picasa.ini` files still sit in
-countless photo folders, holding the stars, captions, albums and edits people
-spent years on. Pico is a new organizer, written from scratch in Rust, that
-reads and writes those same files. A library built in Picasa opens in Pico just
-as you left it, and what you change in Pico, Picasa still understands.
+Google stopped Picasa in 2016, but millions of photo folders still carry its
+`.picasa.ini` files with stars, captions, albums and edits. **Pico** is a new
+photo organizer written from scratch in Rust that reads and writes those files,
+so a library built in Picasa years ago opens in Pico as it was, and keeps
+working the other way round.
 
-Pico is a single file with nothing to install. Nothing leaves your computer,
-and your originals stay untouched until you press **Save**.
+Pico is small (a single file, no installer needed) and works completely
+offline: nothing is uploaded anywhere, and originals are never touched until
+you press **Save**.
 
 <img src="docs/screenshots/pico-1.webp#gh-dark-mode-only" width="100%" alt="The library: every folder in one continuous ribbon">
 <img src="docs/screenshots/pico-1-light.webp#gh-light-mode-only" width="100%" alt="The library: every folder in one continuous ribbon">
 
-## What it does
+## Library
 
-### Library
-
-- **Folders, albums, the timeline and places** flow as one continuous ribbon,
-  as in Picasa: where one folder ends, the next begins, with its own title and
-  description.
-- **Places without the internet.** Photos with GPS are grouped by the nearest
-  town, or else by country, sea or continent. The place names (GeoNames,
-  Natural Earth) are built in.
-- **Dates from the camera**: from EXIF in every photo format, and the
-  recording time of MP4 and MOV videos.
-- Stars, captions, tags, albums in your own order, search, *starred only* and
-  *videos only* filters, a duplicate finder.
-- Drag and drop between folders and albums, selecting with a rectangle or with
-  Shift+click across folders, context menus, scrolling with a little weight to
-  it.
+- **Folders, albums, timeline and places** in one continuous ribbon: where one
+  folder ends, the next begins, with its title and description.
+- **Places without the internet**: photos with GPS are grouped by the nearest
+  town, otherwise by country, sea or continent. The place names (GeoNames,
+  Natural Earth) are built into the program.
+- Stars, captions, tags, albums with your own order, search, filters for
+  starred photos and videos, duplicate finder.
+- Drag and drop between folders and albums, selection with a rectangle,
+  context menus, kinetic scrolling.
 
 <img src="docs/screenshots/pico-4.webp#gh-dark-mode-only" width="100%" alt="Places: photos grouped by where they were taken">
 <img src="docs/screenshots/pico-4-light.webp#gh-light-mode-only" width="100%" alt="Places: photos grouped by where they were taken">
 
-### Viewing and editing
+## Editing
 
-- **Paging without a blank frame**: Pico prepares two photos on each side of
-  the one you are looking at.
-- Zoom up to 800% around the pointer, real pixels at 1:1, a filmstrip of the
-  neighbouring shots, full screen on **F11**.
 - **Basic fixes**: crop with ready-made proportions, straighten, *I'm Feeling
   Lucky*, auto contrast and auto color.
 - **Tuning**: fill light, highlights, shadows, color temperature, with a live
   histogram.
-- **Effects** from Picasa and from Picnik's **Creative Kit**: sepia, B&W,
+- **Effects** from Picasa and the **Creative Kit** of Picnik: sepia, B&W,
   warmify, film grain, soft focus, glow, Lomo, Holga, HDR-ish, Polaroid, pencil
   sketch and more.
-- Edits never touch the file and are stored the way Picasa stored them; hold
-  **Original** to see the photo without them.
-- **Videos** play in the same viewer, turned if you rotated them, and any frame
-  can be saved as a photo.
+- Every edit is non-destructive and stored the way Picasa stored it;
+  **Original** shows the photo before edits while the button is held.
 
 <img src="docs/screenshots/pico-2.webp#gh-dark-mode-only" width="100%" alt="Editing: basic fixes, tuning and effects">
 <img src="docs/screenshots/pico-2-light.webp#gh-light-mode-only" width="100%" alt="Editing: basic fixes, tuning and effects">
 
-### Properties for the curious
+## Properties for the curious
 
 Pico shows **every** metadata field: EXIF, XMP, IPTC, ICC, PNG, WebP, video
 streams, and the **camera makers' notes** of Canon, Nikon, Olympus, Fujifilm,
 Sony, Apple, DJI and others. Fields that should agree across metadata kinds
-but don't get a **!** mark: an easy way to tell an edited file from one
+but don't get a **!** mark — an easy way to tell an edited file from one
 straight out of the camera.
 
 <img src="docs/screenshots/pico-3.webp#gh-dark-mode-only" width="100%" alt="Properties: every metadata field, checked against each other">
 <img src="docs/screenshots/pico-3-light.webp#gh-light-mode-only" width="100%" alt="Properties: every metadata field, checked against each other">
 
-### Create
+## Create
 
 - **Collages**: mosaic, frame mosaic, grid, contact sheet, multiple exposure.
 - **Movies** from photos: MP4 in 720p or 1080p with smooth transitions and
   music (with FFmpeg installed).
-- **Slideshows** that play videos too, and **export** with downsizing and a
-  choice of JPEG quality.
+- **Slideshows** that play videos too, **export** with downsizing and a choice
+  of JPEG quality.
 
-<img src="docs/screenshots/pico-5.webp#gh-dark-mode-only" width="100%" alt="A collage of the selected photos">
-<img src="docs/screenshots/pico-5-light.webp#gh-light-mode-only" width="100%" alt="A collage of the selected photos">
+<img src="docs/screenshots/pico-5.webp#gh-dark-mode-only" width="100%" alt="Collage from the selected photos">
+<img src="docs/screenshots/pico-5-light.webp#gh-light-mode-only" width="100%" alt="Collage from the selected photos">
 
-### And also
+## Everything else
 
-- Light and dark themes that follow the system; English and Russian, ready for
-  more languages.
-- Open source under the Apache 2.0 license.
+- Light and dark themes that follow the system, English and Russian interface,
+  ready for more languages.
+- The source is open under the Apache 2.0 license.
 
 *The photos in the screenshots are from Wikimedia Commons, released into the
 public domain (CC0).*
