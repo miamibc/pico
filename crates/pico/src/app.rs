@@ -4060,7 +4060,7 @@ const SHORTCUTS: &[(&str, &[(&str, &str)])] = &[
             ("Home / End", tr_mark!("First / last photo")),
             (tr_mark!("Ctrl+wheel, pinch"), tr_mark!("Zoom")),
             (tr_mark!("Double-click, Esc"), tr_mark!("Back to the library")),
-            ("F11", tr_mark!("Full screen")),
+            ("F, F11", tr_mark!("Full screen")),
             ("Ctrl+Z / Ctrl+Y", tr_mark!("Undo / redo an edit")),
             (tr_mark!("\\ (hold)"), tr_mark!("Show the original")),
         ],

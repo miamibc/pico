@@ -206,9 +206,9 @@ tests), `make testdata` (a test library in `testdata/library`, see
 - **Undo** (**Ctrl+Z**) removes the last edit, **Redo** (**Ctrl+Y** or
   **Ctrl+Shift+Z**) brings it back. After **Undo All Edits**, Redo brings the
   edits back one by one. A new edit clears the Redo history.
-- **Home/End** — the first and the last photo. **F11** (or the **⛶** button) —
+- **Home/End** — the first and the last photo. **F** or **F11** (or the **⛶** button) —
   full screen: only the photo, no menu or panels; arrows, wheel and zoom work,
-  **Esc** or **F11** leaves.
+  **Esc**, **F** or **F11** leaves.
 - **Search** (the field at the top right, **Ctrl+F**) looks through the whole
   library: file and folder names, captions, keywords.
 - The status bar at the bottom right: name, date taken and size of the photo
@@ -358,7 +358,7 @@ The full list is also in the program itself: **Help → Keyboard Shortcuts**
 | Photo | wheel, Ctrl+wheel | previous and next, zoom |
 | Photo | Ctrl+Z / Ctrl+Y | undo / redo an edit |
 | Photo | \\ (hold) | show the original |
-| Photo | F11 | full screen |
+| Photo | F, F11 | full screen |
 
 ## Appearance and language
 

@@ -487,6 +487,12 @@ fn home_end_and_full_screen_in_viewer() {
     harness.key_press(Key::F11);
     harness.step();
     assert!(!harness.state().is_full_screen(), "F11 toggles");
+    harness.key_press(Key::F);
+    harness.step();
+    assert!(harness.state().is_full_screen(), "F as well");
+    harness.key_press(Key::F);
+    harness.step();
+    assert!(!harness.state().is_full_screen());
 }
 
 #[test]

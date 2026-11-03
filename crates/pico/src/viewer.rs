@@ -305,7 +305,8 @@ impl Viewer {
             }
         }
         ui.input(|i| {
-            if i.key_pressed(egui::Key::F11) || (self.full_screen && i.key_pressed(egui::Key::Escape)) {
+            let f = i.key_pressed(egui::Key::F) && i.modifiers.is_none();
+            if f || i.key_pressed(egui::Key::F11) || (self.full_screen && i.key_pressed(egui::Key::Escape)) {
                 Some(ViewerAction::FullScreen(!self.full_screen))
             } else if i.key_pressed(egui::Key::Escape) {
                 Some(ViewerAction::Close)
@@ -348,7 +349,7 @@ impl Viewer {
             if ui.button(tr!("▶ Slideshow")).on_hover_text("Ctrl+4").clicked() {
                 action = Some(ViewerAction::Slideshow);
             }
-            if ui.button("⛶").on_hover_text(tr!("Full screen (F11; Esc to leave)")).clicked() {
+            if ui.button("⛶").on_hover_text(tr!("Full screen (F or F11; Esc to leave)")).clicked() {
                 action = Some(ViewerAction::FullScreen(true));
             }
             ui.separator();
