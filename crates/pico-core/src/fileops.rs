@@ -103,7 +103,7 @@ pub fn move_to_trash(path: &Path) -> io::Result<PathBuf> {
     let absolute = std::path::absolute(path)?;
     if cfg!(windows) {
         return run_trash_command(
-            Command::new("powershell")
+            crate::video::hidden("powershell")
                 .args(["-NoProfile", "-NonInteractive", "-Command"])
                 .arg(windows_recycle_script(&absolute)),
         )
@@ -209,7 +209,7 @@ fn timestamp_at(secs: u64) -> String {
 /// Opens a file with the program the desktop associates with it.
 pub fn open_external(path: &Path) -> io::Result<()> {
     let mut command = if cfg!(windows) {
-        let mut c = Command::new("cmd");
+        let mut c = crate::video::hidden("cmd");
         c.args(["/C", "start", ""]).arg(path);
         c
     } else if cfg!(target_os = "macos") {

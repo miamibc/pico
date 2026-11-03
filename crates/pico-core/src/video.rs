@@ -10,6 +10,21 @@ use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 use std::time::Duration;
 
+/// A command for a console program that opens no window of its own. Pico is
+/// a windowed app on Windows, so each console child would otherwise flash a
+/// black console window.
+pub(crate) fn hidden(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    #[allow(unused_mut)]
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
 fn exe_name(tool: &str) -> String {
     if cfg!(windows) { format!("{tool}.exe") } else { tool.to_owned() }
 }
@@ -37,7 +52,7 @@ pub fn ffmpeg() -> Option<&'static Path> {
 /// With `max_side`, the frame is scaled so that its longer side fits.
 pub fn extract_frame(path: &Path, at: Duration, max_side: Option<u32>) -> io::Result<image::RgbaImage> {
     let ffmpeg = ffmpeg().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "ffmpeg not found"))?;
-    let mut command = Command::new(ffmpeg);
+    let mut command = hidden(ffmpeg);
     command
         .args(["-v", "error", "-nostdin", "-ss"])
         .arg(format!("{:.3}", at.as_secs_f64()))
@@ -80,7 +95,7 @@ pub struct VideoInfo {
 /// Reads a video's size, length and frame rate with ffprobe.
 pub fn probe(path: &Path) -> io::Result<VideoInfo> {
     let ffprobe = ffprobe().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "ffprobe not found"))?;
-    let output = Command::new(ffprobe)
+    let output = hidden(ffprobe)
         .args(["-v", "error", "-select_streams", "v:0", "-show_entries"])
         .arg("stream=width,height,r_frame_rate:stream_side_data=rotation:format=duration")
         .args(["-of", "default=nw=1"])
@@ -95,7 +110,7 @@ pub fn probe(path: &Path) -> io::Result<VideoInfo> {
 /// each stream, and their tags (creation time, device, location…).
 pub fn describe(path: &Path) -> Vec<(String, String)> {
     let Some(ffprobe) = ffprobe() else { return Vec::new() };
-    let Ok(output) = Command::new(ffprobe)
+    let Ok(output) = hidden(ffprobe)
         .args(["-v", "error", "-show_format", "-show_streams", "-of", "flat"])
         .arg(path)
         .stdin(Stdio::null())
@@ -217,7 +232,7 @@ impl FrameStream {
     /// own frame rate. A few frames are buffered ahead.
     pub fn start(path: &Path, start: Duration, width: u32, height: u32, fps: f32) -> io::Result<Self> {
         let ffmpeg = ffmpeg().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "ffmpeg not found"))?;
-        let mut child = Command::new(ffmpeg)
+        let mut child = hidden(ffmpeg)
             .args(["-v", "error", "-nostdin", "-ss"])
             .arg(format!("{:.3}", start.as_secs_f64()))
             .arg("-i")
@@ -267,7 +282,7 @@ impl SoundPlayer {
         let at = format!("{:.3}", start.as_secs_f64());
         // ffplay seeks to the video's key frame before `start`, which can be
         // seconds early; the trim drops the sound before `start`.
-        let mut child = Command::new(ffplay()?)
+        let mut child = hidden(ffplay()?)
             .args(["-nodisp", "-autoexit", "-vn", "-stats", "-loglevel", "quiet", "-ss", &at])
             .arg("-af")
             .arg(format!("atrim=start={at}"))
