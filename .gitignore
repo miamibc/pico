@@ -8,6 +8,9 @@
 # Generated test library (testdata/make_testdata.py); source photos are not ours to publish
 /testdata/library/
 
+# Camera RAW samples from raw.pixls.us (CC0), 170 MB: too big for the repository
+/testdata/raw-samples/
+
 # Local instructions for Claude Code and the local task list
 /CLAUDE.md
 /TASKS.md

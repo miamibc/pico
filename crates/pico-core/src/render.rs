@@ -28,7 +28,10 @@ pub fn decode(path: &Path, kind: MediaKind, meta: &PhotoMeta) -> io::Result<Dyna
         MediaKind::Video => video::extract_frame(path, meta.video_start().unwrap_or(Duration::from_secs(1)), None)
             .or_else(|_| video::extract_frame(path, Duration::ZERO, None))
             .map(DynamicImage::ImageRgba8),
-        MediaKind::RawPhoto => video::extract_frame(path, Duration::ZERO, None).map(DynamicImage::ImageRgba8),
+        // The camera's own preview inside a RAW; ffmpeg for the rest of this
+        // group (HEIC, AVIF, JPEG XL, PSD).
+        MediaKind::RawPhoto => crate::raw::preview(path)
+            .or_else(|_| video::extract_frame(path, Duration::ZERO, None).map(DynamicImage::ImageRgba8)),
     }
 }
 

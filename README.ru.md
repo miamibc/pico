@@ -107,9 +107,11 @@ Linux x86_64 и Windows x86_64. Каждый push в `main` собирает п�
 
 ## Сборка и запуск
 
-Нужен Rust 1.95 или новее (`rustup`). Для видео и RAW-фото нужен `ffmpeg`
-(вместе с `ffprobe`; для звука — `ffplay`) в `PATH` или рядом с программой.
-Без него всё остальное работает.
+Нужен Rust 1.95 или новее (`rustup`). Для видео, HEIC, AVIF и JPEG XL нужен
+`ffmpeg` (вместе с `ffprobe`; для звука — `ffplay`) в `PATH` или рядом с
+программой. Без него всё остальное работает, в том числе RAW-файлы камер:
+Pico показывает JPEG, который камера хранит внутри них (Sony ARW, Nikon NEF,
+Canon CR2, DNG, Fujifilm RAF и другие RAW на основе TIFF).
 
 ```sh
 make release          # или: cargo build --release

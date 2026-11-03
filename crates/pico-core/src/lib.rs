@@ -26,6 +26,7 @@ pub mod meta;
 pub mod metadata;
 pub mod movie;
 pub mod ops;
+pub mod raw;
 pub mod rect64;
 pub mod render;
 pub mod thumbnail;
