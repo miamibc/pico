@@ -45,7 +45,10 @@ impl MediaFile {
                 Some(exif) => {
                     let taken = exif.taken.filter(|t| plausible_date(t));
                     let when = taken.as_deref().map(|t| {
-                        exif.offset.as_deref().and_then(|o| dates::with_offset_to_local(t, o)).unwrap_or_else(|| t.to_owned())
+                        exif.offset
+                            .as_deref()
+                            .and_then(|o| dates::with_offset_to_local(t, o))
+                            .unwrap_or_else(|| t.to_owned())
                     });
                     (taken, when, exif.gps)
                 }

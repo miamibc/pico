@@ -5,8 +5,8 @@
 //! It strikes the middle with sparks and a puff of smoke. Unstarring makes
 //! the badge vanish in a puff of smoke.
 //!
-//! The play button on a paused video is made the same way: it spins in when
-//! the video stops and bursts into smoke when it plays.
+//! The play sign on a paused video is flat and white: played, it turns into
+//! the pause sign, which fades a second later; paused, it turns back.
 //!
 //! The star is a faceted solid (two cushions on a five-pointed outline with rounded points)
 //! lit from the upper left, with a soft shadow beneath so it shows on light
@@ -39,9 +39,6 @@ const ROUND_INNER: f32 = 0.05;
 const ROUND_STEPS: usize = 6;
 /// Camera distance, in star radii, for the perspective.
 const CAMERA: f32 = 5.0;
-/// Seconds the play button takes to spin in, and to burst when played.
-const PLAY_IN: f64 = 0.45;
-const PLAY_OUT: f64 = 0.5;
 
 pub struct Flight {
     start: f64,
@@ -131,38 +128,58 @@ impl Puff {
     }
 }
 
-/// The play button over a video, `radius` from its middle to its tip,
-/// `since` seconds after the video stopped (`playing` false: it spins in) or
-/// started (it bursts into smoke and is gone). True while it still moves.
-pub fn play_button(
-    painter: &egui::Painter,
-    centre: Pos2,
-    radius: f32,
-    playing: bool,
-    since: f64,
-    hovered: bool,
-) -> bool {
-    let outline = play_outline();
-    if playing {
-        let k = (since / PLAY_OUT) as f32;
-        if !(0.0..1.0).contains(&k) {
-            return false;
-        }
-        let fade = (1.0 - k / 0.4).max(0.0);
-        if fade > 0.0 {
-            paint_solid(painter, &outline, centre, radius * (1.0 + 0.5 * ease_out(k)), 0.0, 0.0, 0.3, fade);
-        }
-        smoke(painter, centre, radius * 2.0, k, 3);
-        return true;
+/// The play button over a video, `radius` from its middle to its tip:
+/// the play sign at `turn` 0, the pause sign at 1, edge-on halfway. The
+/// player winds `turn` back and forth, so a turn reverses wherever it is.
+///
+/// A crisp white sign with rounded corners and a soft shadow, shrinking a
+/// little as it goes edge-on.
+pub fn play_button(painter: &egui::Painter, centre: Pos2, radius: f32, turn: f32, fade: f32, hovered: bool) {
+    let size = radius * 0.6;
+    if turn < 0.5 {
+        let half = turn * 2.0;
+        let grow = (1.0 - 0.3 * half) * if hovered { 1.06 } else { 1.0 };
+        paint_sign(painter, centre, size * grow, (PI / 2.0 * half).cos(), fade, false);
+    } else {
+        // The pause sign a tenth smaller: as tall, it looks bigger.
+        let half = (1.0 - turn) * 2.0;
+        paint_sign(painter, centre, size * 0.9 * (1.0 - 0.3 * half), (PI / 2.0 * half).cos(), fade, true);
     }
-    let k = ((since / PLAY_IN) as f32).clamp(0.0, 1.0);
-    // Spins in from edge-on, as the star does, and grows a little when hovered.
-    let yaw = PI * 1.5 * (1.0 - ease_out(k));
-    let tilt = 0.3 * (1.0 - k);
-    let grow = (0.6 + 0.4 * ease_out(k)) * if hovered { 1.08 } else { 1.0 };
-    let fade = (k / 0.3).min(1.0);
-    paint_solid(painter, &outline, centre, radius * grow, yaw, tilt, 0.3, fade);
-    k < 1.0
+}
+
+/// The play sign (or the pause sign) of `size`, squeezed across to
+/// `squeeze` of its width as it turns about the vertical, with its shadow.
+fn paint_sign(painter: &egui::Painter, centre: Pos2, size: f32, squeeze: f32, fade: f32, pause: bool) {
+    // Edge-on there is nothing to see, and a flattened outline smears.
+    if squeeze < 0.05 || fade <= 0.0 {
+        return;
+    }
+    let shapes: Vec<Vec<Pos2>> = if pause {
+        let bar = |left: f32| {
+            let corners = [(left, -0.85), (left + 0.36, -0.85), (left + 0.36, 0.85), (left, 0.85)];
+            rounded(&corners.map(|(x, y)| (Pos2::new(x, y), 0.1)))
+        };
+        // As tall as the play sign.
+        vec![bar(-0.55), bar(0.19)]
+    } else {
+        // The centroid a little right of the middle, as play signs are
+        // drawn to look centred.
+        vec![play_outline().into_iter().map(|p| p + Vec2::new(0.1, 0.0)).collect()]
+    };
+    let place = |p: Pos2, grow: f32, shift: Vec2| centre + (Vec2::new(p.x * squeeze, p.y) * grow + shift) * size;
+    for shape in &shapes {
+        // A short soft shadow below and to the right.
+        for (grow, a) in [(1.12, 0.1), (1.07, 0.14), (1.03, 0.19)] {
+            let points = shape.iter().map(|&p| place(p, grow, Vec2::new(0.02, 0.05))).collect();
+            let shadow = Color32::from_black_alpha((a * fade * 255.0) as u8);
+            painter.add(egui::Shape::convex_polygon(points, shadow, egui::Stroke::NONE));
+        }
+    }
+    for shape in &shapes {
+        let points = shape.iter().map(|&p| place(p, 1.0, Vec2::ZERO)).collect();
+        let white = Color32::from_rgba_unmultiplied(255, 255, 255, (250.0 * fade) as u8);
+        painter.add(egui::Shape::convex_polygon(points, white, egui::Stroke::NONE));
+    }
 }
 
 fn ease_out(k: f32) -> f32 {

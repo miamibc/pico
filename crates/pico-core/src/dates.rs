@@ -66,7 +66,9 @@ pub fn from_file_name(name: &str) -> Option<String> {
     for start in 0..groups.len() {
         let (date, used) = match groups[start..] {
             [ymd, ..] if ymd.len() == 8 => (date_of(number(&ymd[..4])?, number(&ymd[4..6])?, number(&ymd[6..])?), 1),
-            [y, m, d, ..] if (y.len(), m.len(), d.len()) == (4, 2, 2) => (date_of(number(y)?, number(m)?, number(d)?), 3),
+            [y, m, d, ..] if (y.len(), m.len(), d.len()) == (4, 2, 2) => {
+                (date_of(number(y)?, number(m)?, number(d)?), 3)
+            }
             _ => continue,
         };
         let Some(date) = date else { continue };

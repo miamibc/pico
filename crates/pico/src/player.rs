@@ -240,6 +240,97 @@ pub fn paint_turned(
     rect
 }
 
+/// Seconds the play sign takes to turn into the pause sign, or back.
+const TURN: f64 = 0.25;
+/// Seconds the pause sign stays after the video starts, and after the mouse
+/// moves over it, and takes to fade.
+const PAUSE_SHOWN: f64 = 1.0;
+const MOVE_SHOWN: f64 = 2.0;
+const PAUSE_FADE: f64 = 0.3;
+
+/// The play sign over a paused video, which turns into the pause sign when
+/// it plays. The pause sign shows a second after the video starts and two
+/// after the mouse last moved over it, then fades; the turn reverses
+/// wherever it is when the video stops or starts again.
+#[derive(Default)]
+pub struct PlaySign {
+    /// 0 the play sign, 1 the pause sign, wound towards whichever is due,
+    /// and when it was last wound (egui time).
+    turn: f32,
+    wound_at: f64,
+    /// Whether the video plays, and since when.
+    playing: bool,
+    since: f64,
+    /// When the mouse last moved over the playing video.
+    moved_at: Option<f64>,
+    /// How visible the pause sign was when the video stopped.
+    shown_at_stop: f32,
+    /// How visible the sign was last painted.
+    shown: f32,
+}
+
+impl PlaySign {
+    /// The sign for a video that plays (or not) from `now`; `show` false
+    /// starts it quietly, the pause sign hidden until a key or the mouse.
+    pub fn new(playing: bool, now: f64, show: bool) -> Self {
+        let turn = if playing { 1.0 } else { 0.0 };
+        let since = if show { now } else { f64::NEG_INFINITY };
+        Self { turn, wound_at: now, playing, since, moved_at: None, shown_at_stop: 0.0, shown: 0.0 }
+    }
+
+    /// Whether the sign is on screen, so it can be clicked.
+    pub fn visible(&self) -> bool {
+        self.shown > 0.0
+    }
+
+    /// Paints the sign over `area` (the picture's panel); true while it moves.
+    pub fn paint(
+        &mut self,
+        ui: &egui::Ui,
+        area: egui::Rect,
+        playing: bool,
+        now: f64,
+        still: bool,
+        hovered: bool,
+    ) -> bool {
+        if playing != self.playing {
+            self.playing = playing;
+            self.since = now;
+        }
+        let target = if playing { 1.0 } else { 0.0 };
+        if still {
+            self.turn = target;
+        } else {
+            let step = ((now - self.wound_at).clamp(0.0, 0.1) / TURN) as f32;
+            self.turn = if playing { (self.turn + step).min(1.0) } else { (self.turn - step).max(0.0) };
+        }
+        self.wound_at = now;
+        let moved = ui.input(|i| {
+            i.pointer.delta() != egui::Vec2::ZERO && i.pointer.hover_pos().is_some_and(|p| area.contains(p))
+        });
+        if moved && playing {
+            self.moved_at = Some(now);
+        }
+        let since = if still { f64::INFINITY } else { now - self.since };
+        let lasting = |seconds: f64, shown: f64| 1.0 - (((seconds - shown) / PAUSE_FADE) as f32).clamp(0.0, 1.0);
+        self.shown = if playing {
+            let after_move = self.moved_at.map_or(0.0, |at| lasting(now - at, MOVE_SHOWN));
+            self.shown_at_stop = lasting(since - TURN, PAUSE_SHOWN).max(after_move);
+            self.shown_at_stop
+        } else {
+            // Coming back as the play sign, whatever was left of the pause sign.
+            (1.0 - self.turn) + self.turn * self.shown_at_stop
+        };
+        crate::star::play_button(ui.painter(), area.center(), sign_radius(area), self.turn, self.shown, hovered);
+        self.turn != target || (playing && self.shown > 0.0)
+    }
+}
+
+/// How big the play sign is over `area`.
+pub fn sign_radius(area: egui::Rect) -> f32 {
+    (area.width().min(area.height()) * 0.12).clamp(36.0, 96.0)
+}
+
 /// The photo view's video player: the picture and a row of controls.
 #[derive(Default)]
 pub struct Player {
@@ -247,12 +338,8 @@ pub struct Player {
     /// Where the picture is shown, as of the last frame.
     area: Option<egui::Rect>,
     muted: bool,
-    /// A click on the picture, which pauses or plays unless it turns out to
-    /// be the first half of a double-click.
-    click_at: Option<f64>,
-    /// Whether the video was playing last frame, and since when (egui
-    /// time), for the play button's animation.
-    playing_since: (bool, f64),
+    /// The play and pause sign over the picture.
+    sign: PlaySign,
     /// No animations (Options > Animations off).
     pub still: bool,
 }
@@ -271,14 +358,13 @@ impl Player {
     pub fn stop(&mut self) {
         self.playback = None;
         self.area = None;
-        self.click_at = None;
     }
 
     pub fn show(&mut self, ui: &mut egui::Ui, file: &MediaFile) -> Option<PlayerAction> {
         if self.playback.as_ref().is_none_or(|p| p.path() != file.path) {
             self.stop();
             self.playback = Some(Playback::open(&file.path, self.muted));
-            self.playing_since = (false, ui.input(|i| i.time));
+            self.sign = PlaySign::new(false, ui.input(|i| i.time), true);
         }
         let playback = self.playback.as_mut()?;
         let info = match playback.info() {
@@ -333,22 +419,8 @@ impl Player {
                 playback.seek((playback.position + SEEK_STEP).min(info.duration), now);
             }
         }
-        if let Some(at) = self.click_at {
-            let wait = ui.ctx().options(|o| o.input_options.max_double_click_delay);
-            if now - at > wait {
-                self.click_at = None;
-                playback.toggle(now);
-            } else {
-                ui.ctx().request_repaint_after(Duration::from_secs_f64(wait));
-            }
-        }
-
         playback.advance(ui.ctx(), now);
-        if playback.is_playing() != self.playing_since.0 {
-            self.playing_since = (playback.is_playing(), now);
-        }
-        let (playing, since) = self.playing_since;
-        let since = if self.still { f64::INFINITY } else { now - since };
+        let playing = playback.is_playing();
         egui::CentralPanel::no_frame().show(ui, |ui| {
             let area = ui.max_rect();
             self.area = Some(area);
@@ -357,14 +429,15 @@ impl Player {
                 let rect = paint_turned(ui.painter(), area, texture, file.meta.rotate, egui::Color32::WHITE);
                 let response = ui.interact(rect, ui.scope_id().with("video"), egui::Sense::click());
                 response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Video, true, "Video"));
+                // A click plays or pauses at once; a second click making it a
+                // double-click closes the video anyway.
                 if response.double_clicked() {
-                    self.click_at = None;
                     action = Some(PlayerAction::Close);
                 } else if response.clicked() {
-                    self.click_at = Some(now);
+                    playback.toggle(now);
                 }
                 // Over the picture, so it takes the click: plays at once.
-                let radius = (area.width().min(area.height()) * 0.12).clamp(36.0, 96.0);
+                let radius = sign_radius(area);
                 let button = egui::Rect::from_center_size(area.center(), egui::Vec2::splat(radius * 2.4));
                 let hovered = if playing {
                     false
@@ -372,12 +445,11 @@ impl Player {
                     let response = ui.interact(button, ui.scope_id().with("play"), egui::Sense::click());
                     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Play"));
                     if response.clicked() {
-                        self.click_at = None;
                         playback.play(now);
                     }
-                    response.on_hover_text(tr!("/ or Space")).hovered()
+                    response.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tr!("/ or Space")).hovered()
                 };
-                if crate::star::play_button(ui.painter(), area.center(), radius, playing, since, hovered) {
+                if self.sign.paint(ui, area, playing, now, self.still, hovered) {
                     ui.ctx().request_repaint();
                 }
             } else {

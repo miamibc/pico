@@ -1,6 +1,6 @@
 //! Full-screen slideshow of the current folder.
 
-use crate::player::Playback;
+use crate::player::{PlaySign, Playback};
 use eframe::egui;
 use pico_core::image::imageops::FilterType;
 use pico_core::library::MediaFile;
@@ -23,7 +23,10 @@ pub struct Slideshow {
     pub index: usize,
     pub playing: bool,
     pub seconds: f64,
-    /// When the current slide appeared (egui time).
+    /// When the current slide appeared (egui time), for the fade from the
+    /// one before, and when its time on screen started counting (again
+    /// after a pause).
+    appeared_at: Option<f64>,
     shown_at: Option<f64>,
     /// The slide before, with its quarter turns (videos are turned when
     /// painted), fading out.
@@ -32,6 +35,11 @@ pub struct Slideshow {
     /// The current slide when it is a video: it plays, and the show moves on
     /// when it ends.
     video: Option<Playback>,
+    /// The video before, with its quarter turns: it plays on while it fades
+    /// out, rather than freeze.
+    previous_video: Option<(Playback, u8)>,
+    /// The play and pause sign over a video, shown on Space or a mouse move.
+    sign: PlaySign,
 }
 
 enum Slide {
@@ -46,10 +54,13 @@ impl Slideshow {
             index,
             playing: true,
             seconds: DEFAULT_SECONDS,
+            appeared_at: None,
             shown_at: None,
             previous: None,
             slides: HashMap::new(),
             video: None,
+            previous_video: None,
+            sign: PlaySign::default(),
         }
     }
 
@@ -73,19 +84,19 @@ impl Slideshow {
             self.video = None;
         } else if self.video.as_ref().is_none_or(|v| v.path() != file.path) {
             self.video = Some(Playback::open(&file.path, false));
+            // The show plays it on its own: no sign until asked for.
+            self.sign = PlaySign::new(self.playing, now, false);
         }
         // A video that ffprobe cannot read shows its still like a photo.
         let video = self.video.as_mut().filter(|v| v.info().is_ok());
         // Stills come rendered with their rotation; video frames are turned
-        // when painted.
+        // when painted. A video shows only its own frames, from its start: its
+        // still is a frame from further in.
         let mut current = match self.slides.get(&file.path) {
-            Some(Slide::Ready(texture)) => Some((texture.clone(), 0)),
+            Some(Slide::Ready(texture)) if video.is_none() => Some((texture.clone(), 0)),
             _ => None,
         };
-        let ready = current.is_some() || matches!(self.slides.get(&files[self.index].path), Some(Slide::Failed));
-        if ready && self.shown_at.is_none() {
-            self.shown_at = Some(now);
-        }
+        let still_failed = matches!(self.slides.get(&file.path), Some(Slide::Failed));
 
         let mut action = None;
         let (left, right, space, escape, faster, slower) = ui.input(|i| {
@@ -101,7 +112,24 @@ impl Slideshow {
         if escape {
             action = Some(SlideshowAction::Exit);
         }
-        if space {
+        // A click on a video plays or pauses it, as Space; the sign in the
+        // middle grows under the pointer while it shows.
+        let area = ui.max_rect();
+        let mut hovered = false;
+        let mut clicked = false;
+        if video.is_some() {
+            let response = ui.interact(area, ui.scope_id().with("slideshow video"), egui::Sense::click());
+            let label = if self.playing { "Pause" } else { "Play" };
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+            clicked = response.clicked();
+            let button =
+                egui::Rect::from_center_size(area.center(), egui::Vec2::splat(crate::player::sign_radius(area) * 2.4));
+            hovered = self.sign.visible() && response.hover_pos().is_some_and(|p| button.contains(p));
+            if hovered {
+                response.on_hover_cursor(egui::CursorIcon::PointingHand);
+            }
+        }
+        if space || clicked {
             self.playing = !self.playing;
             self.shown_at = Some(now);
         }
@@ -119,6 +147,13 @@ impl Slideshow {
             video_ended = video.finished();
         }
         let is_video = self.video.as_ref().is_some_and(|v| v.info().is_ok());
+        // A video is ready with its first frame; until then the slide before
+        // stays (and a video before plays on).
+        let ready = current.is_some() || (!is_video && still_failed);
+        if ready && self.shown_at.is_none() {
+            self.shown_at = Some(now);
+            self.appeared_at = Some(now);
+        }
         if faster {
             self.seconds = (self.seconds - 1.0).max(1.0);
         }
@@ -133,18 +168,28 @@ impl Slideshow {
             self.step(files.len(), -1, current.clone());
         }
 
-        let area = ui.max_rect();
         let painter = ui.painter();
         painter.rect_filled(area, 0.0, egui::Color32::BLACK);
-        let fade = (elapsed / FADE_SECONDS).clamp(0.0, 1.0) as f32;
-        if let Some((previous, turns)) = &self.previous
+        // Space only pauses and plays: the fade is the slide's arrival's.
+        let fade = (self.appeared_at.map_or(0.0, |t| now - t) / FADE_SECONDS).clamp(0.0, 1.0) as f32;
+        if fade >= 1.0 {
+            // Gone: its sound stops with it.
+            self.previous_video = None;
+        }
+        if let Some((video, turns)) = &mut self.previous_video {
+            video.advance(&ctx, now);
+            if let Some(texture) = video.texture() {
+                paint_fit(painter, area, texture, *turns, 1.0 - fade);
+            }
+        } else if let Some((previous, turns)) = &self.previous
             && fade < 1.0
         {
             paint_fit(painter, area, previous, *turns, 1.0 - fade);
         }
+        let has_previous = self.previous.is_some() || self.previous_video.is_some();
         if let Some((texture, turns)) = &current {
-            paint_fit(painter, area, texture, *turns, if self.previous.is_some() { fade } else { 1.0 });
-        } else if !ready {
+            paint_fit(painter, area, texture, *turns, if has_previous { fade } else { 1.0 });
+        } else if !ready && !has_previous {
             painter.text(
                 area.center(),
                 egui::Align2::CENTER_CENTER,
@@ -152,6 +197,14 @@ impl Slideshow {
                 egui::FontId::proportional(32.0),
                 egui::Color32::GRAY,
             );
+        }
+        // Over a video, as in the player: follows the show's pausing, not
+        // the video's own end, which only moves the show on.
+        if is_video
+            && current.is_some()
+            && self.sign.paint(ui, area, self.playing, now, false, hovered && !self.playing)
+        {
+            ctx.request_repaint();
         }
         let file = &files[self.index];
         let caption = file.meta.caption.clone().unwrap_or_else(|| file.name());
@@ -190,8 +243,19 @@ impl Slideshow {
 
     fn step(&mut self, len: usize, delta: isize, current: Option<(egui::TextureHandle, u8)>) {
         self.index = (self.index as isize + delta).rem_euclid(len as isize) as usize;
-        self.previous = current;
+        // A video leaving plays on as it fades out.
+        match self.video.take().filter(|v| v.texture().is_some()) {
+            Some(video) => {
+                self.previous_video = Some((video, current.map_or(0, |(_, turns)| turns)));
+                self.previous = None;
+            }
+            None => {
+                self.previous_video = None;
+                self.previous = current;
+            }
+        }
         self.shown_at = None;
+        self.appeared_at = None;
     }
 
     fn request(&mut self, ctx: &egui::Context, file: &MediaFile) {

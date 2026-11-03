@@ -1826,8 +1826,8 @@ fn video_shows_every_frame_while_playing() {
     harness.step();
     assert!(!harness.state().player_state().0, "stopped on the photo before");
 
-    // A click on the picture plays once it is clearly not a double-click;
-    // a double-click goes back to the library, as for photos.
+    // A click on the picture plays at once; a double-click goes back to
+    // the library, as for photos.
     harness.key_press(Key::ArrowRight);
     wait_until(&mut harness, "the first frame", |app| app.player_state().2);
     // Off the play button in the middle, which plays at once.
@@ -1843,11 +1843,7 @@ fn video_shows_every_frame_while_playing() {
         });
     }
     harness.step();
-    assert!(!harness.state().player_state().0, "waits for a second click");
-    for _ in 0..8 {
-        harness.step();
-    }
-    assert!(harness.state().player_state().0, "a single click plays");
+    assert!(harness.state().player_state().0, "a single click plays at once");
     double_click(&mut harness, "Video");
     harness.step();
     assert!(!harness.state().is_viewing());
