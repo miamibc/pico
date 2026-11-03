@@ -8,6 +8,7 @@ pub mod agree;
 pub mod album_file;
 pub mod collage;
 pub mod config;
+pub mod dates;
 pub mod effects;
 pub mod exif;
 mod exif_tags;

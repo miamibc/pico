@@ -1984,9 +1984,10 @@ fn sorting_by_name_date_and_size() {
     let mut harness = harness(&fixture.dir);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
 
-    assert_eq!(harness.state().listing_names(), ["a.png", "b.png", "c.png"]);
-    harness.state_mut().sort("date", false);
+    // By date taken unless asked otherwise.
     assert_eq!(harness.state().listing_names(), ["c.png", "a.png", "b.png"]);
+    harness.state_mut().sort("name", false);
+    assert_eq!(harness.state().listing_names(), ["a.png", "b.png", "c.png"]);
     harness.state_mut().sort("size", false);
     assert_eq!(harness.state().listing_names(), ["a.png", "b.png", "c.png"]);
     harness.state_mut().sort("date", true);

@@ -220,8 +220,11 @@ tests), `make testdata` (a test library in `testdata/library`, see
 - The **★** button next to the search shows only starred photos, **▶** — only
   videos.
 - **View**: thumbnail size, captions under them (file name, caption, tags),
-  sorting (by name, date taken, size, reversed), showing hidden photos, the
-  Photo Tray, slideshow.
+  sorting (by date taken — the default —, name, size, reversed), showing
+  hidden photos, the Photo Tray, slideshow. A file without a date taken sorts
+  by the date in its name (`IMG_20220421_153012`), else by the earlier of its
+  creation and modification times; all dates are brought to the computer's
+  time zone, so videos (dated in UTC) sit among the photos.
 - **Alt+Enter** (or **View → Properties and Tags**) opens a panel on the right
   with the photo's histogram (red, green, blue, with the edits; the same in the
   library and the viewer), properties (size, resolution, camera, shutter speed,

@@ -239,8 +239,8 @@ impl PicoApp {
             starred_only: false,
             videos_only: false,
             show_hidden: false,
-            captions: CaptionMode::None,
-            sort_by: SortBy::Name,
+            captions: CaptionMode::Filename,
+            sort_by: SortBy::Date,
             reverse: false,
             show_info: false,
             show_filmstrip: true,
@@ -433,7 +433,8 @@ impl PicoApp {
             Some("date") => SortBy::Date,
             Some("size") => SortBy::Size,
             Some("custom") => SortBy::Custom,
-            _ => SortBy::Name,
+            Some("name") => SortBy::Name,
+            _ => SortBy::Date,
         };
         self.reverse = flag("reverse", false);
         self.show_filmstrip = flag("filmstrip", true);

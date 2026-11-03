@@ -801,12 +801,16 @@ fn paint_cell(
         painter.text(corner, egui::Align2::CENTER_CENTER, icon, egui::FontId::proportional(12.0), egui::Color32::WHITE);
         corner.x -= 22.0;
     }
+    // On the picture itself, in a dark disc like the badges, so it shows on
+    // any theme: a wide frame leaves the cell's corner on the bare background.
     if file.kind == MediaKind::Video {
+        let at = picture.right_bottom() + egui::vec2(-12.0, -12.0);
+        painter.circle_filled(at, 10.0, egui::Color32::from_black_alpha(150));
         painter.text(
-            inner.right_bottom() + egui::vec2(-4.0, -4.0),
-            egui::Align2::RIGHT_BOTTOM,
+            at + egui::vec2(1.0, 0.0),
+            egui::Align2::CENTER_CENTER,
             "▶",
-            egui::FontId::proportional(16.0),
+            egui::FontId::proportional(11.0),
             egui::Color32::WHITE,
         );
     }

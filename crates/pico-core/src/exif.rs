@@ -151,6 +151,8 @@ pub struct Exif {
     /// When the photo was taken, as written by the camera: `YYYY:MM:DD HH:MM:SS`
     /// (which also sorts correctly as text).
     pub taken: Option<String>,
+    /// The camera's offset from UTC for `taken` (`+03:00`), when it wrote one.
+    pub offset: Option<String>,
     /// Latitude and longitude in degrees (south and west negative).
     pub gps: Option<(f64, f64)>,
     /// Human-readable `(label, value)` pairs in display order: the summary.
@@ -405,8 +407,12 @@ pub fn parse(tiff: &[u8]) -> Option<Exif> {
         _ => None,
     };
     // Date taken, else when it was digitized (scans), else last written.
-    let taken = text(0x9003).or_else(|| text(0x9004)).or_else(|| text(0x0132));
-    let mut exif = Exif { taken, gps: None, fields: Vec::new(), all };
+    // Each date has its own offset tag (OffsetTimeOriginal, …Digitized, OffsetTime).
+    let (taken, offset) = [(0x9003, 0x9011), (0x9004, 0x9012), (0x0132, 0x9010)]
+        .into_iter()
+        .find_map(|(date, offset)| Some((text(date)?, text(offset))))
+        .map_or((None, None), |(taken, offset)| (Some(taken), offset));
+    let mut exif = Exif { taken, offset, gps: None, fields: Vec::new(), all };
     let mut push = |label: &'static str, value: Option<String>| {
         if let Some(v) = value.filter(|v| !v.trim().is_empty()) {
             exif.fields.push((label, v.trim().to_owned()));
