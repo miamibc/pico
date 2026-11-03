@@ -7,8 +7,10 @@ use pico_core::video::{self, Frame, FrameStream, SoundPlayer, VideoInfo};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-/// Decoded frames are at most this wide; enough for a window, light on the CPU.
-const MAX_FRAME_WIDTH: u32 = 1280;
+/// Decoded frames are at most this wide, even on a larger screen: each
+/// frame travels from ffmpeg as raw RGBA, and 4K would be a gigabyte a
+/// second.
+const MAX_FRAME_WIDTH: u32 = 2560;
 const SEEK_STEP: Duration = Duration::from_secs(5);
 
 pub enum PlayerAction {
@@ -44,13 +46,16 @@ pub struct Playback {
 
 impl Playback {
     /// Opens `path` paused at the start; ffprobe tells its size and length.
-    pub fn open(path: &Path, muted: bool) -> Playback {
+    /// Frames are decoded at the video's own size, or smaller to fit `screen`
+    /// (in pixels), so that they are not scaled twice on the way.
+    pub fn open(path: &Path, muted: bool, screen: (u32, u32)) -> Playback {
         let info = video::probe(path).map_err(|e| e.to_string());
         let size = match &info {
             Ok(info) => {
-                let width = info.width.clamp(2, MAX_FRAME_WIDTH) & !1;
-                let height = ((info.height as f32 * width as f32 / info.width as f32).round() as u32).max(2) & !1;
-                (width, height)
+                let (w, h) = (info.width.max(2) as f32, info.height.max(2) as f32);
+                let scale = (screen.0 as f32 / w).min(screen.1 as f32 / h).min(MAX_FRAME_WIDTH as f32 / w).min(1.0);
+                let even = |side: f32| ((side * scale).round() as u32).max(2) & !1;
+                (even(w), even(h))
             }
             Err(_) => (0, 0),
         };
@@ -209,6 +214,13 @@ impl Playback {
     }
 }
 
+/// The screen's size in pixels, for [`Playback::open`].
+pub fn screen_pixels(ctx: &egui::Context) -> (u32, u32) {
+    let points = ctx.input(|i| i.viewport().monitor_size).unwrap_or(egui::vec2(1920.0, 1080.0));
+    let pixels = points * ctx.pixels_per_point();
+    (pixels.x.round() as u32, pixels.y.round() as u32)
+}
+
 /// Paints `texture` turned `turns` quarter turns clockwise (a video rotated
 /// in Pico, as its thumbnail is), as large as fits `area`, centred; returns
 /// where it went. Turned by its corners' texture coordinates, so frames need
@@ -363,7 +375,7 @@ impl Player {
     pub fn show(&mut self, ui: &mut egui::Ui, file: &MediaFile) -> Option<PlayerAction> {
         if self.playback.as_ref().is_none_or(|p| p.path() != file.path) {
             self.stop();
-            self.playback = Some(Playback::open(&file.path, self.muted));
+            self.playback = Some(Playback::open(&file.path, self.muted, screen_pixels(ui.ctx())));
             self.sign = PlaySign::new(false, ui.input(|i| i.time), true);
         }
         let playback = self.playback.as_mut()?;

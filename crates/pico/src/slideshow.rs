@@ -83,7 +83,7 @@ impl Slideshow {
         if file.kind != MediaKind::Video {
             self.video = None;
         } else if self.video.as_ref().is_none_or(|v| v.path() != file.path) {
-            self.video = Some(Playback::open(&file.path, false));
+            self.video = Some(Playback::open(&file.path, false, crate::player::screen_pixels(&ctx)));
             // The show plays it on its own: no sign until asked for.
             self.sign = PlaySign::new(self.playing, now, false);
         }
