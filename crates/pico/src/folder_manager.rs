@@ -29,6 +29,10 @@ pub struct FolderManager {
     children: HashMap<PathBuf, Vec<PathBuf>>,
     /// A folder to open the tree to and scroll into view next frame.
     reveal: Option<PathBuf>,
+    /// The watched folders, to open the tree to once, when the dialog shows.
+    unfold: Option<Vec<PathBuf>>,
+    /// Those of them under the root being drawn.
+    unfolding: Vec<PathBuf>,
 }
 
 impl FolderManager {
@@ -42,7 +46,10 @@ impl FolderManager {
             selected: None,
             children: HashMap::new(),
             reveal: None,
+            unfold: None,
+            unfolding: Vec::new(),
         };
+        manager.unfold = Some(manager.rules.watched.clone());
         if let Some(path) = selected {
             manager.select(path);
         }
@@ -77,12 +84,23 @@ impl FolderManager {
                         // The same folder can sit under several roots;
                         // open the tree to it under the first only.
                         let target = self.reveal.take();
-                        let first = target.as_ref().and_then(|t| self.roots.iter().position(|(_, r)| t.starts_with(r)));
+                        let first_root = |t: &Path| self.roots.iter().position(|(_, r)| t.starts_with(r));
+                        let first = target.as_deref().and_then(first_root);
+                        // Every watched folder shows, opened to once.
+                        let unfold = self.unfold.take().unwrap_or_default();
+                        let unfold_roots: Vec<Option<usize>> = unfold.iter().map(|w| first_root(w)).collect();
                         for (i, (label, path)) in self.roots.clone().into_iter().enumerate() {
                             self.reveal = if Some(i) == first { target.clone() } else { None };
+                            self.unfolding = unfold
+                                .iter()
+                                .zip(&unfold_roots)
+                                .filter(|(_, root)| **root == Some(i))
+                                .map(|(w, _)| w.clone())
+                                .collect();
                             self.node(ui, &path, label);
                         }
                         self.reveal = None;
+                        self.unfolding.clear();
                     });
                 });
                 ui.separator();
@@ -170,7 +188,8 @@ impl FolderManager {
     }
 
     fn node(&mut self, ui: &mut egui::Ui, path: &Path, label: String) {
-        let opens = self.reveal.as_deref().is_some_and(|r| r != path && r.starts_with(path));
+        let leads_to = |r: &Path| r != path && r.starts_with(path);
+        let opens = self.reveal.as_deref().is_some_and(leads_to) || self.unfolding.iter().any(|w| leads_to(w));
         let reveal_here = self.reveal.as_deref() == Some(path);
         let header = |this: &mut Self, ui: &mut egui::Ui| {
             let (icon, color) = match this.rules.state(path) {
