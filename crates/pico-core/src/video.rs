@@ -7,8 +7,8 @@
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::OnceLock;
-use std::time::Duration;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 /// A command for a console program that opens no window of its own. Pico is
 /// a windowed app on Windows, so each console child would otherwise flash a
@@ -43,9 +43,26 @@ fn locate(tool: &str) -> Option<PathBuf> {
         .find(|candidate| candidate.is_file())
 }
 
+/// A tool found once is kept for the whole run. One not found is looked for
+/// again, at most every few seconds, so a tool copied next to Pico while it
+/// runs is picked up without a restart.
+fn found(tool: &str, cell: &'static OnceLock<PathBuf>, last_try: &Mutex<Option<Instant>>) -> Option<&'static Path> {
+    if let Some(path) = cell.get() {
+        return Some(path);
+    }
+    let mut last_try = last_try.lock().unwrap_or_else(|e| e.into_inner());
+    if last_try.is_some_and(|t| t.elapsed() < Duration::from_secs(5)) {
+        return None;
+    }
+    *last_try = Some(Instant::now());
+    let path = locate(tool)?;
+    Some(cell.get_or_init(|| path))
+}
+
 pub fn ffmpeg() -> Option<&'static Path> {
-    static FFMPEG: OnceLock<Option<PathBuf>> = OnceLock::new();
-    FFMPEG.get_or_init(|| locate("ffmpeg")).as_deref()
+    static FFMPEG: OnceLock<PathBuf> = OnceLock::new();
+    static LAST_TRY: Mutex<Option<Instant>> = Mutex::new(None);
+    found("ffmpeg", &FFMPEG, &LAST_TRY)
 }
 
 /// Decodes one frame (or a still image ffmpeg understands) into an RGBA image.
@@ -73,14 +90,16 @@ pub fn extract_frame(path: &Path, at: Duration, max_side: Option<u32>) -> io::Re
 }
 
 pub fn ffprobe() -> Option<&'static Path> {
-    static FFPROBE: OnceLock<Option<PathBuf>> = OnceLock::new();
-    FFPROBE.get_or_init(|| locate("ffprobe")).as_deref()
+    static FFPROBE: OnceLock<PathBuf> = OnceLock::new();
+    static LAST_TRY: Mutex<Option<Instant>> = Mutex::new(None);
+    found("ffprobe", &FFPROBE, &LAST_TRY)
 }
 
 /// `ffplay`, used only to play a video's sound.
 pub fn ffplay() -> Option<&'static Path> {
-    static FFPLAY: OnceLock<Option<PathBuf>> = OnceLock::new();
-    FFPLAY.get_or_init(|| locate("ffplay")).as_deref()
+    static FFPLAY: OnceLock<PathBuf> = OnceLock::new();
+    static LAST_TRY: Mutex<Option<Instant>> = Mutex::new(None);
+    found("ffplay", &FFPLAY, &LAST_TRY)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
