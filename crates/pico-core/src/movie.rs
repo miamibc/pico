@@ -7,7 +7,7 @@ use crate::video;
 use image::{DynamicImage, GenericImage, Rgba, RgbaImage};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 const FPS: u32 = 25;
 
@@ -55,7 +55,7 @@ pub fn make_movie(
             frames.push(path);
             progress(i + 1, photos.len());
         }
-        let mut command = Command::new(ffmpeg);
+        let mut command = crate::video::hidden(ffmpeg);
         command.args(["-v", "error", "-y", "-nostdin"]);
         command.args(movie_args(&frames, out, options));
         let output = command.stdin(Stdio::null()).output()?;

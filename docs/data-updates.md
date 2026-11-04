@@ -10,7 +10,8 @@ here, on the developer's machine, and lands in the repository as ready-made
 files.
 
 You need `curl`, `unzip` and Python 3 (standard library only). Downloads go
-into `target/data-download/` and stay out of git.
+into `testdata/data-download/`, which is kept between runs and stays out of
+git.
 
 ## Place names (Places)
 

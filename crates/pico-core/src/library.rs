@@ -1,5 +1,6 @@
 //! Scanning watched folders into a list of folders with media.
 
+use crate::dates;
 use crate::ini::PicasaIni;
 use crate::media::MediaKind;
 use crate::meta::PhotoMeta;
@@ -23,6 +24,8 @@ pub struct MediaFile {
     pub taken: Option<String>,
     /// Where the photo was taken, from EXIF GPS: (latitude, longitude).
     pub gps: Option<(f64, f64)>,
+    /// The date to sort by, in this computer's local time: see [`Self::sort_date`].
+    date: String,
 }
 
 impl MediaFile {
@@ -30,30 +33,52 @@ impl MediaFile {
     /// EXIF date of a photo, the recording date of an MP4 or QuickTime video.
     pub fn new(path: PathBuf, kind: MediaKind) -> Self {
         let stat = std::fs::metadata(&path).ok();
-        let (taken, gps) = match kind {
-            MediaKind::Video => (crate::video::recorded(&path), None),
-            _ => crate::exif::read_quick(&path).map_or((None, None), |e| (e.taken, e.gps)),
+        // `taken` is shown as the file has it, but in local time for a video
+        // (kept in UTC); `when` is the same moment in local time, to sort by.
+        let (taken, when, gps) = match kind {
+            MediaKind::Video => {
+                let taken = crate::video::recorded(&path).filter(|t| plausible_date(t));
+                let local = taken.as_deref().and_then(dates::utc_to_local);
+                (local.clone(), local, None)
+            }
+            _ => match crate::exif::read_quick(&path) {
+                Some(exif) => {
+                    let taken = exif.taken.filter(|t| plausible_date(t));
+                    let when = taken.as_deref().map(|t| {
+                        exif.offset
+                            .as_deref()
+                            .and_then(|o| dates::with_offset_to_local(t, o))
+                            .unwrap_or_else(|| t.to_owned())
+                    });
+                    (taken, when, exif.gps)
+                }
+                None => (None, None, None),
+            },
         };
-        let taken = taken.filter(|t| plausible_date(t));
+        let modified = stat.as_ref().and_then(|s| s.modified().ok());
+        let created = stat.as_ref().and_then(|s| s.created().ok());
+        let date = when
+            .or_else(|| dates::from_file_name(&Folder::file_name(&path)))
+            .or_else(|| dates::earliest_file_time(created, modified).map(dates::system_to_local))
+            .unwrap_or_else(|| "1970:01:01 00:00:00".to_owned());
         Self {
             path,
             kind,
             meta: PhotoMeta::default(),
             size: stat.as_ref().map_or(0, |s| s.len()),
-            modified: stat.and_then(|s| s.modified().ok()),
+            modified,
             taken,
             gps,
+            date,
         }
     }
 
-    /// The date to sort by: when the photo was taken, else when the file changed,
-    /// as text that sorts chronologically.
+    /// The date to sort by, as text that sorts chronologically, in this
+    /// computer's local time: when the photo was taken, else the date in its
+    /// name (`IMG_20220421_153012`), else the earlier of the file's creation
+    /// and modification times.
     pub fn sort_date(&self) -> String {
-        if let Some(taken) = &self.taken {
-            return taken.clone();
-        }
-        let secs = self.modified.and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
-        crate::fileops::exif_style_date(secs)
+        self.date.clone()
     }
 
     pub fn name(&self) -> String {
@@ -669,8 +694,18 @@ mod place_tests {
         let png = MediaFile::new(dir.join("a.png"), MediaKind::Photo);
         assert_eq!(png.taken.as_deref(), Some("2009:07:14 18:30:05"));
         let clip = MediaFile::new(dir.join("clip.mp4"), MediaKind::Video);
-        assert_eq!(clip.taken.as_deref(), Some("2021:03:14 09:05:59"));
-        assert_eq!(clip.sort_date(), "2021:03:14 09:05:59");
+        // Shown and sorted in this computer's local time.
+        let local = dates::utc_to_local("2021:03:14 09:05:59");
+        assert_eq!(clip.taken, local);
+        assert_eq!(Some(clip.sort_date()), local);
+        assert_eq!(png.sort_date(), "2009:07:14 18:30:05");
+        // No date inside: the one in the name, else the file's.
+        let named = dir.join("IMG_20220421_153012.png");
+        std::fs::write(&named, b"").unwrap();
+        std::fs::write(dir.join("plain.png"), b"").unwrap();
+        assert_eq!(MediaFile::new(named, MediaKind::Photo).sort_date(), "2022:04:21 15:30:12");
+        let plain = MediaFile::new(dir.join("plain.png"), MediaKind::Photo);
+        assert_eq!(plain.sort_date(), dates::system_to_local(plain.modified.unwrap()));
         // A camera without its clock set: not a date to sort by.
         assert!(!plausible_date("0000:00:00 00:00:00") && !plausible_date("    :  :     :  :  "));
         assert!(plausible_date("2009:07:14 18:30:05"));

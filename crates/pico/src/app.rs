@@ -239,8 +239,8 @@ impl PicoApp {
             starred_only: false,
             videos_only: false,
             show_hidden: false,
-            captions: CaptionMode::None,
-            sort_by: SortBy::Name,
+            captions: CaptionMode::Filename,
+            sort_by: SortBy::Date,
             reverse: false,
             show_info: false,
             show_filmstrip: true,
@@ -401,6 +401,9 @@ impl PicoApp {
         set("theme", theme.into());
         set("language", self.language.clone().unwrap_or_else(|| "auto".into()));
         set("animations", self.animations.to_string());
+        let (zoom_mode, zoom) = self.viewer.zoom_setting();
+        set("zoom_mode", zoom_mode.into());
+        set("zoom", zoom.map(|z| z.to_string()).unwrap_or_default());
         if let Some(Source::Folder(i)) = self.source
             && let Some(folder) = self.folders.get(i)
         {
@@ -433,7 +436,8 @@ impl PicoApp {
             Some("date") => SortBy::Date,
             Some("size") => SortBy::Size,
             Some("custom") => SortBy::Custom,
-            _ => SortBy::Name,
+            Some("name") => SortBy::Name,
+            _ => SortBy::Date,
         };
         self.reverse = flag("reverse", false);
         self.show_filmstrip = flag("filmstrip", true);
@@ -472,6 +476,8 @@ impl PicoApp {
         // main() sets the language itself, before the window opens.
         self.language = get("language").filter(|l| *l != "auto").map(str::to_owned);
         self.animations = flag("animations", true);
+        let zoom = get("zoom").and_then(|v| v.parse::<f32>().ok());
+        self.viewer.set_zoom_setting(get("zoom_mode").unwrap_or("fit"), zoom);
     }
 
     /// Sets the chosen theme; "as the system" uses the desktop's wish when
@@ -4059,7 +4065,7 @@ const SHORTCUTS: &[(&str, &[(&str, &str)])] = &[
             ("Home / End", tr_mark!("First / last photo")),
             (tr_mark!("Ctrl+wheel, pinch"), tr_mark!("Zoom")),
             (tr_mark!("Double-click, Esc"), tr_mark!("Back to the library")),
-            ("F11", tr_mark!("Full screen")),
+            ("F, F11", tr_mark!("Full screen")),
             ("Ctrl+Z / Ctrl+Y", tr_mark!("Undo / redo an edit")),
             (tr_mark!("\\ (hold)"), tr_mark!("Show the original")),
         ],

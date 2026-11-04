@@ -252,21 +252,12 @@ fn zoom_pan_and_wheel_in_viewer() {
     // Pinch or Ctrl+wheel zooms; a small photo fits at 100%, so zoom in.
     let photo = harness.get_by_label("Photo").rect();
     harness.hover_at(photo.center());
-    harness.event(egui::Event::Zoom(2.0));
+    harness.event(egui::Event::Zoom(1.5));
     harness.step();
-    assert_eq!(harness.state().zoom_state().0, Some(200.0));
+    assert_eq!(harness.state().zoom_state().0, Some(150.0));
     harness.event(egui::Event::Zoom(10.0));
     harness.step();
-    assert_eq!(harness.state().zoom_state().0, Some(800.0), "zoom stops at 800%");
-    // Dragging looks around the zoomed photo.
-    let start = harness.get_by_label("Photo").rect().center();
-    harness.drag_at(start);
-    harness.step();
-    harness.hover_at(start + egui::vec2(30.0, 20.0));
-    harness.step();
-    harness.drop_at(start + egui::vec2(30.0, 20.0));
-    harness.step();
-    assert_ne!(harness.state().zoom_state().1, egui::Vec2::ZERO, "the photo moved");
+    assert_eq!(harness.state().zoom_state().0, Some(300.0), "zoom stops at 300%");
     harness.get_by_label("Fit").click();
     harness.step();
     assert_eq!(harness.state().zoom_state(), (None, egui::Vec2::ZERO, false));
@@ -293,6 +284,15 @@ fn zoom_pan_and_wheel_in_viewer() {
     assert_eq!(harness.state().zoom_state().0, Some(100.0));
     wait_until(&mut harness, "the full-resolution picture", |app| app.zoom_state().2);
     screenshot(&mut harness, "zoom");
+    // Dragging looks around the zoomed photo.
+    let start = harness.get_by_label("Photo").rect().center();
+    harness.drag_at(start);
+    harness.step();
+    harness.hover_at(start + egui::vec2(30.0, 20.0));
+    harness.step();
+    harness.drop_at(start + egui::vec2(30.0, 20.0));
+    harness.step();
+    assert_ne!(harness.state().zoom_state().1, egui::Vec2::ZERO, "the photo moved");
 }
 
 #[test]
@@ -487,6 +487,12 @@ fn home_end_and_full_screen_in_viewer() {
     harness.key_press(Key::F11);
     harness.step();
     assert!(!harness.state().is_full_screen(), "F11 toggles");
+    harness.key_press(Key::F);
+    harness.step();
+    assert!(harness.state().is_full_screen(), "F as well");
+    harness.key_press(Key::F);
+    harness.step();
+    assert!(!harness.state().is_full_screen());
 }
 
 #[test]
@@ -1292,7 +1298,10 @@ fn settings_come_back_next_time() {
     assert!(settings.get("last_folder").is_some_and(|p| p.ends_with("more")), "{settings:?}");
     // (The window size comes from eframe, which the test harness does not report.)
     assert_eq!(settings.get("sidebar_width").map(String::as_str), Some("260"));
+    assert_eq!(settings.get("zoom_mode").map(String::as_str), Some("fit"));
     settings.insert("sidebar_width".into(), "400".into());
+    settings.insert("zoom_mode".into(), "custom".into());
+    settings.insert("zoom".into(), "1.5".into());
     drop(harness);
 
     // A new window with those settings opens where the last one was.
@@ -1310,6 +1319,8 @@ fn settings_come_back_next_time() {
     harness.run();
     let again = harness.state().settings_for_test(&harness.ctx.clone());
     assert_eq!(again.get("sidebar_width").map(String::as_str), Some("400"));
+    assert_eq!(again.get("zoom_mode").map(String::as_str), Some("custom"));
+    assert_eq!(again.get("zoom").map(String::as_str), Some("1.5"));
     // The year comes back open, its month showing.
     assert_eq!(harness.get_all_by_label_contains(&in_year).count(), 2);
     assert_eq!(again.get("left_sections"), settings.get("left_sections"));
@@ -1820,8 +1831,8 @@ fn video_shows_every_frame_while_playing() {
     harness.step();
     assert!(!harness.state().player_state().0, "stopped on the photo before");
 
-    // A click on the picture plays once it is clearly not a double-click;
-    // a double-click goes back to the library, as for photos.
+    // A click on the picture plays at once; a double-click goes back to
+    // the library, as for photos.
     harness.key_press(Key::ArrowRight);
     wait_until(&mut harness, "the first frame", |app| app.player_state().2);
     // Off the play button in the middle, which plays at once.
@@ -1837,11 +1848,7 @@ fn video_shows_every_frame_while_playing() {
         });
     }
     harness.step();
-    assert!(!harness.state().player_state().0, "waits for a second click");
-    for _ in 0..8 {
-        harness.step();
-    }
-    assert!(harness.state().player_state().0, "a single click plays");
+    assert!(harness.state().player_state().0, "a single click plays at once");
     double_click(&mut harness, "Video");
     harness.step();
     assert!(!harness.state().is_viewing());
@@ -1984,9 +1991,10 @@ fn sorting_by_name_date_and_size() {
     let mut harness = harness(&fixture.dir);
     wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
 
-    assert_eq!(harness.state().listing_names(), ["a.png", "b.png", "c.png"]);
-    harness.state_mut().sort("date", false);
+    // By date taken unless asked otherwise.
     assert_eq!(harness.state().listing_names(), ["c.png", "a.png", "b.png"]);
+    harness.state_mut().sort("name", false);
+    assert_eq!(harness.state().listing_names(), ["a.png", "b.png", "c.png"]);
     harness.state_mut().sort("size", false);
     assert_eq!(harness.state().listing_names(), ["a.png", "b.png", "c.png"]);
     harness.state_mut().sort("date", true);
