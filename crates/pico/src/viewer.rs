@@ -26,7 +26,10 @@ use std::sync::mpsc::{Receiver, channel};
 const WORKING_SIDE: u32 = 2560;
 
 /// Strongest zoom, in screen pixels per photo pixel.
-const MAX_ZOOM: f32 = 8.0;
+const MAX_ZOOM: f32 = 3.0;
+/// The least zoom the slider, Ctrl+wheel and the percent button go to; Fit
+/// may show a big photo smaller still.
+const MIN_ZOOM: f32 = 0.3;
 
 /// Wheel travel, in points, that moves to the next or previous photo.
 const WHEEL_STEP: f32 = 40.0;
@@ -495,14 +498,14 @@ impl Viewer {
         // The zoom on screen, whichever mode made it: the fit's own in Fit.
         let percent_label = format!("{:.0}%", current * 100.0);
         ui.scope(|ui| {
-            // Joined: square inner corners, no gaps.
-            ui.spacing_mut().item_spacing.x = 0.0;
+            // Joined: square inner corners, a hairline between the parts.
+            ui.spacing_mut().item_spacing.x = 1.0;
             let round = ui.visuals().widgets.inactive.corner_radius;
             let left = egui::CornerRadius { ne: 0, se: 0, ..round };
             let right = egui::CornerRadius { nw: 0, sw: 0, ..round };
             // Framed even when off, so the three read as one button; the
             // percent keeps its width as the number changes.
-            let segment = |selected: bool, text: &str, corners: egui::CornerRadius| {
+            let segment = |selected: bool, text: &'static str, corners: egui::CornerRadius| {
                 egui::Button::new(text).selected(selected).corner_radius(corners).min_size(egui::vec2(44.0, 0.0))
             };
             if ui
@@ -521,33 +524,55 @@ impl Viewer {
                 self.scale_pan(1.0);
                 self.zoom_mode = ZoomMode::Actual;
             }
-            if ui
-                .add_enabled(ready, segment(self.zoom_mode == ZoomMode::Custom, &percent_label, right))
-                .on_hover_text(tr!("Back to your own zoom"))
-                .clicked()
-            {
-                self.set_custom_zoom(self.custom_zoom.unwrap_or(current));
-            }
+            // The third part holds the percent and the slider, framed as
+            // one with the two before.
+            let custom = self.zoom_mode == ZoomMode::Custom;
+            let visuals = ui.visuals();
+            let fill = if custom { visuals.selection.bg_fill } else { visuals.widgets.inactive.weak_bg_fill };
+            let height = ui.spacing().interact_size.y;
+            ui.add_enabled_ui(ready, |ui| {
+                egui::Frame::new()
+                    .fill(fill)
+                    .corner_radius(right)
+                    .inner_margin(egui::Margin { left: 4, right: 10, top: 0, bottom: 0 })
+                    .show(ui, |ui| {
+                        ui.set_min_height(height);
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        // The slider's rail (and resting handle) in a shade of
+                        // the part's own fill, so it reads alike on the light
+                        // and the dark theme and on the highlight.
+                        let text = ui.visuals().text_color();
+                        ui.visuals_mut().widgets.inactive.bg_fill = fill.lerp_to_gamma(text, 0.3);
+                        let percent_button = egui::Button::new(&percent_label)
+                            .selected(custom)
+                            .frame(false)
+                            .min_size(egui::vec2(40.0, height));
+                        if ui.add(percent_button).on_hover_text(tr!("Keep this zoom from photo to photo")).clicked() {
+                            // The zoom it shows, as it is now.
+                            self.set_custom_zoom(current);
+                        }
+                        let mut percent = current * 100.0;
+                        let slider = egui::Slider::new(&mut percent, MIN_ZOOM * 100.0..=MAX_ZOOM * 100.0)
+                            .logarithmic(true)
+                            .show_value(false);
+                        // A change smaller than a whole percent is the
+                        // slider's rounding, not the user.
+                        if ui
+                            .add(slider)
+                            .on_hover_text(tr!("Zoom (Ctrl+wheel; drag the photo to look around)"))
+                            .changed()
+                            && (percent - current * 100.0).abs() >= 0.5
+                        {
+                            self.set_custom_zoom(percent / 100.0);
+                        }
+                    });
+            });
         });
-        let mut percent = current * 100.0;
-        let low = fit.min(current) * 100.0;
-        let slider =
-            egui::Slider::new(&mut percent, low..=MAX_ZOOM.max(fit) * 100.0).logarithmic(true).show_value(false);
-        // A change smaller than a whole percent is the slider's rounding,
-        // not the user.
-        if ui
-            .add_enabled(ready, slider)
-            .on_hover_text(tr!("Zoom (Ctrl+wheel; drag the photo to look around)"))
-            .changed()
-            && (percent - current * 100.0).abs() >= 0.5
-        {
-            self.set_custom_zoom(percent / 100.0);
-        }
     }
 
     /// Switches to the user's own zoom, around the middle of the view.
     fn set_custom_zoom(&mut self, zoom: f32) {
-        let zoom = zoom.clamp(0.01, MAX_ZOOM.max(self.fit_zoom));
+        let zoom = zoom.clamp(MIN_ZOOM, MAX_ZOOM);
         self.scale_pan(zoom);
         self.custom_zoom = Some(zoom);
         self.zoom_mode = ZoomMode::Custom;
@@ -803,7 +828,7 @@ impl Viewer {
                     let old = self.zoom.unwrap_or(self.fit_zoom);
                     // Keep the point under the pointer in place.
                     let pivot = pointer.map_or(egui::Vec2::ZERO, |p| p - area.center());
-                    let target = (old * zoom_delta).clamp(self.fit_zoom.min(old), MAX_ZOOM.max(self.fit_zoom));
+                    let target = (old * zoom_delta).clamp(MIN_ZOOM, MAX_ZOOM);
                     self.pan = pivot - (pivot - self.pan) * (target / old);
                     self.custom_zoom = Some(target);
                     self.zoom_mode = ZoomMode::Custom;
@@ -1141,6 +1166,27 @@ impl Viewer {
             && self.detail.is_some()
             && self.detail.as_ref().map(|(k, _)| k) == self.texture.as_ref().map(|(k, _)| k);
         (self.zoom.map(|z| (z * 100.0).round()), self.pan, detail)
+    }
+
+    /// The zoom mode and the user's own zoom, as kept in the settings:
+    /// `fit`, `1:1` or `custom`, and a scale (1.0 is 100%).
+    pub fn zoom_setting(&self) -> (&'static str, Option<f32>) {
+        let mode = match self.zoom_mode {
+            ZoomMode::Fit => "fit",
+            ZoomMode::Actual => "1:1",
+            ZoomMode::Custom => "custom",
+        };
+        (mode, self.custom_zoom)
+    }
+
+    /// Restores what [`Self::zoom_setting`] gave.
+    pub fn set_zoom_setting(&mut self, mode: &str, zoom: Option<f32>) {
+        self.custom_zoom = zoom.filter(|z| z.is_finite()).map(|z| z.clamp(MIN_ZOOM, MAX_ZOOM));
+        self.zoom_mode = match mode {
+            "1:1" => ZoomMode::Actual,
+            "custom" if self.custom_zoom.is_some() => ZoomMode::Custom,
+            _ => ZoomMode::Fit,
+        };
     }
 
     pub fn is_full_screen(&self) -> bool {

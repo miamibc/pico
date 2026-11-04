@@ -252,21 +252,12 @@ fn zoom_pan_and_wheel_in_viewer() {
     // Pinch or Ctrl+wheel zooms; a small photo fits at 100%, so zoom in.
     let photo = harness.get_by_label("Photo").rect();
     harness.hover_at(photo.center());
-    harness.event(egui::Event::Zoom(2.0));
+    harness.event(egui::Event::Zoom(1.5));
     harness.step();
-    assert_eq!(harness.state().zoom_state().0, Some(200.0));
+    assert_eq!(harness.state().zoom_state().0, Some(150.0));
     harness.event(egui::Event::Zoom(10.0));
     harness.step();
-    assert_eq!(harness.state().zoom_state().0, Some(800.0), "zoom stops at 800%");
-    // Dragging looks around the zoomed photo.
-    let start = harness.get_by_label("Photo").rect().center();
-    harness.drag_at(start);
-    harness.step();
-    harness.hover_at(start + egui::vec2(30.0, 20.0));
-    harness.step();
-    harness.drop_at(start + egui::vec2(30.0, 20.0));
-    harness.step();
-    assert_ne!(harness.state().zoom_state().1, egui::Vec2::ZERO, "the photo moved");
+    assert_eq!(harness.state().zoom_state().0, Some(300.0), "zoom stops at 300%");
     harness.get_by_label("Fit").click();
     harness.step();
     assert_eq!(harness.state().zoom_state(), (None, egui::Vec2::ZERO, false));
@@ -293,6 +284,15 @@ fn zoom_pan_and_wheel_in_viewer() {
     assert_eq!(harness.state().zoom_state().0, Some(100.0));
     wait_until(&mut harness, "the full-resolution picture", |app| app.zoom_state().2);
     screenshot(&mut harness, "zoom");
+    // Dragging looks around the zoomed photo.
+    let start = harness.get_by_label("Photo").rect().center();
+    harness.drag_at(start);
+    harness.step();
+    harness.hover_at(start + egui::vec2(30.0, 20.0));
+    harness.step();
+    harness.drop_at(start + egui::vec2(30.0, 20.0));
+    harness.step();
+    assert_ne!(harness.state().zoom_state().1, egui::Vec2::ZERO, "the photo moved");
 }
 
 #[test]
@@ -1298,7 +1298,10 @@ fn settings_come_back_next_time() {
     assert!(settings.get("last_folder").is_some_and(|p| p.ends_with("more")), "{settings:?}");
     // (The window size comes from eframe, which the test harness does not report.)
     assert_eq!(settings.get("sidebar_width").map(String::as_str), Some("260"));
+    assert_eq!(settings.get("zoom_mode").map(String::as_str), Some("fit"));
     settings.insert("sidebar_width".into(), "400".into());
+    settings.insert("zoom_mode".into(), "custom".into());
+    settings.insert("zoom".into(), "1.5".into());
     drop(harness);
 
     // A new window with those settings opens where the last one was.
@@ -1316,6 +1319,8 @@ fn settings_come_back_next_time() {
     harness.run();
     let again = harness.state().settings_for_test(&harness.ctx.clone());
     assert_eq!(again.get("sidebar_width").map(String::as_str), Some("400"));
+    assert_eq!(again.get("zoom_mode").map(String::as_str), Some("custom"));
+    assert_eq!(again.get("zoom").map(String::as_str), Some("1.5"));
     // The year comes back open, its month showing.
     assert_eq!(harness.get_all_by_label_contains(&in_year).count(), 2);
     assert_eq!(again.get("left_sections"), settings.get("left_sections"));

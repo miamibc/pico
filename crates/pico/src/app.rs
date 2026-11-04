@@ -401,6 +401,9 @@ impl PicoApp {
         set("theme", theme.into());
         set("language", self.language.clone().unwrap_or_else(|| "auto".into()));
         set("animations", self.animations.to_string());
+        let (zoom_mode, zoom) = self.viewer.zoom_setting();
+        set("zoom_mode", zoom_mode.into());
+        set("zoom", zoom.map(|z| z.to_string()).unwrap_or_default());
         if let Some(Source::Folder(i)) = self.source
             && let Some(folder) = self.folders.get(i)
         {
@@ -473,6 +476,8 @@ impl PicoApp {
         // main() sets the language itself, before the window opens.
         self.language = get("language").filter(|l| *l != "auto").map(str::to_owned);
         self.animations = flag("animations", true);
+        let zoom = get("zoom").and_then(|v| v.parse::<f32>().ok());
+        self.viewer.set_zoom_setting(get("zoom_mode").unwrap_or("fit"), zoom);
     }
 
     /// Sets the chosen theme; "as the system" uses the desktop's wish when
