@@ -72,6 +72,18 @@ type Size = (u32, u32);
 /// What a texture shows: the file plus the edits it was rendered with.
 type RenderKey = (PathBuf, String);
 
+/// How the photo is zoomed; the user picks it, and it stays from photo to photo.
+#[derive(Default, Clone, Copy, PartialEq)]
+enum ZoomMode {
+    /// The whole photo in the window.
+    #[default]
+    Fit,
+    /// One photo pixel per screen pixel.
+    Actual,
+    /// The user's own zoom, from the slider, Ctrl+wheel or the percent button.
+    Custom,
+}
+
 /// Room Fit, 1:1 and the zoom slider with its value take in the bar.
 const ZOOM_CONTROLS_WIDTH: f32 = 280.0;
 
@@ -98,6 +110,11 @@ pub struct Viewer {
     player: Player,
     /// Screen pixels per photo pixel (1.0 is 1:1); `None` fits the window.
     zoom: Option<f32>,
+    /// Fit, 1:1 or a zoom of the user's: changed only by the user, kept from
+    /// photo to photo. `zoom` follows from it each frame.
+    zoom_mode: ZoomMode,
+    /// The user's zoom, for [`ZoomMode::Custom`] and the percent button.
+    custom_zoom: Option<f32>,
     /// Offset of the zoomed photo's centre from the middle of the view.
     pan: egui::Vec2,
     /// The zoom that fits the photo, as of the last frame.
@@ -197,7 +214,7 @@ impl Viewer {
             // A star flying for the photo before would land on this one.
             self.star_flight = None;
             self.star_puff = None;
-            self.zoom = None;
+            // The zoom mode stays; the new photo starts in its middle.
             self.pan = egui::Vec2::ZERO;
             self.wheel = 0.0;
             self.detail = None;
@@ -469,55 +486,77 @@ impl Viewer {
         Some(if near(edited.0, same.0) && near(edited.1, same.1) { (same, None) } else { (edited, Some(same)) })
     }
 
-    /// Fit, 1:1 and the zoom slider; greyed out until the photo is `ready`.
-    /// About [`ZOOM_CONTROLS_WIDTH`] wide.
+    /// Fit, 1:1 and the zoom in percent as one switch of three, then the
+    /// zoom slider; greyed out until the photo is `ready`. About
+    /// [`ZOOM_CONTROLS_WIDTH`] wide.
     fn zoom_controls(&mut self, ui: &mut egui::Ui, ready: bool) {
         let fit = self.fit_zoom.max(0.01);
-        if ui
-            .add_enabled(ready, egui::Button::selectable(self.zoom.is_none(), "Fit"))
-            .on_hover_text(tr!("Fit the photo in the window"))
-            .clicked()
-        {
-            self.zoom = None;
-            self.pan = egui::Vec2::ZERO;
-        }
-        if ui
-            .add_enabled(ready, egui::Button::selectable(self.zoom == Some(1.0), "1:1"))
-            .on_hover_text(tr!("One photo pixel per screen pixel"))
-            .clicked()
-        {
-            self.set_zoom(1.0);
-        }
         let current = self.zoom.unwrap_or(fit);
+        // The zoom on screen, whichever mode made it: the fit's own in Fit.
+        let percent_label = format!("{:.0}%", current * 100.0);
+        ui.scope(|ui| {
+            // Joined: square inner corners, no gaps.
+            ui.spacing_mut().item_spacing.x = 0.0;
+            let round = ui.visuals().widgets.inactive.corner_radius;
+            let left = egui::CornerRadius { ne: 0, se: 0, ..round };
+            let right = egui::CornerRadius { nw: 0, sw: 0, ..round };
+            // Framed even when off, so the three read as one button; the
+            // percent keeps its width as the number changes.
+            let segment = |selected: bool, text: &str, corners: egui::CornerRadius| {
+                egui::Button::new(text).selected(selected).corner_radius(corners).min_size(egui::vec2(44.0, 0.0))
+            };
+            if ui
+                .add_enabled(ready, segment(self.zoom_mode == ZoomMode::Fit, "Fit", left))
+                .on_hover_text(tr!("Fit the photo in the window"))
+                .clicked()
+            {
+                self.zoom_mode = ZoomMode::Fit;
+                self.pan = egui::Vec2::ZERO;
+            }
+            if ui
+                .add_enabled(ready, segment(self.zoom_mode == ZoomMode::Actual, "1:1", egui::CornerRadius::ZERO))
+                .on_hover_text(tr!("One photo pixel per screen pixel"))
+                .clicked()
+            {
+                self.scale_pan(1.0);
+                self.zoom_mode = ZoomMode::Actual;
+            }
+            if ui
+                .add_enabled(ready, segment(self.zoom_mode == ZoomMode::Custom, &percent_label, right))
+                .on_hover_text(tr!("Back to your own zoom"))
+                .clicked()
+            {
+                self.set_custom_zoom(self.custom_zoom.unwrap_or(current));
+            }
+        });
         let mut percent = current * 100.0;
-        let slider = egui::Slider::new(&mut percent, fit * 100.0..=MAX_ZOOM.max(fit) * 100.0)
-            .logarithmic(true)
-            .suffix("%")
-            .fixed_decimals(0)
-            .show_value(true);
-        // The slider rounds to whole percents; a change smaller than that is
-        // its rounding (e.g. of a fit of 36.9%), not the user, and must not
-        // turn Fit off.
+        let low = fit.min(current) * 100.0;
+        let slider =
+            egui::Slider::new(&mut percent, low..=MAX_ZOOM.max(fit) * 100.0).logarithmic(true).show_value(false);
+        // A change smaller than a whole percent is the slider's rounding,
+        // not the user.
         if ui
             .add_enabled(ready, slider)
             .on_hover_text(tr!("Zoom (Ctrl+wheel; drag the photo to look around)"))
             .changed()
             && (percent - current * 100.0).abs() >= 0.5
         {
-            self.set_zoom(percent / 100.0);
+            self.set_custom_zoom(percent / 100.0);
         }
     }
 
-    /// Zooms around the middle of the view.
-    fn set_zoom(&mut self, zoom: f32) {
-        let fit = self.fit_zoom.max(0.01);
-        let old = self.zoom.unwrap_or(fit);
-        let zoom = zoom.clamp(fit, MAX_ZOOM.max(fit));
+    /// Switches to the user's own zoom, around the middle of the view.
+    fn set_custom_zoom(&mut self, zoom: f32) {
+        let zoom = zoom.clamp(0.01, MAX_ZOOM.max(self.fit_zoom));
+        self.scale_pan(zoom);
+        self.custom_zoom = Some(zoom);
+        self.zoom_mode = ZoomMode::Custom;
+    }
+
+    /// Keeps what is in the middle of the view there as the zoom goes to `zoom`.
+    fn scale_pan(&mut self, zoom: f32) {
+        let old = self.zoom.unwrap_or(self.fit_zoom.max(0.01));
         self.pan *= zoom / old;
-        self.zoom = (zoom > fit * 1.001).then_some(zoom);
-        if self.zoom.is_none() {
-            self.pan = egui::Vec2::ZERO;
-        }
     }
 
     /// Takes the last saved edit off the stack.
@@ -746,8 +785,14 @@ impl Viewer {
             let fit = (area.width() / size.x).min(area.height() / size.y).min(max_scale);
             self.fit_zoom = fit * base_scale;
             let zoomable = self.tool.is_none();
+            // The zoom the mode asks for; tools show the photo fitted.
+            self.zoom = match self.zoom_mode {
+                _ if !zoomable => None,
+                ZoomMode::Fit => None,
+                ZoomMode::Actual => Some(1.0),
+                ZoomMode::Custom => Some(self.custom_zoom.unwrap_or(self.fit_zoom)),
+            };
             if !zoomable {
-                self.zoom = None;
                 self.pan = egui::Vec2::ZERO;
             }
             let hovered = ui.rect_contains_pointer(area);
@@ -758,9 +803,11 @@ impl Viewer {
                     let old = self.zoom.unwrap_or(self.fit_zoom);
                     // Keep the point under the pointer in place.
                     let pivot = pointer.map_or(egui::Vec2::ZERO, |p| p - area.center());
-                    let target = (old * zoom_delta).clamp(self.fit_zoom, MAX_ZOOM.max(self.fit_zoom));
+                    let target = (old * zoom_delta).clamp(self.fit_zoom.min(old), MAX_ZOOM.max(self.fit_zoom));
                     self.pan = pivot - (pivot - self.pan) * (target / old);
-                    self.set_zoom(target);
+                    self.custom_zoom = Some(target);
+                    self.zoom_mode = ZoomMode::Custom;
+                    self.zoom = Some(target);
                 } else if !command && scroll != 0.0 {
                     self.wheel += scroll;
                     if self.wheel.abs() >= WHEEL_STEP {

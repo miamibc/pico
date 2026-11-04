@@ -62,7 +62,7 @@ msgstr ""
 msgid "Empty the tray; the photos stay where they are"
 msgstr ""
 
-#: crates/pico/src/app.rs:699 crates/pico/src/viewer.rs:349
+#: crates/pico/src/app.rs:699 crates/pico/src/viewer.rs:351
 msgid "▶ Slideshow"
 msgstr ""
 
@@ -250,7 +250,7 @@ msgstr ""
 msgid "Exit"
 msgstr ""
 
-#: crates/pico/src/app.rs:1799 crates/pico/src/viewer.rs:342
+#: crates/pico/src/app.rs:1799 crates/pico/src/viewer.rs:344
 msgid "Edit"
 msgstr ""
 
@@ -550,15 +550,15 @@ msgstr ""
 msgid "Star / Unstar"
 msgstr ""
 
-#: crates/pico/src/app.rs:2224 crates/pico/src/viewer.rs:582
+#: crates/pico/src/app.rs:2224 crates/pico/src/viewer.rs:604
 msgid "I'm Feeling Lucky"
 msgstr ""
 
-#: crates/pico/src/app.rs:2225 crates/pico/src/viewer.rs:583
+#: crates/pico/src/app.rs:2225 crates/pico/src/viewer.rs:605
 msgid "Auto Contrast"
 msgstr ""
 
-#: crates/pico/src/app.rs:2226 crates/pico/src/viewer.rs:584
+#: crates/pico/src/app.rs:2226 crates/pico/src/viewer.rs:606
 msgid "Auto Color"
 msgstr ""
 
@@ -578,7 +578,7 @@ msgstr ""
 msgid "Sharpen"
 msgstr ""
 
-#: crates/pico/src/app.rs:2242 crates/pico/src/viewer.rs:688
+#: crates/pico/src/app.rs:2242 crates/pico/src/viewer.rs:710
 msgid "Undo All Edits"
 msgstr ""
 
@@ -746,7 +746,7 @@ msgstr ""
 msgid "Folder:"
 msgstr ""
 
-#: crates/pico/src/app.rs:3141 crates/pico/src/app.rs:3299 crates/pico/src/folder_manager.rs:136
+#: crates/pico/src/app.rs:3141 crates/pico/src/app.rs:3299 crates/pico/src/folder_manager.rs:154
 msgid "Browse…"
 msgstr ""
 
@@ -834,7 +834,7 @@ msgstr ""
 msgid "Move"
 msgstr ""
 
-#: crates/pico/src/app.rs:3270 crates/pico/src/folder_manager.rs:109 crates/pico/src/tools.rs:188 crates/pico/src/tools.rs:269
+#: crates/pico/src/app.rs:3270 crates/pico/src/folder_manager.rs:127 crates/pico/src/tools.rs:188 crates/pico/src/tools.rs:269
 msgid "Cancel"
 msgstr ""
 
@@ -1156,7 +1156,7 @@ msgid_plural "{n} files"
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/pico/src/app.rs:4088 crates/pico/src/folder_manager.rs:256
+#: crates/pico/src/app.rs:4088 crates/pico/src/folder_manager.rs:275
 msgid "{n} folder"
 msgid_plural "{n} folders"
 msgstr[0] ""
@@ -1314,91 +1314,91 @@ msgstr ""
 msgid "Pictures laid over one another"
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:67
+#: crates/pico/src/folder_manager.rs:74
 msgid "Folder Manager"
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:68
+#: crates/pico/src/folder_manager.rs:75
 msgid "Pick folders on the left and tell Pico whether to look inside them."
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:101
+#: crates/pico/src/folder_manager.rs:119
 msgid "Watching {watched}, leaving out {excluded}."
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:112
+#: crates/pico/src/folder_manager.rs:130
 msgid "OK"
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:129
+#: crates/pico/src/folder_manager.rs:147
 msgid "Folder path:"
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:134
+#: crates/pico/src/folder_manager.rs:152
 msgid "Go"
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:136
+#: crates/pico/src/folder_manager.rs:154
 msgid "Choose with the system folder dialog"
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:148
+#: crates/pico/src/folder_manager.rs:166
 msgid "Pick a folder on the left, or type its path."
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:154
+#: crates/pico/src/folder_manager.rs:172
 msgid "Watch for photos"
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:155
+#: crates/pico/src/folder_manager.rs:173
 msgid "Pico shows this folder and everything inside it, and notices new photos"
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:156
+#: crates/pico/src/folder_manager.rs:174
 msgid "Leave out of Pico"
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:157
+#: crates/pico/src/folder_manager.rs:175
 msgid "Pico ignores this folder; no files are touched"
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:162
+#: crates/pico/src/folder_manager.rs:180
 msgid "Watched, with everything inside it."
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:163
+#: crates/pico/src/folder_manager.rs:181
 msgid "Inside a watched folder, so it's in."
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:164
+#: crates/pico/src/folder_manager.rs:182
 msgid "Left out, along with everything inside it."
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:165
+#: crates/pico/src/folder_manager.rs:183
 msgid "Inside a folder that's left out."
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:166
+#: crates/pico/src/folder_manager.rs:184
 msgid "Not in Pico. Photos here are safe from being admired."
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:263
+#: crates/pico/src/folder_manager.rs:282
 msgid "Pictures"
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:266
+#: crates/pico/src/folder_manager.rs:285
 msgid "Home"
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:272
+#: crates/pico/src/folder_manager.rs:291
 msgid "Drive {letter}:"
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:281
+#: crates/pico/src/folder_manager.rs:300
 msgid "Drives"
 msgstr ""
 
-#: crates/pico/src/folder_manager.rs:283
+#: crates/pico/src/folder_manager.rs:302
 msgid "Computer"
 msgstr ""
 
@@ -1614,39 +1614,39 @@ msgstr ""
 msgid "{n} bytes"
 msgstr ""
 
-#: crates/pico/src/player.rs:287
+#: crates/pico/src/player.rs:385
 msgid "This video is shy: {e}"
 msgstr ""
 
-#: crates/pico/src/player.rs:296
+#: crates/pico/src/player.rs:394
 msgid "⏸ Pause"
 msgstr ""
 
-#: crates/pico/src/player.rs:296
+#: crates/pico/src/player.rs:394
 msgid "▶ Play"
 msgstr ""
 
-#: crates/pico/src/player.rs:297 crates/pico/src/player.rs:378
+#: crates/pico/src/player.rs:395 crates/pico/src/player.rs:462
 msgid "/ or Space"
 msgstr ""
 
-#: crates/pico/src/player.rs:302
+#: crates/pico/src/player.rs:400
 msgid "Mute"
 msgstr ""
 
-#: crates/pico/src/player.rs:410
+#: crates/pico/src/player.rs:494
 msgid "Could not save the frame: {e}"
 msgstr ""
 
-#: crates/pico/src/slideshow.rs:158
+#: crates/pico/src/slideshow.rs:211
 msgid "{n}s"
 msgstr ""
 
-#: crates/pico/src/slideshow.rs:158
+#: crates/pico/src/slideshow.rs:211
 msgid "paused"
 msgstr ""
 
-#: crates/pico/src/slideshow.rs:173
+#: crates/pico/src/slideshow.rs:226
 msgid "Space pause, arrows move, -/+ speed, Esc exit"
 msgstr ""
 
@@ -1666,7 +1666,7 @@ msgstr ""
 msgid "Drag over the photo to choose what stays"
 msgstr ""
 
-#: crates/pico/src/tools.rs:165 crates/pico/src/viewer.rs:573
+#: crates/pico/src/tools.rs:165 crates/pico/src/viewer.rs:595
 msgid "Crop"
 msgstr ""
 
@@ -1714,7 +1714,7 @@ msgstr ""
 msgid "Defaults"
 msgstr ""
 
-#: crates/pico/src/tools.rs:284 crates/pico/src/viewer.rs:577
+#: crates/pico/src/tools.rs:284 crates/pico/src/viewer.rs:599
 msgid "Straighten"
 msgstr ""
 
@@ -1726,155 +1726,159 @@ msgstr ""
 msgid "Angle"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:336
+#: crates/pico/src/viewer.rs:338
 msgid "⬅ Back to Library"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:343
+#: crates/pico/src/viewer.rs:345
 msgid "Show the edit panel"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:344
+#: crates/pico/src/viewer.rs:346
 msgid "Videos are not edited in Pico"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:352
+#: crates/pico/src/viewer.rs:354
 msgid "Full screen (F or F11; Esc to leave)"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:356
+#: crates/pico/src/viewer.rs:358
 msgid "Previous (Left arrow; Home for the first)"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:360
+#: crates/pico/src/viewer.rs:362
 msgid "Next (Right arrow; End for the last)"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:364
+#: crates/pico/src/viewer.rs:366
 msgid "★ Starred"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:364
+#: crates/pico/src/viewer.rs:366
 msgid "☆ Star"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:370
+#: crates/pico/src/viewer.rs:372
 msgid "Rotate counterclockwise (Ctrl+Shift+R)"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:373
+#: crates/pico/src/viewer.rs:375
 msgid "Rotate clockwise (Ctrl+R)"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:381 crates/pico/src/viewer.rs:791
+#: crates/pico/src/viewer.rs:383 crates/pico/src/viewer.rs:813
 msgid "Original"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:382
+#: crates/pico/src/viewer.rs:384
 msgid "Hold to see the photo without its edits (or hold \\)"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:383
+#: crates/pico/src/viewer.rs:385
 msgid "No edits to compare with"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:397
+#: crates/pico/src/viewer.rs:399
 msgid "Save Frame as Photo"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:398
+#: crates/pico/src/viewer.rs:400
 msgid "Save the frame on screen next to the video"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:410
+#: crates/pico/src/viewer.rs:412
 msgid "Add a caption. Future you will thank you."
 msgstr ""
 
-#: crates/pico/src/viewer.rs:428
+#: crates/pico/src/viewer.rs:430
 msgid "file date {date}"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:439
+#: crates/pico/src/viewer.rs:441
 msgid "{size} (original {original})"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:478
+#: crates/pico/src/viewer.rs:496
 msgid "Fit the photo in the window"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:486
+#: crates/pico/src/viewer.rs:504
 msgid "One photo pixel per screen pixel"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:503
+#: crates/pico/src/viewer.rs:511
+msgid "Back to your own zoom"
+msgstr ""
+
+#: crates/pico/src/viewer.rs:525
 msgid "Zoom (Ctrl+wheel; drag the photo to look around)"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:571
+#: crates/pico/src/viewer.rs:593
 msgid "Basic Fixes"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:594
+#: crates/pico/src/viewer.rs:616
 msgid "Tuning"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:603 crates/pico-core/src/effects.rs:384 crates/pico-core/src/effects.rs:392 crates/pico-core/src/effects.rs:402
+#: crates/pico/src/viewer.rs:625 crates/pico-core/src/effects.rs:384 crates/pico-core/src/effects.rs:392 crates/pico-core/src/effects.rs:402
 msgid "Fill Light"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:604 crates/pico-core/src/effects.rs:403
+#: crates/pico/src/viewer.rs:626 crates/pico-core/src/effects.rs:403
 msgid "Highlights"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:605 crates/pico-core/src/effects.rs:404
+#: crates/pico/src/viewer.rs:627 crates/pico-core/src/effects.rs:404
 msgid "Shadows"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:606 crates/pico-core/src/effects.rs:357 crates/pico-core/src/effects.rs:411
+#: crates/pico/src/viewer.rs:628 crates/pico-core/src/effects.rs:357 crates/pico-core/src/effects.rs:411
 msgid "Color Temperature"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:632
+#: crates/pico/src/viewer.rs:654
 msgid "Effects"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:641
+#: crates/pico/src/viewer.rs:663
 msgid "Creative Kit"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:670
+#: crates/pico/src/viewer.rs:692
 msgid "No edits yet. The photo is perfect, apparently."
 msgstr ""
 
-#: crates/pico/src/viewer.rs:674
+#: crates/pico/src/viewer.rs:696
 msgid "{n} not shown yet (kept in the file)"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:675
+#: crates/pico/src/viewer.rs:697
 msgid "Pico keeps edits it cannot draw yet, so Picasa still sees them."
 msgstr ""
 
-#: crates/pico/src/viewer.rs:679
+#: crates/pico/src/viewer.rs:701
 msgid "Undo"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:680
+#: crates/pico/src/viewer.rs:702
 msgid "Remove the last edit (Ctrl+Z)"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:683
+#: crates/pico/src/viewer.rs:705
 msgid "Redo"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:684
+#: crates/pico/src/viewer.rs:706
 msgid "Bring the edit back (Ctrl+Y)"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:841
+#: crates/pico/src/viewer.rs:863
 msgid "Pico squinted at this file and gave up:\n{error}"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:671
+#: crates/pico/src/viewer.rs:693
 msgid "{n} edit"
 msgid_plural "{n} edits"
 msgstr[0] ""
