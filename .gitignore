@@ -11,6 +11,14 @@
 # Camera RAW samples from raw.pixls.us (CC0), 170 MB: too big for the repository
 /testdata/raw-samples/
 
+# Demo library for the README and website screenshots (CC0 photos from
+# Wikimedia Commons, 55 MB), kept here so they are not downloaded again
+/testdata/demo-photos/
+
+# Downloads for refreshing place names, EXIF and maker-note tags (make places,
+# exif-tags, maker-tags; see docs/data-updates.md), 160 MB
+/testdata/data-download/
+
 # Local instructions for Claude Code and the local task list
 /CLAUDE.md
 /TASKS.md

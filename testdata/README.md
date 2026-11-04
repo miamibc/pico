@@ -25,3 +25,14 @@ cargo test -p pico testdata_tour -- --ignored   # screenshots of every folder in
 | `12-nested` | Nested folders and a hidden `.picasaoriginals` backup |
 
 Expected looks are written into each folder's name or captions.
+
+## Kept locally, not committed
+
+These folders live in the project so they are at hand for every release and
+never lost or downloaded again; they are too big for the repository.
+
+| Folder | What it is | Where it came from |
+|---|---|---|
+| `demo-photos/` | The demo library of the README and website screenshots (`make screenshots`), 80 photos in 8 topics with `.picasa.ini` files | CC0 photos from Wikimedia Commons, listed in `docs/screenshots/make_screenshots.py`; `make screenshots` downloads only the ones missing |
+| `data-download/` | What `make places`, `make exif-tags` and `make maker-tags` download (GeoNames, Natural Earth, exiv2 and ExifTool tag pages, ExifRead); its `exifread` tests hold a few more RAW samples | The sources in `docs/data-updates.md`; those targets download afresh each time |
+| `raw-samples/` | Camera RAW files for `crates/pico-core/src/raw.rs` (its `real_raw_files` test reads them): Sony ILCE-7CM2 ARW, Nikon Z8 NEF | CC0 samples from [raw.pixls.us](https://raw.pixls.us/) (`Sony/ILCE-7CM2`, `Nikon/Z 8`) |

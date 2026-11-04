@@ -51,16 +51,20 @@ tour: testdata
 	cargo test -p pico testdata_tour -- --ignored
 
 # README and website screenshots in docs/screenshots, dark and light, of a demo
-# library of CC0 photos from Wikimedia Commons (needs Python with Pillow and the
-# internet the first time). The library sits in /tmp, so the Properties panel
+# library of CC0 photos from Wikimedia Commons (needs Python with Pillow, and the
+# internet only for photos not in DEMO yet). The photos stay in the project;
+# the app sees them through the link /tmp/Photos, so the Properties panel
 # shows a short path.
-DEMO ?= /tmp/Photos
+DEMO ?= $(CURDIR)/testdata/demo-photos
+DEMO_LINK := /tmp/Photos
 
 screenshots:
 	python3 -I docs/screenshots/make_screenshots.py library $(DEMO)
+	@[ ! -e $(DEMO_LINK) ] || [ -L $(DEMO_LINK) ] || { echo "$(DEMO_LINK) is a real folder: move it into $(DEMO)"; exit 1; }
+	ln -sfn $(DEMO) $(DEMO_LINK)
 	rm -rf target/screenshots
-	PICO_DEMO=$(DEMO) PICO_SHOTS=$(CURDIR)/target/screenshots cargo test -p pico website_shots -- --ignored
-	PICO_DEMO=$(DEMO) PICO_SHOTS=$(CURDIR)/target/screenshots PICO_SUFFIX=-light cargo test -p pico website_shots -- --ignored
+	PICO_DEMO=$(DEMO_LINK) PICO_SHOTS=$(CURDIR)/target/screenshots cargo test -p pico website_shots -- --ignored
+	PICO_DEMO=$(DEMO_LINK) PICO_SHOTS=$(CURDIR)/target/screenshots PICO_SUFFIX=-light cargo test -p pico website_shots -- --ignored
 	python3 -I docs/screenshots/make_screenshots.py webp target/screenshots docs/screenshots
 
 # Draws the logos for the window and Help → About, and for README the title
@@ -83,8 +87,8 @@ po:
 	python3 -I crates/pico/po/update.py
 
 # Rarely changing data, refreshed from the internet (see docs/data-updates.md).
-# Downloads go to target/data-download.
-DATA_DL = target/data-download
+# Downloads go to testdata/data-download (kept, out of git).
+DATA_DL = testdata/data-download
 NE_URL = https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson
 
 # Place names for Places: GeoNames towns, Natural Earth countries, seas and

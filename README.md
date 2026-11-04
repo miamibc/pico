@@ -148,8 +148,9 @@ tests), `make testdata` (a test library in `testdata/library`, see
   selected folder, **Watch for photos** or **Leave out of Pico** on the right.
   The rule of the nearest folder wins: you can watch `~/Pictures`, leave out
   `~/Pictures/Screenshots`, and inside it turn one folder back on. The path can
-  be typed in or picked with the system dialog (**Browse…**). Changes apply on
-  **OK**; the files themselves are not touched.
+  be typed in or picked with the system dialog (**Browse…**). The tree opens to
+  every watched folder. Changes apply on **OK**; the files themselves are not
+  touched.
 - The **Photo Tray** is hidden until **View → Photo Tray** turns it on; albums
   do its job for most. Then it sits at the bottom: while it is empty, it shows
   the selection; **Hold** (**Ctrl+H**) puts the selected photos into the tray,
@@ -195,10 +196,14 @@ tests), `make testdata` (a test library in `testdata/library`, see
   thumbnail opens it. The filmstrip can be hidden: **View → Filmstrip**. The
   bar below the photo takes more rows where the window is narrow.
 - The mouse wheel over a photo flips through the shots, **Ctrl+wheel** (or a
-  pinch on a touchpad) zooms around the pointer. At the bottom are **Fit**,
-  **1:1** and a slider up to 800%; a zoomed photo can be dragged with the
-  mouse. When you zoom into a large shot, Pico loads it at full resolution, so
-  1:1 shows real pixels. Two photos on each side are prepared in advance, so
+  pinch on a touchpad) zooms around the pointer. At the bottom is a switch of
+  three: **Fit** (the whole photo in the window), **1:1** (one photo pixel per
+  screen pixel) and the zoom in percent with a slider from 30% to 300% inside
+  it. The percent shows the zoom on screen; a click on it, the slider or
+  Ctrl+wheel keep that zoom. The chosen mode stays from photo to photo and
+  between runs. A zoomed photo can be dragged with the mouse. When you zoom
+  into a large shot, Pico loads it at full resolution, so 1:1 shows real
+  pixels. Two photos on each side are prepared in advance, so
   paging shows no blank frame.
 - Above the photo is a line about it: name, date taken (from EXIF; for MP4 and
   MOV videos, when they were recorded; otherwise the file date), size in pixels (after a crop — the original
@@ -294,9 +299,13 @@ them into the file, use **File → Save** (the original is kept in
 ### Video
 
 Videos open the same way as photos. **/** or **Space** — play/pause (or the
-golden ▶ over a paused video, or a click on the picture), **,** and **.** — 5 seconds back/forward, the slider seeks,
-**Mute** turns the sound off. **Save Frame as Photo** in the bottom bar saves
-the current frame next to the video. In a slideshow a video plays to the end.
+white ▶ over a paused video, or a click on the picture), **,** and **.** — 5
+seconds back/forward, the slider seeks, **Mute** turns the sound off. When the
+video plays, ▶ turns into ⏸, which fades a second later and comes back for two
+seconds when the mouse moves over the picture. Frames are decoded at the
+video's own size, up to the screen's. **Save Frame as Photo** in the bottom bar saves
+the current frame next to the video. In a slideshow a video plays to the end, from its start, and crossfades into
+the next slide while it still plays.
 A video turned with the rotate buttons plays turned, in slideshows too, and
 its saved frames are turned the same way. Videos are not edited in Pico:
 **Edit** is greyed out for them.
@@ -324,7 +333,8 @@ also sets it as the wallpaper (GNOME).
 ### Slideshow
 
 **Ctrl+4** or **View → Slideshow** — full screen. **Space** — pause, arrows —
-previous and next, **−/+** — display time, **Esc** — exit.
+previous and next, **−/+** — display time, **Esc** — exit. On a video, a click
+on the picture also pauses and plays it, and ▶ / ⏸ show when the mouse moves.
 
 ### Files
 
@@ -383,7 +393,7 @@ language is in `crates/pico/po/README.md`.
   library's folders and the ones left out of it.
 - `~/.config/pico/settings.txt` — what Pico remembers between runs: thumbnail
   size, captions, sorting, the filmstrip, the Photo Tray, the folder list view,
-  the properties panel, theme, language, animations, the window size, the widths of the left and right panels, which
+  the properties panel, the zoom mode, theme, language, animations, the window size, the widths of the left and right panels, which
   sections on the left and in the properties panel are open, and the last open
   folder (`key=value` lines, can be edited by hand; written a second after a
   change and on exit).
