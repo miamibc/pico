@@ -1346,6 +1346,9 @@ fn settings_come_back_next_time() {
     settings.insert("zoom".into(), "1.5".into());
     assert_eq!(settings.get("slide_seconds").map(String::as_str), Some("3"));
     settings.insert("slide_seconds".into(), "7".into());
+    assert_eq!(settings.get("crop_aspect").map(String::as_str), Some("Manual"));
+    settings.insert("crop_aspect".into(), "16:10".into());
+    settings.insert("crop_portrait".into(), "true".into());
     drop(harness);
 
     // A new window with those settings opens where the last one was.
@@ -1366,6 +1369,8 @@ fn settings_come_back_next_time() {
     assert_eq!(again.get("zoom_mode").map(String::as_str), Some("custom"));
     assert_eq!(again.get("zoom").map(String::as_str), Some("1.5"));
     assert_eq!(again.get("slide_seconds").map(String::as_str), Some("7"));
+    assert_eq!(again.get("crop_aspect").map(String::as_str), Some("16:10"));
+    assert_eq!(again.get("crop_portrait").map(String::as_str), Some("true"));
     // The year comes back open, its month showing.
     assert_eq!(harness.get_all_by_label_contains(&in_year).count(), 2);
     assert_eq!(again.get("left_sections"), settings.get("left_sections"));
@@ -1681,6 +1686,38 @@ fn sliders_preview_on_a_smaller_copy_then_render_in_full() {
     let (preview, texture, _) = harness.state().viewer_picture_sizes().unwrap();
     assert!(!preview);
     assert_eq!(texture, full);
+}
+
+#[test]
+fn crop_aspect_stays_for_the_next_photo() {
+    let fixture = Fixture::new("crop-aspect");
+    // A light photo: the hint over it must still read.
+    RgbImage::from_pixel(120, 80, Rgb([245, 245, 240])).save(fixture.dir.join("a.png")).unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    harness.state_mut().open_edit_panel();
+    wait_until(&mut harness, "the photo", |app| app.viewer_loaded());
+    harness.get_by_label("Crop").click();
+    harness.run_steps(3);
+    screenshot(&mut harness, "crop-hint");
+    harness.get_by_label("Aspect").click();
+    harness.run_steps(2);
+    harness.get_by_label("Square").click();
+    harness.run_steps(2);
+    harness.get_by_label("Cancel").click();
+    harness.run_steps(2);
+
+    harness.key_press(Key::ArrowRight);
+    wait_until(&mut harness, "the next photo", |app| app.viewer_loaded());
+    harness.get_by_label("Crop").click();
+    harness.run_steps(3);
+    assert_eq!(harness.get_by_label("Aspect").value().as_deref(), Some("Square"));
+    let ctx = harness.ctx.clone();
+    let settings = harness.state().settings_for_test(&ctx);
+    assert_eq!(settings.get("crop_aspect").map(String::as_str), Some("Square"));
 }
 
 #[test]

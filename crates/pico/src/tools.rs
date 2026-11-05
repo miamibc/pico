@@ -23,16 +23,52 @@ pub enum ToolAction {
     Cancel,
 }
 
-/// Picasa's crop presets; ratios are width / height in landscape.
-const ASPECTS: [(&str, Option<f32>); 7] = [
-    (tr_mark!("Manual"), None),
-    ("4 x 6", Some(1.5)),
-    ("5 x 7", Some(1.4)),
-    ("8 x 10", Some(1.25)),
-    (tr_mark!("Square"), Some(1.0)),
-    ("16 x 9", Some(16.0 / 9.0)),
-    (tr_mark!("As shot"), Some(0.0)), // resolved to the photo's own ratio
+/// How a crop's sides relate.
+#[derive(Clone, Copy, PartialEq)]
+enum Ratio {
+    Free,
+    /// Width / height in landscape.
+    Fixed(f32),
+    /// The photo's own.
+    AsShot,
+    /// The screen's.
+    Screen,
+}
+
+/// Picasa 3's crop presets: print sizes, then screens and frames.
+const ASPECTS: [(&str, Ratio); 11] = [
+    (tr_mark!("Manual"), Ratio::Free),
+    ("4 x 6", Ratio::Fixed(1.5)),
+    ("5 x 7", Ratio::Fixed(1.4)),
+    ("8 x 10", Ratio::Fixed(1.25)),
+    (tr_mark!("Square"), Ratio::Fixed(1.0)),
+    ("4:3", Ratio::Fixed(4.0 / 3.0)),
+    ("16:10", Ratio::Fixed(1.6)),
+    ("16:9", Ratio::Fixed(16.0 / 9.0)),
+    ("5:3", Ratio::Fixed(5.0 / 3.0)),
+    (tr_mark!("As shot"), Ratio::AsShot),
+    (tr_mark!("As the screen"), Ratio::Screen),
 ];
+
+/// The aspect picked for crops, kept from photo to photo and between runs.
+#[derive(Clone, Copy, Default, PartialEq, Debug)]
+pub struct CropShape {
+    aspect: usize,
+    portrait: bool,
+}
+
+impl CropShape {
+    /// The aspect's name as saved in the settings, and whether it is turned
+    /// to portrait.
+    pub fn setting(self) -> (&'static str, bool) {
+        (ASPECTS[self.aspect].0, self.portrait)
+    }
+
+    /// Back from [`Self::setting`]; an unknown name is Manual.
+    pub fn from_setting(name: &str, portrait: bool) -> Self {
+        Self { aspect: ASPECTS.iter().position(|(n, _)| *n == name).unwrap_or(0), portrait }
+    }
+}
 
 #[derive(Default)]
 pub struct CropTool {
@@ -40,6 +76,8 @@ pub struct CropTool {
     pub rect: Option<Rect>,
     aspect: usize,
     portrait: bool,
+    /// The screen's size, for the aspect that follows it.
+    pub screen: Vec2,
     drag: Option<Drag>,
 }
 
@@ -59,14 +97,24 @@ enum Drag {
 const GRAB: f32 = 8.0;
 
 impl CropTool {
+    pub fn new(shape: CropShape) -> Self {
+        Self { aspect: shape.aspect, portrait: shape.portrait, ..Default::default() }
+    }
+
+    pub fn shape(&self) -> CropShape {
+        CropShape { aspect: self.aspect, portrait: self.portrait }
+    }
+
     /// Width / height of the selection in unit space, if the aspect is locked.
     fn unit_ratio(&self, image_px: Vec2) -> Option<f32> {
-        let mut ratio = ASPECTS[self.aspect].1?;
-        if ratio == 0.0 {
-            ratio = image_px.x / image_px.y;
-        } else if self.portrait == (ratio >= 1.0) {
-            ratio = 1.0 / ratio;
-        }
+        let ratio = match ASPECTS[self.aspect].1 {
+            Ratio::Free => return None,
+            Ratio::AsShot => image_px.x / image_px.y,
+            Ratio::Fixed(r) => r,
+            Ratio::Screen if self.screen.min_elem() > 0.0 => self.screen.max_elem() / self.screen.min_elem(),
+            Ratio::Screen => 16.0 / 9.0,
+        };
+        let ratio = if ASPECTS[self.aspect].1 != Ratio::AsShot && self.portrait { 1.0 / ratio } else { ratio };
         Some(ratio * image_px.y / image_px.x)
     }
 
@@ -223,13 +271,21 @@ impl CropTool {
 
     pub fn paint(&self, painter: &egui::Painter, image_rect: Rect) {
         let Some(unit) = self.rect else {
-            painter.text(
-                image_rect.center(),
-                egui::Align2::CENTER_CENTER,
-                tr!("Drag over the photo to choose what stays"),
-                egui::FontId::proportional(18.0),
-                Color32::WHITE,
-            );
+            let hint = tr!("Drag over the photo to choose what stays");
+            let text = |offset: Vec2, color: Color32| {
+                let (at, font) = (image_rect.center() + offset, egui::FontId::proportional(18.0));
+                painter.text(at, egui::Align2::CENTER_CENTER, hint, font, color);
+            };
+            // A soft dark shadow, about a 3-pixel blur around the letters,
+            // so the hint reads on light photos too: copies on rings around
+            // it, faint ones farther out.
+            for (radius, alpha) in [(1.0, 60), (2.0, 34), (3.0, 16)] {
+                for i in 0..12 {
+                    let angle = i as f32 * std::f32::consts::TAU / 12.0;
+                    text(Vec2::angled(angle) * radius, Color32::from_black_alpha(alpha));
+                }
+            }
+            text(Vec2::ZERO, Color32::WHITE);
             return;
         };
         let rect = Rect::from_min_max(
@@ -273,10 +329,9 @@ impl CropTool {
                 }
             },
         );
-        ui.add_enabled(
-            ASPECTS[self.aspect].1.is_some_and(|r| r != 1.0),
-            egui::Checkbox::new(&mut self.portrait, tr!("Portrait")),
-        );
+        let turns = matches!(ASPECTS[self.aspect].1, Ratio::Screen)
+            || matches!(ASPECTS[self.aspect].1, Ratio::Fixed(r) if r != 1.0);
+        ui.add_enabled(turns, egui::Checkbox::new(&mut self.portrait, tr!("Portrait")));
         if before != (self.aspect, self.portrait) {
             self.refit(image_px);
         }
@@ -506,5 +561,23 @@ mod tests {
         assert_eq!(tool.edges_at(image, pos2(200.0, 296.0)), Some((0, 1)));
         assert_eq!(tool.edges_at(image, pos2(200.0, 200.0)), None, "inside moves");
         assert_eq!(tool.edges_at(image, pos2(20.0, 20.0)), None, "outside draws anew");
+    }
+
+    #[test]
+    fn crop_shape_round_trips_through_settings() {
+        let shape = CropShape { aspect: 6, portrait: true };
+        assert_eq!(shape.setting(), ("16:10", true));
+        assert_eq!(CropShape::from_setting("16:10", true), shape);
+        assert_eq!(CropShape::from_setting("no such", false), CropShape::default(), "Manual");
+    }
+
+    #[test]
+    fn screen_aspect_follows_the_screen_and_turns() {
+        let image_px = vec2(300.0, 300.0);
+        let screen = ASPECTS.iter().position(|(_, r)| *r == Ratio::Screen).unwrap();
+        let mut tool = CropTool { aspect: screen, screen: vec2(1920.0, 1200.0), ..Default::default() };
+        assert!((tool.unit_ratio(image_px).unwrap() - 1.6).abs() < 1e-5);
+        tool.portrait = true;
+        assert!((tool.unit_ratio(image_px).unwrap() - 1.0 / 1.6).abs() < 1e-5);
     }
 }

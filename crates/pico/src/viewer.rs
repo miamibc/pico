@@ -209,6 +209,8 @@ pub struct Viewer {
     pub still: bool,
     /// The photo's thumbnail, with its edits, shown until the photo is ready.
     pub placeholder: Option<egui::TextureHandle>,
+    /// The crop aspect last picked, for the next crop.
+    crop_shape: tools::CropShape,
 }
 
 impl Viewer {
@@ -682,7 +684,12 @@ impl Viewer {
     fn edit_panel(&mut self, ui: &mut egui::Ui, file: &MediaFile) -> Option<ViewerAction> {
         let image_px = self.texture.as_ref().map_or(egui::vec2(1.0, 1.0), |(key, t)| self.shown_size(key, t));
         let tool_action = match &mut self.tool {
-            Some((_, Tool::Crop(crop))) => Some(crop.controls(ui, image_px, file.meta.rotate)),
+            Some((_, Tool::Crop(crop))) => {
+                crop.screen = ui.ctx().input(|i| i.viewport().monitor_size).unwrap_or(ui.ctx().content_rect().size());
+                let action = crop.controls(ui, image_px, file.meta.rotate);
+                self.crop_shape = crop.shape();
+                Some(action)
+            }
             Some((_, Tool::Straighten { amount })) => Some(tools::straighten_controls(ui, amount)),
             Some((_, Tool::Effect { spec, params })) => Some(tools::effect_controls(ui, spec, params)),
             None => None,
@@ -699,7 +706,7 @@ impl Viewer {
         ui.horizontal_wrapped(|ui| {
             if ui.button(tr!("Crop")).clicked() {
                 self.draft = None;
-                self.tool = Some((file.path.clone(), Tool::Crop(CropTool::default())));
+                self.tool = Some((file.path.clone(), Tool::Crop(CropTool::new(self.crop_shape))));
             }
             if ui.button(tr!("Straighten")).clicked() {
                 self.draft = None;
@@ -1335,6 +1342,15 @@ impl Viewer {
             "custom" if self.custom_zoom.is_some() => ZoomMode::Custom,
             _ => ZoomMode::Fit,
         };
+    }
+
+    /// The crop aspect to save: its name and whether it is turned to portrait.
+    pub fn crop_setting(&self) -> (&'static str, bool) {
+        self.crop_shape.setting()
+    }
+
+    pub fn set_crop_setting(&mut self, name: &str, portrait: bool) {
+        self.crop_shape = tools::CropShape::from_setting(name, portrait);
     }
 
     pub fn is_full_screen(&self) -> bool {

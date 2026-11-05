@@ -408,6 +408,9 @@ impl PicoApp {
         let (zoom_mode, zoom) = self.viewer.zoom_setting();
         set("zoom_mode", zoom_mode.into());
         set("zoom", zoom.map(|z| z.to_string()).unwrap_or_default());
+        let (aspect, portrait) = self.viewer.crop_setting();
+        set("crop_aspect", aspect.into());
+        set("crop_portrait", portrait.to_string());
         if let Some(Source::Folder(i)) = self.source
             && let Some(folder) = self.folders.get(i)
         {
@@ -485,6 +488,7 @@ impl PicoApp {
             .map_or(crate::slideshow::DEFAULT_SECONDS, |s| s.clamp(1.0, 60.0));
         let zoom = get("zoom").and_then(|v| v.parse::<f32>().ok());
         self.viewer.set_zoom_setting(get("zoom_mode").unwrap_or("fit"), zoom);
+        self.viewer.set_crop_setting(get("crop_aspect").unwrap_or_default(), flag("crop_portrait", false));
     }
 
     /// Sets the chosen theme; "as the system" uses the desktop's wish when
