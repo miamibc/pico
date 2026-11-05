@@ -1302,6 +1302,8 @@ fn settings_come_back_next_time() {
     settings.insert("sidebar_width".into(), "400".into());
     settings.insert("zoom_mode".into(), "custom".into());
     settings.insert("zoom".into(), "1.5".into());
+    assert_eq!(settings.get("slide_seconds").map(String::as_str), Some("3"));
+    settings.insert("slide_seconds".into(), "7".into());
     drop(harness);
 
     // A new window with those settings opens where the last one was.
@@ -1321,6 +1323,7 @@ fn settings_come_back_next_time() {
     assert_eq!(again.get("sidebar_width").map(String::as_str), Some("400"));
     assert_eq!(again.get("zoom_mode").map(String::as_str), Some("custom"));
     assert_eq!(again.get("zoom").map(String::as_str), Some("1.5"));
+    assert_eq!(again.get("slide_seconds").map(String::as_str), Some("7"));
     // The year comes back open, its month showing.
     assert_eq!(harness.get_all_by_label_contains(&in_year).count(), 2);
     assert_eq!(again.get("left_sections"), settings.get("left_sections"));

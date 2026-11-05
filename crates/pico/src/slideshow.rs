@@ -49,11 +49,11 @@ enum Slide {
 }
 
 impl Slideshow {
-    pub fn new(index: usize) -> Self {
+    pub fn new(index: usize, seconds: f64) -> Self {
         Self {
             index,
             playing: true,
-            seconds: DEFAULT_SECONDS,
+            seconds,
             appeared_at: None,
             shown_at: None,
             previous: None,

@@ -195,6 +195,8 @@ pub struct PicoApp {
     language: Option<String>,
     /// The flying star and scrolling with weight.
     animations: bool,
+    /// Seconds per slide in the slideshow, kept from show to show.
+    slide_seconds: f64,
     /// The desktop's light or dark wish, where Pico reads it itself (Linux).
     system_dark: Option<bool>,
     system_theme: Option<Receiver<bool>>,
@@ -292,6 +294,7 @@ impl PicoApp {
             theme: egui::ThemePreference::System,
             language: None,
             animations: true,
+            slide_seconds: crate::slideshow::DEFAULT_SECONDS,
             system_dark: None,
             system_theme: None,
             sidebar_width: 260.0,
@@ -401,6 +404,7 @@ impl PicoApp {
         set("theme", theme.into());
         set("language", self.language.clone().unwrap_or_else(|| "auto".into()));
         set("animations", self.animations.to_string());
+        set("slide_seconds", self.slide_seconds.to_string());
         let (zoom_mode, zoom) = self.viewer.zoom_setting();
         set("zoom_mode", zoom_mode.into());
         set("zoom", zoom.map(|z| z.to_string()).unwrap_or_default());
@@ -476,6 +480,9 @@ impl PicoApp {
         // main() sets the language itself, before the window opens.
         self.language = get("language").filter(|l| *l != "auto").map(str::to_owned);
         self.animations = flag("animations", true);
+        self.slide_seconds = get("slide_seconds")
+            .and_then(|v| v.parse::<f64>().ok())
+            .map_or(crate::slideshow::DEFAULT_SECONDS, |s| s.clamp(1.0, 60.0));
         let zoom = get("zoom").and_then(|v| v.parse::<f32>().ok());
         self.viewer.set_zoom_setting(get("zoom_mode").unwrap_or("fit"), zoom);
     }
@@ -1677,7 +1684,7 @@ impl PicoApp {
         }
         let start = self.current.and_then(|c| listing.iter().position(|&r| r == c)).unwrap_or(0);
         let back = if self.view == View::Photo { ReturnTo::Photo } else { ReturnTo::Library };
-        self.slideshow = Some(Slideshow::new(start));
+        self.slideshow = Some(Slideshow::new(start, self.slide_seconds));
         self.view = View::Slideshow(back);
         ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
     }
@@ -1695,6 +1702,7 @@ impl PicoApp {
             show.index = index;
         }
         let action = show.show(ui, &files);
+        self.slide_seconds = show.seconds;
         // Leaving the slideshow selects the photo it stopped on.
         self.current = listing.get(show.index).copied();
         if let Some(SlideshowAction::Exit) = action {
