@@ -10,7 +10,8 @@
 //! `.Picasa.ini` copied from there are found as well.
 //!
 //! Section and key order is preserved, and unknown keys are kept untouched so
-//! that saving never loses data written by Picasa or other tools.
+//! that saving never loses data written by Picasa or other tools. So are the
+//! empty lines older Picasa versions put between sections.
 
 use std::fmt::Write as _;
 use std::io;
@@ -27,11 +28,13 @@ const ENCODING_SECTION: &str = "encoding";
 pub struct Section {
     pub name: String,
     pub entries: Vec<(String, String)>,
+    /// Empty lines before the section's header in the file.
+    pub blank_before: usize,
 }
 
 impl Section {
     pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into(), entries: Vec::new() }
+        Self { name: name.into(), entries: Vec::new(), blank_before: 0 }
     }
 
     pub fn get(&self, key: &str) -> Option<&str> {
@@ -56,21 +59,30 @@ impl Section {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PicasaIni {
     pub sections: Vec<Section>,
+    /// Empty lines after the last section.
+    pub blank_after: usize,
 }
 
 impl PicasaIni {
     /// Parses file content. Never fails: malformed lines are skipped, as Picasa does.
     pub fn parse(text: &str) -> Self {
         let mut ini = Self::default();
+        let mut blank = 0;
         for raw in text.lines() {
             let line = raw.trim_end_matches('\r').trim_start_matches('\u{feff}');
-            if line.trim().is_empty() || line.starts_with(';') {
+            if line.trim().is_empty() {
+                blank += 1;
+                continue;
+            }
+            if line.starts_with(';') {
                 continue;
             }
             if let Some(name) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
-                ini.sections.push(Section::new(name));
+                ini.sections.push(Section { blank_before: std::mem::take(&mut blank), ..Section::new(name) });
                 continue;
             }
+            // Empty lines among the keys of a section are not kept.
+            blank = 0;
             let Some((key, value)) = line.split_once('=') else { continue };
             if ini.sections.is_empty() {
                 // Keys before any section header have nowhere to go in Picasa either.
@@ -79,6 +91,7 @@ impl PicasaIni {
             let section = ini.sections.last_mut().expect("checked above");
             section.entries.push((key.to_owned(), value.to_owned()));
         }
+        ini.blank_after = blank;
         ini
     }
 
@@ -144,6 +157,7 @@ impl PicasaIni {
             marker.set("utf8", "1");
             write_section(&mut out, &marker);
         }
+        out.push_str(&"\r\n".repeat(self.blank_after));
         out
     }
 
@@ -156,6 +170,7 @@ impl PicasaIni {
 }
 
 fn write_section(out: &mut String, section: &Section) {
+    out.push_str(&"\r\n".repeat(section.blank_before));
     let _ = write!(out, "[{}]\r\n", section.name);
     for (key, value) in &section.entries {
         let _ = write!(out, "{key}={value}\r\n");
@@ -262,6 +277,18 @@ mod tests {
         let (_, ini) = PicasaIni::load_for_folder(&dir).unwrap().unwrap();
         assert_eq!(ini.get("Picasa", "name"), Some("dot"));
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn keeps_the_empty_lines_of_older_picasa() {
+        let text = "\r\n[a.jpg]\r\nbackuphash=40423\r\n\r\n[Picasa]\r\nname=Dropbox\r\n\r\n";
+        let mut ini = PicasaIni::parse(text);
+        assert_eq!(ini.to_text(), text);
+        ini.section_mut("a.jpg").set("star", "yes");
+        assert_eq!(
+            ini.to_text(),
+            "\r\n[a.jpg]\r\nbackuphash=40423\r\nstar=yes\r\n\r\n[Picasa]\r\nname=Dropbox\r\n\r\n"
+        );
     }
 
     #[test]

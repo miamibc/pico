@@ -97,6 +97,48 @@ fn screenshot(harness: &mut Harness<'_, PicoApp>, name: &str) {
 }
 
 #[test]
+fn picasa_galleries_are_left_as_they_were_until_edited() {
+    let fixture = Fixture::new("picasa-kept");
+    // As older Picasa versions and other tools write it: empty lines, a crop
+    // without its mirror key, keywords with spaces, an edit Pico does not know.
+    let ini = "\r\n[Picasa]\r\nname=Holiday\r\nP2category=Folders on Disk\r\ndate=41127.961285\r\n\r\n\
+[a.png]\r\nbackuphash=40423\r\nkeywords=sea, sun\r\nrotate=rotate(0)\r\n\r\n\
+[b.png]\r\nbackuphash=722\r\nfilters=crop64=1,a4f0a44f56ef546;HDR=1,6.362573,1.771930,19.298244;\
+FutureFilter=1,42,cafebabe;finetune2=1,0.274854,0.050526,0.084211,00000000,0.000000;\r\nredo=sat=1,0.500000;\r\n\r\n\
+[c.png]\r\nfaces=rect64(3f845bcb59418507),8e62398ebda8c1a5\r\n\r\n\
+[Contacts2]\r\n8e62398ebda8c1a5=Lena;;\r\n";
+    std::fs::write(fixture.dir.join(".picasa.ini"), ini).unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+
+    // Looking around: the library, every photo with its edits, Properties.
+    harness.get_by_label("b.png").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    harness.state_mut().open_edit_panel();
+    wait_until(&mut harness, "the edited photo", |app| app.viewer_loaded());
+    harness.key_press_modifiers(Modifiers::ALT, Key::Enter);
+    harness.run_steps(3);
+    for _ in 0..3 {
+        harness.key_press(Key::ArrowRight);
+        wait_until(&mut harness, "the next photo", |app| app.viewer_loaded());
+    }
+    harness.key_press(Key::Escape);
+    harness.run_steps(3);
+    assert_eq!(fixture.ini(), ini, "looking changes nothing");
+
+    // A star on one photo adds just that line.
+    harness.get_by_label("b.png").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    wait_until(&mut harness, "the photo", |app| app.viewer_loaded());
+    harness.key_press(Key::S);
+    harness.step();
+    let starred = ini.replace("redo=sat=1,0.500000;\r\n", "redo=sat=1,0.500000;\r\nstar=yes\r\n");
+    assert_eq!(fixture.ini(), starred);
+}
+
+#[test]
 fn star_rotate_and_caption_are_saved_to_ini() {
     let fixture = Fixture::new("viewer");
     let mut harness = harness(&fixture.dir);
