@@ -197,6 +197,10 @@ fn read_within(path: &std::path::Path, tiff_limit: u64) -> Option<Exif> {
         let tiff = item.get(4 + skip..)?;
         return parse(tiff.strip_prefix(EXIF_HEADER).unwrap_or(tiff));
     }
+    // Canon CR3: the directories as blocks of their own in Canon's box.
+    if let Some(cr3) = crate::raw::cr3_exif(&head) {
+        return parse_parts(cr3.ifd0, cr3.exif, cr3.gps);
+    }
     if head.starts_with(b"II*\0") || head.starts_with(b"MM\0*") {
         // TIFF and RAW: the whole file is the block, with values further in.
         head.clear();
@@ -332,6 +336,13 @@ pub(crate) fn riff_chunk<'a>(file: &'a [u8], kind: &[u8; 4]) -> Option<&'a [u8]>
 
 /// Parses a TIFF-structured EXIF block.
 pub fn parse(tiff: &[u8]) -> Option<Exif> {
+    parse_parts(tiff, None, None)
+}
+
+/// Parses EXIF kept as separate TIFF blocks, as Canon's CR3 does: `tiff`
+/// with IFD0, and the EXIF and GPS directories each as the first directory
+/// of a block of its own.
+fn parse_parts(tiff: &[u8], exif_part: Option<&[u8]>, gps_part: Option<&[u8]>) -> Option<Exif> {
     let little = match tiff.get(..2)? {
         b"II" => true,
         b"MM" => false,
@@ -385,6 +396,21 @@ pub fn parse(tiff: &[u8]) -> Option<Exif> {
             tags.insert(base + t, v);
         }
         pending.extend(nested);
+    }
+    for (part, base) in [(exif_part, 0), (gps_part, 0x1_0000)] {
+        let Some(part) = part else { continue };
+        let little = match part.get(..2) {
+            Some(b"II") => true,
+            Some(b"MM") => false,
+            _ => continue,
+        };
+        let reader = Tiff { data: part, little };
+        let mut found = std::collections::BTreeMap::new();
+        reader.read_ifd(reader.u32(4).unwrap_or(0) as usize, &mut found, &mut Vec::new());
+        for (t, v) in found {
+            all.extend(describe(base + t, &v));
+            tags.insert(base + t, v);
+        }
     }
     all.extend(maker);
     // IFD1 describes the embedded thumbnail.

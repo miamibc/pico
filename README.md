@@ -111,8 +111,8 @@ save Actions minutes; uncomment them to build everything.
 You need Rust 1.95 or newer (`rustup`). Video, HEIC, AVIF and JPEG XL need
 `ffmpeg` (together with `ffprobe`; `ffplay` for sound) in `PATH` or next to
 the program. Everything else works without it, camera RAW files too: Picco
-shows the JPEG the camera keeps inside them (Sony ARW, Nikon NEF, Canon CR2,
-DNG, Fujifilm RAF and other TIFF-based RAWs).
+shows the JPEG the camera keeps inside them (Sony ARW, Nikon NEF, Canon CR2
+and CR3, DNG, Fujifilm RAF and other TIFF-based RAWs).
 
 ```sh
 make release          # or: cargo build --release

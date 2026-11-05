@@ -113,7 +113,7 @@ Linux x86_64, arm64 и armv7, Windows x86_64 и macOS. Каждый push в `mai
 `ffmpeg` (вместе с `ffprobe`; для звука — `ffplay`) в `PATH` или рядом с
 программой. Без него всё остальное работает, в том числе RAW-файлы камер:
 Picco показывает JPEG, который камера хранит внутри них (Sony ARW, Nikon NEF,
-Canon CR2, DNG, Fujifilm RAF и другие RAW на основе TIFF).
+Canon CR2 и CR3, DNG, Fujifilm RAF и другие RAW на основе TIFF).
 
 ```sh
 make release          # или: cargo build --release
