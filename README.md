@@ -93,10 +93,12 @@ processors use the same `x86_64` (64-bit) or `x86` (32-bit) builds.
 
 The macOS build is not signed with an Apple certificate: on first launch,
 open `Pico.app` with right click → **Open** (or **System Settings →
-Privacy & Security → Open Anyway**).
+Privacy & Security → Open Anyway**). For video, HEIC, AVIF and JPEG XL, install
+ffmpeg with `brew install ffmpeg`, or put `ffmpeg`, `ffprobe` and `ffplay` into
+`Pico.app/Contents/MacOS`.
 
 Releases are built by `.github/workflows/release.yml`. For now it is enabled
-only for Linux x86_64 and Windows x86_64. Every push to `main` builds the
+only for Linux x86_64, arm64 and armv7, Windows x86_64 and macOS. Every push to `main` builds the
 program once and updates the `latest` pre-release. If there is no release yet
 for the version in `Cargo.toml`, the same archives become the `v<version>`
 release, described by `docs/releases/v<version>.md`, and the tag is created

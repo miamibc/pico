@@ -3,7 +3,7 @@
 **English** · [Русский](project-notes.ru.md)
 
 Pico is a Rust rewrite of Google Picasa 3 with small changes and
-improvements. Builds for Linux, Windows, possibly macOS; few dependencies,
+improvements. Builds for Linux, Windows and macOS; few dependencies,
 simple to build and run.
 
 ## Decisions

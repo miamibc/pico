@@ -1,11 +1,11 @@
 # Builds Pico and publishes the archives as a GitHub release. Run by hand
 # (Actions > release > Run workflow) to get the archives as artifacts only.
 #
-# For now only Linux x86_64 and Windows x86_64 are built, once per push to
-# main. The archives go to a rolling pre-release tagged `latest`. When the
-# version in Cargo.toml has no release yet, the same archives also become
-# release `v<version>`, with the notes from docs/releases/v<version>.md
-# (English, then Russian); the tag is created on the pushed commit. So a new
+# For now only Linux x86_64, arm64 and armv7 (Raspberry Pi), Windows x86_64
+# and macOS (one universal app) are built, once per push to main. The archives go to a rolling pre-release
+# tagged `latest`. When the version in Cargo.toml has no release yet, the same
+# archives also become release `v<version>`, with the notes from
+# docs/releases/v<version>.md (English, then Russian); the tag is created on the pushed commit. So a new
 # version is: bump it, add its notes, merge. The other systems are commented
 # out to save Actions minutes; uncomment them (and the `needs` of the release
 # job) to build everything.
@@ -34,10 +34,10 @@ jobs:
             name: linux-x86_64
           # - target: i686-unknown-linux-gnu
             # name: linux-x86
-          # - target: aarch64-unknown-linux-gnu
-            # name: linux-arm64
-          # - target: armv7-unknown-linux-gnueabihf
-            # name: linux-armv7
+          - target: aarch64-unknown-linux-gnu
+            name: linux-arm64
+          - target: armv7-unknown-linux-gnueabihf
+            name: linux-armv7
     runs-on: ubuntu-latest
     steps:
       # The whole history: the build number counts commits (crates/pico/build.rs).
@@ -114,41 +114,41 @@ jobs:
           name: pico-${{ matrix.name }}
           path: pico-${{ matrix.name }}.zip
 
-  # # One universal app for Apple Silicon and Intel Macs. It is not signed, so
-  # # the first start needs right-click > Open (see README).
-  # macos:
-    # runs-on: macos-latest
-    # steps:
-      # - uses: actions/checkout@v4
-      # - uses: dtolnay/rust-toolchain@stable
-        # with:
-          # targets: aarch64-apple-darwin, x86_64-apple-darwin
-      # - uses: Swatinem/rust-cache@v2
-      # - name: Build
-        # run: |
-          # cargo build --release --locked -p pico --target aarch64-apple-darwin
-          # cargo build --release --locked -p pico --target x86_64-apple-darwin
-      # - name: Package
-        # run: |
-          # version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "pico") | .version')
-          # app=Pico.app/Contents
-          # mkdir -p "$app/MacOS"
-          # lipo -create -output "$app/MacOS/pico" \
-            # target/aarch64-apple-darwin/release/pico target/x86_64-apple-darwin/release/pico
-          # sed "s/@VERSION@/$version/g" packaging/macos/Info.plist > "$app/Info.plist"
-          # codesign --force --deep --sign - Pico.app
-          # mkdir pico-macos
-          # mv Pico.app pico-macos/
-          # cp README.md pico-macos/
-          # ditto -c -k --keepParent pico-macos pico-macos.zip
-      # - uses: actions/upload-artifact@v4
-        # with:
-          # name: pico-macos
-          # path: pico-macos.zip
+  # One universal app for Apple Silicon and Intel Macs. It is not signed, so
+  # the first start needs right-click > Open (see README).
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: |
+          cargo build --release --locked -p pico --target aarch64-apple-darwin
+          cargo build --release --locked -p pico --target x86_64-apple-darwin
+      - name: Package
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "pico") | .version')
+          app=Pico.app/Contents
+          mkdir -p "$app/MacOS"
+          lipo -create -output "$app/MacOS/pico" \
+            target/aarch64-apple-darwin/release/pico target/x86_64-apple-darwin/release/pico
+          sed "s/@VERSION@/$version/g" packaging/macos/Info.plist > "$app/Info.plist"
+          codesign --force --deep --sign - Pico.app
+          mkdir pico-macos
+          mv Pico.app pico-macos/
+          cp README.md pico-macos/
+          ditto -c -k --keepParent pico-macos pico-macos.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pico-macos
+          path: pico-macos.zip
 
   release:
     if: github.event_name == 'push'
-    needs: [linux, windows] # [linux, windows, macos]
+    needs: [linux, windows, macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

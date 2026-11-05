@@ -94,10 +94,12 @@ AMD берут одни и те же сборки `x86_64` (64 бита) или 
 
 Сборка для macOS не подписана сертификатом Apple: при первом запуске
 откройте `Pico.app` через правый клик → **Open** (или **System Settings →
-Privacy & Security → Open Anyway**).
+Privacy & Security → Open Anyway**). Для видео, HEIC, AVIF и JPEG XL
+установите ffmpeg через `brew install ffmpeg` или положите `ffmpeg`, `ffprobe`
+и `ffplay` в `Pico.app/Contents/MacOS`.
 
 Релизы собирает `.github/workflows/release.yml`. Пока он включён только для
-Linux x86_64 и Windows x86_64. Каждый push в `main` собирает программу один
+Linux x86_64, arm64 и armv7, Windows x86_64 и macOS. Каждый push в `main` собирает программу один
 раз и обновляет предрелиз `latest`. Если для версии из `Cargo.toml` релиза
 ещё нет, те же архивы становятся релизом `v<версия>` с описанием из
 `docs/releases/v<версия>.md`, а тег ставится сам. Выпустить новую версию —

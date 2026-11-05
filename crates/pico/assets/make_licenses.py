@@ -2,7 +2,7 @@
 
 Usage (from the repository root): python3 -I crates/pico/assets/make_licenses.py
 
-Lists every crate built into the app for Linux and Windows (normal
+Lists every crate built into the app for Linux, Windows and macOS (normal
 dependencies only: build tools and test crates are not shipped), then the
 license texts found in those crates, each text once with the crates using it.
 """
@@ -13,7 +13,8 @@ import re
 import subprocess
 import sys
 
-TARGETS = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
+# Intel Macs get the same crates as Apple Silicon, ARM Linux the same as x86.
+TARGETS = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu", "aarch64-apple-darwin"]
 LICENSE_FILE = re.compile(r"^(licen[cs]e|copying|notice|ofl|ufl)", re.I)
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "licenses.txt")
 

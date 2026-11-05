@@ -1,8 +1,8 @@
 //! Video and exotic-format support through an external `ffmpeg` binary.
 //!
 //! Pico does not link against ffmpeg: it runs the executable found next to
-//! Pico or on `PATH`. Without it, video and RAW thumbnails are unavailable but
-//! everything else works.
+//! Pico, on `PATH` or (on macOS) in Homebrew. Without it, video and RAW
+//! thumbnails are unavailable but everything else works.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -29,16 +29,23 @@ fn exe_name(tool: &str) -> String {
     if cfg!(windows) { format!("{tool}.exe") } else { tool.to_owned() }
 }
 
-/// Locates an ffmpeg tool once per process: next to Pico first, then `PATH`.
+/// Where Homebrew installs programs on Apple Silicon and on Intel Macs. An app
+/// started from Finder gets only the system `PATH` and would not see them.
+const HOMEBREW_DIRS: &[&str] = &["/opt/homebrew/bin", "/usr/local/bin"];
+
+/// Locates an ffmpeg tool once per process: next to Pico first, then `PATH`,
+/// then (on macOS) Homebrew.
 fn locate(tool: &str) -> Option<PathBuf> {
     let name = exe_name(tool);
     let beside = std::env::current_exe().ok()?.parent()?.join(&name);
     if beside.is_file() {
         return Some(beside);
     }
+    let homebrew = if cfg!(target_os = "macos") { HOMEBREW_DIRS } else { &[] };
     std::env::var_os("PATH")
         .into_iter()
         .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+        .chain(homebrew.iter().map(PathBuf::from))
         .map(|dir| dir.join(&name))
         .find(|candidate| candidate.is_file())
 }
