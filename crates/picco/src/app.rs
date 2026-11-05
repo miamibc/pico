@@ -182,6 +182,10 @@ pub struct PiccoApp {
     /// turn three ways.
     settings_saved: usize,
     confirm_trash: Option<Vec<FileRef>>,
+    /// "Don't ask again" ticked in the trash question now open.
+    trash_without_asking: bool,
+    /// Whether Delete asks before moving files to the trash.
+    ask_before_trash: bool,
     /// Photos dropped on a folder, waiting for "Move" (folder index).
     confirm_move: Option<(Vec<FileRef>, usize)>,
     show_about: bool,
@@ -285,6 +289,8 @@ impl PiccoApp {
             show_options: false,
             settings_saved: 0,
             confirm_trash: None,
+            trash_without_asking: false,
+            ask_before_trash: true,
             confirm_move: None,
             show_about: false,
             logo: None,
@@ -404,6 +410,7 @@ impl PiccoApp {
         set("theme", theme.into());
         set("language", self.language.clone().unwrap_or_else(|| "auto".into()));
         set("animations", self.animations.to_string());
+        set("ask_before_trash", self.ask_before_trash.to_string());
         set("slide_seconds", self.slide_seconds.to_string());
         let (zoom_mode, zoom) = self.viewer.zoom_setting();
         set("zoom_mode", zoom_mode.into());
@@ -483,6 +490,7 @@ impl PiccoApp {
         // main() sets the language itself, before the window opens.
         self.language = get("language").filter(|l| *l != "auto").map(str::to_owned);
         self.animations = flag("animations", true);
+        self.ask_before_trash = flag("ask_before_trash", true);
         self.slide_seconds = get("slide_seconds")
             .and_then(|v| v.parse::<f64>().ok())
             .map_or(crate::slideshow::DEFAULT_SECONDS, |s| s.clamp(1.0, 60.0));
@@ -1540,7 +1548,12 @@ impl PiccoApp {
     fn delete_targets(&mut self) {
         let targets = self.targets();
         let Some(Source::Album(token)) = self.source.clone() else {
-            self.confirm_trash = Some(targets);
+            if self.ask_before_trash {
+                self.trash_without_asking = false;
+                self.confirm_trash = Some(targets);
+            } else {
+                self.trash(targets);
+            }
             return;
         };
         self.edit_files(&targets, |meta| meta.albums.retain(|t| t != &token));
@@ -3278,12 +3291,18 @@ impl PiccoApp {
             let mut keep = false;
             dialog_window(ctx, tr!("Move to Trash")).open(&mut open).show_dialog(ctx, |ui| {
                 ui.label(tr!("Move {files} to the trash?", files = plural(files.len(), "file")));
+                ui.checkbox(&mut self.trash_without_asking, tr!("Don't ask again"))
+                    .on_hover_text(tr!("Tools > Options brings the question back"));
                 ui.horizontal(|ui| {
                     confirmed = ui.button(tr!("Move to Trash")).clicked();
                     keep = ui.button(tr!("Keep")).clicked();
                 });
             });
             if confirmed {
+                // Only a confirmed move remembers the tick.
+                if self.trash_without_asking {
+                    self.ask_before_trash = false;
+                }
                 self.trash(files);
             } else if open && !keep && !ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                 self.confirm_trash = Some(files);
@@ -3376,7 +3395,7 @@ impl PiccoApp {
         if self.show_options {
             let mut open = true;
             dialog_window(ctx, tr!("Options")).open(&mut open).show_dialog(ctx, |ui| {
-                let was = (self.theme, self.animations, self.language.clone());
+                let was = (self.theme, self.animations, self.language.clone(), self.ask_before_trash);
                 ui.heading(tr!("Look"));
                 ui.horizontal(|ui| {
                     let before = self.theme;
@@ -3412,8 +3431,11 @@ impl PiccoApp {
                 if self.language != before {
                     crate::i18n::set_language(self.language.as_deref());
                 }
+                ui.separator();
+                ui.heading(tr!("Files"));
+                ui.checkbox(&mut self.ask_before_trash, tr!("Ask before moving photos to the trash"));
                 // Settings keep at once; the status says so (in the new language).
-                if (self.theme, self.animations, self.language.clone()) != was {
+                if (self.theme, self.animations, self.language.clone(), self.ask_before_trash) != was {
                     const SAID: [&str; 3] = [
                         tr_mark!("Settings saved and written down. All in order!"),
                         tr_mark!("Noted. Picco won't forget."),

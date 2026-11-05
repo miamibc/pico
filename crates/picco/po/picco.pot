@@ -6,1169 +6,1185 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: crates/picco/src/app.rs:356
+#: crates/picco/src/app.rs:362
 msgid "Looking for photos… (they're usually hiding in Downloads)"
 msgstr ""
 
-#: crates/picco/src/app.rs:537
+#: crates/picco/src/app.rs:545
 msgid "Could not save the settings: {e}"
 msgstr ""
 
-#: crates/picco/src/app.rs:583
+#: crates/picco/src/app.rs:591
 msgid "Could not save the folder list: {e}"
 msgstr ""
 
-#: crates/picco/src/app.rs:659 crates/picco/src/app.rs:1867 crates/picco/src/app.rs:2292 crates/picco/src/app.rs:2835
+#: crates/picco/src/app.rs:667 crates/picco/src/app.rs:1880 crates/picco/src/app.rs:2305 crates/picco/src/app.rs:2848
 msgid "Photo Tray"
 msgstr ""
 
-#: crates/picco/src/app.rs:662
+#: crates/picco/src/app.rs:670
 msgid "Select photos, then Hold"
 msgstr ""
 
-#: crates/picco/src/app.rs:663
+#: crates/picco/src/app.rs:671
 msgid "{photos} selected"
 msgstr ""
 
-#: crates/picco/src/app.rs:664
+#: crates/picco/src/app.rs:672
 msgid "{photos} held"
 msgstr ""
 
-#: crates/picco/src/app.rs:665
+#: crates/picco/src/app.rs:673
 msgid "{photos} held, {n} selected"
 msgstr ""
 
-#: crates/picco/src/app.rs:670 crates/picco/src/app.rs:764
+#: crates/picco/src/app.rs:678 crates/picco/src/app.rs:772
 msgid "Hold"
 msgstr ""
 
-#: crates/picco/src/app.rs:671
+#: crates/picco/src/app.rs:679
 msgid "Keep the selection in the tray (Ctrl+H)"
 msgstr ""
 
-#: crates/picco/src/app.rs:681 crates/picco/src/app.rs:761
+#: crates/picco/src/app.rs:689 crates/picco/src/app.rs:769
 msgid "Unhold"
 msgstr ""
 
-#: crates/picco/src/app.rs:682
+#: crates/picco/src/app.rs:690
 msgid "Take the picked or selected photos out of the tray"
 msgstr ""
 
-#: crates/picco/src/app.rs:685
+#: crates/picco/src/app.rs:693
 msgid "Clear"
 msgstr ""
 
-#: crates/picco/src/app.rs:686
+#: crates/picco/src/app.rs:694
 msgid "Empty the tray; the photos stay where they are"
 msgstr ""
 
-#: crates/picco/src/app.rs:715 crates/picco/src/viewer.rs:434
+#: crates/picco/src/app.rs:723 crates/picco/src/viewer.rs:434
 msgid "▶ Slideshow"
 msgstr ""
 
-#: crates/picco/src/app.rs:718
+#: crates/picco/src/app.rs:726
 msgid "Export…"
 msgstr ""
 
-#: crates/picco/src/app.rs:722
+#: crates/picco/src/app.rs:730
 msgid "Make a Collage…"
 msgstr ""
 
-#: crates/picco/src/app.rs:725
+#: crates/picco/src/app.rs:733
 msgid "Make a Movie…"
 msgstr ""
 
-#: crates/picco/src/app.rs:729
+#: crates/picco/src/app.rs:737
 msgid "Show Tray"
 msgstr ""
 
-#: crates/picco/src/app.rs:757 crates/picco/src/app.rs:1839
+#: crates/picco/src/app.rs:765 crates/picco/src/app.rs:1852
 msgid "View"
 msgstr ""
 
-#: crates/picco/src/app.rs:761
+#: crates/picco/src/app.rs:769
 msgid "Take the photo out of the tray"
 msgstr ""
 
-#: crates/picco/src/app.rs:764
+#: crates/picco/src/app.rs:772
 msgid "Keep the photo in the tray"
 msgstr ""
 
-#: crates/picco/src/app.rs:773
+#: crates/picco/src/app.rs:781
 msgid "Tray: {name}"
 msgstr ""
 
-#: crates/picco/src/app.rs:944
+#: crates/picco/src/app.rs:952
 msgid "Could not save the album: {e}"
 msgstr ""
 
-#: crates/picco/src/app.rs:1102
+#: crates/picco/src/app.rs:1110
 msgid "{photos} of this album could not be found: moved or deleted."
 msgstr ""
 
-#: crates/picco/src/app.rs:1188
+#: crates/picco/src/app.rs:1196
 msgid "Saved to {path}"
 msgstr ""
 
-#: crates/picco/src/app.rs:1195 crates/picco/src/app.rs:1500 crates/picco/src/app.rs:1521
+#: crates/picco/src/app.rs:1203 crates/picco/src/app.rs:1508 crates/picco/src/app.rs:1529
 msgid "Could not write {path}: {e}"
 msgstr ""
 
-#: crates/picco/src/app.rs:1201
+#: crates/picco/src/app.rs:1209
 msgid "Updated {photos}"
 msgstr ""
 
-#: crates/picco/src/app.rs:1230
+#: crates/picco/src/app.rs:1238
 msgid "Copied {files} to the clipboard"
 msgstr ""
 
-#: crates/picco/src/app.rs:1231
+#: crates/picco/src/app.rs:1239
 msgid "Could not copy to the clipboard: {e}"
 msgstr ""
 
-#: crates/picco/src/app.rs:1253
+#: crates/picco/src/app.rs:1261
 msgid "Copied {effects}"
 msgstr ""
 
-#: crates/picco/src/app.rs:1290
+#: crates/picco/src/app.rs:1298
 msgid "No duplicates. Every photo is one of a kind."
 msgstr ""
 
-#: crates/picco/src/app.rs:1291
+#: crates/picco/src/app.rs:1299
 msgid "{groups} of identical files"
 msgstr ""
 
-#: crates/picco/src/app.rs:1304
+#: crates/picco/src/app.rs:1312
 msgid "Add a folder to Picco"
 msgstr ""
 
-#: crates/picco/src/app.rs:1305
+#: crates/picco/src/app.rs:1313
 msgid "Export to folder"
 msgstr ""
 
-#: crates/picco/src/app.rs:1366
+#: crates/picco/src/app.rs:1374
 msgid "Collage saved to {path}"
 msgstr ""
 
-#: crates/picco/src/app.rs:1371
+#: crates/picco/src/app.rs:1379
 msgid "Collage saved to {path} and set as the desktop background"
 msgstr ""
 
-#: crates/picco/src/app.rs:1373
+#: crates/picco/src/app.rs:1381
 msgid "Saved, but could not set the wallpaper: {e}"
 msgstr ""
 
-#: crates/picco/src/app.rs:1440
+#: crates/picco/src/app.rs:1448
 msgid "Making a movie… popcorn recommended."
 msgstr ""
 
-#: crates/picco/src/app.rs:1450 crates/picco/src/app.rs:3156
+#: crates/picco/src/app.rs:1458 crates/picco/src/app.rs:3169
 msgid "Preparing photo {done} of {total}…"
 msgstr ""
 
-#: crates/picco/src/app.rs:1459
+#: crates/picco/src/app.rs:1467
 msgid "Movie saved to {path}"
 msgstr ""
 
-#: crates/picco/src/app.rs:1462
+#: crates/picco/src/app.rs:1470
 msgid "Could not make the movie: {e}"
 msgstr ""
 
-#: crates/picco/src/app.rs:1511
+#: crates/picco/src/app.rs:1519
 msgid "Renamed the album to \"{name}\""
 msgstr ""
 
-#: crates/picco/src/app.rs:1528
+#: crates/picco/src/app.rs:1536
 msgid "Could not delete the album file: {e}"
 msgstr ""
 
-#: crates/picco/src/app.rs:1535
+#: crates/picco/src/app.rs:1543
 msgid "Deleted the album \"{name}\""
 msgstr ""
 
-#: crates/picco/src/app.rs:1549
+#: crates/picco/src/app.rs:1562
 msgid "Took {photos} out of \"{name}\"; the files stay"
 msgstr ""
 
-#: crates/picco/src/app.rs:1569
+#: crates/picco/src/app.rs:1582
 msgid "Added {photos} to \"{name}\""
 msgstr ""
 
-#: crates/picco/src/app.rs:1594
+#: crates/picco/src/app.rs:1607
 msgid "Those are already in Picco."
 msgstr ""
 
-#: crates/picco/src/app.rs:1595
+#: crates/picco/src/app.rs:1608
 msgid "Added {folders} to Picco"
 msgstr ""
 
-#: crates/picco/src/app.rs:1613
+#: crates/picco/src/app.rs:1626
 msgid "{photos}: drop on a folder, an album or the tray, or between photos to arrange them"
 msgstr ""
 
-#: crates/picco/src/app.rs:1617
+#: crates/picco/src/app.rs:1630
 msgid "{photos}: drop on a folder, an album or the tray"
 msgstr ""
 
-#: crates/picco/src/app.rs:1618
+#: crates/picco/src/app.rs:1631
 msgid "{photos}: drop on a folder or an album, or between photos to arrange them"
 msgstr ""
 
-#: crates/picco/src/app.rs:1622
+#: crates/picco/src/app.rs:1635
 msgid "{photos}: drop on a folder or an album"
 msgstr ""
 
-#: crates/picco/src/app.rs:1634
+#: crates/picco/src/app.rs:1647
 msgid "Drop folders here to add them to Picco"
 msgstr ""
 
-#: crates/picco/src/app.rs:1663
+#: crates/picco/src/app.rs:1676
 msgid "Moved {files} to \"{name}\""
 msgstr ""
 
-#: crates/picco/src/app.rs:1665
+#: crates/picco/src/app.rs:1678
 msgid "Moved {files}, {stayed} stayed: {first}"
 msgstr ""
 
-#: crates/picco/src/app.rs:1730
+#: crates/picco/src/app.rs:1743
 msgid "Saved {path}"
 msgstr ""
 
-#: crates/picco/src/app.rs:1801
+#: crates/picco/src/app.rs:1814
 msgid "File"
 msgstr ""
 
-#: crates/picco/src/app.rs:1802 crates/picco/src/app.rs:2517
+#: crates/picco/src/app.rs:1815 crates/picco/src/app.rs:2530
 msgid "Add Folder to Picco…"
 msgstr ""
 
-#: crates/picco/src/app.rs:1805 crates/picco/src/app.rs:2199
+#: crates/picco/src/app.rs:1818 crates/picco/src/app.rs:2212
 msgid "Rescan Folders"
 msgstr ""
 
-#: crates/picco/src/app.rs:1812
+#: crates/picco/src/app.rs:1825
 msgid "Exit"
 msgstr ""
 
-#: crates/picco/src/app.rs:1816 crates/picco/src/viewer.rs:427
+#: crates/picco/src/app.rs:1829 crates/picco/src/viewer.rs:427
 msgid "Edit"
 msgstr ""
 
-#: crates/picco/src/app.rs:1817
+#: crates/picco/src/app.rs:1830
 msgid "Select All"
 msgstr ""
 
-#: crates/picco/src/app.rs:1820
+#: crates/picco/src/app.rs:1833
 msgid "Invert Selection"
 msgstr ""
 
-#: crates/picco/src/app.rs:1823
+#: crates/picco/src/app.rs:1836
 msgid "Clear Selection"
 msgstr ""
 
-#: crates/picco/src/app.rs:1827
+#: crates/picco/src/app.rs:1840
 msgid "Copy"
 msgstr ""
 
-#: crates/picco/src/app.rs:1828
+#: crates/picco/src/app.rs:1841
 msgid "Ctrl+C: copy the files, to paste into a chat or a folder"
 msgstr ""
 
-#: crates/picco/src/app.rs:1831
+#: crates/picco/src/app.rs:1844
 msgid "Copy All Effects"
 msgstr ""
 
-#: crates/picco/src/app.rs:1834
+#: crates/picco/src/app.rs:1847
 msgid "Paste All Effects"
 msgstr ""
 
-#: crates/picco/src/app.rs:1840
+#: crates/picco/src/app.rs:1853
 msgid "Slideshow"
 msgstr ""
 
-#: crates/picco/src/app.rs:1843 crates/picco/src/app.rs:4097
+#: crates/picco/src/app.rs:1856 crates/picco/src/app.rs:4119
 msgid "Thumbnail size"
 msgstr ""
 
-#: crates/picco/src/app.rs:1844
+#: crates/picco/src/app.rs:1857
 msgid "Thumbnail Captions"
 msgstr ""
 
-#: crates/picco/src/app.rs:1849
+#: crates/picco/src/app.rs:1862
 msgid "Sort"
 msgstr ""
 
-#: crates/picco/src/app.rs:1850
+#: crates/picco/src/app.rs:1863
 msgid "By Name"
 msgstr ""
 
-#: crates/picco/src/app.rs:1851
+#: crates/picco/src/app.rs:1864
 msgid "By Date Taken"
 msgstr ""
 
-#: crates/picco/src/app.rs:1852
+#: crates/picco/src/app.rs:1865
 msgid "By Size"
 msgstr ""
 
-#: crates/picco/src/app.rs:1855
+#: crates/picco/src/app.rs:1868
 msgid "Custom Order"
 msgstr ""
 
-#: crates/picco/src/app.rs:1856
+#: crates/picco/src/app.rs:1869
 msgid "The album's own order: drag photos to arrange them"
 msgstr ""
 
-#: crates/picco/src/app.rs:1857
+#: crates/picco/src/app.rs:1870
 msgid "Albums only"
 msgstr ""
 
-#: crates/picco/src/app.rs:1860
+#: crates/picco/src/app.rs:1873
 msgid "Reverse Order"
 msgstr ""
 
-#: crates/picco/src/app.rs:1862
+#: crates/picco/src/app.rs:1875
 msgid "Properties and Tags"
 msgstr ""
 
-#: crates/picco/src/app.rs:1863
+#: crates/picco/src/app.rs:1876
 msgid "Filmstrip"
 msgstr ""
 
-#: crates/picco/src/app.rs:1864
+#: crates/picco/src/app.rs:1877
 msgid "Neighbouring photos above the open one"
 msgstr ""
 
-#: crates/picco/src/app.rs:1865
+#: crates/picco/src/app.rs:1878
 msgid "Hidden Pictures"
 msgstr ""
 
-#: crates/picco/src/app.rs:1868
+#: crates/picco/src/app.rs:1881
 msgid "Hold photos from any folders to show, export or glue them together"
 msgstr ""
 
-#: crates/picco/src/app.rs:1876
+#: crates/picco/src/app.rs:1889
 msgid "Picture"
 msgstr ""
 
-#: crates/picco/src/app.rs:1880 crates/picco/src/app.rs:3229
+#: crates/picco/src/app.rs:1893 crates/picco/src/app.rs:3242
 msgid "Create"
 msgstr ""
 
-#: crates/picco/src/app.rs:1883
+#: crates/picco/src/app.rs:1896
 msgid "Movie…"
 msgstr ""
 
-#: crates/picco/src/app.rs:1884
+#: crates/picco/src/app.rs:1897
 msgid "From the selected photos"
 msgstr ""
 
-#: crates/picco/src/app.rs:1890
+#: crates/picco/src/app.rs:1903
 msgid "Picture Collage…"
 msgstr ""
 
-#: crates/picco/src/app.rs:1891
+#: crates/picco/src/app.rs:1904
 msgid "From the selected photos, or all shown"
 msgstr ""
 
-#: crates/picco/src/app.rs:1897
+#: crates/picco/src/app.rs:1910
 msgid "Tools"
 msgstr ""
 
-#: crates/picco/src/app.rs:1898
+#: crates/picco/src/app.rs:1911
 msgid "Show Duplicate Files"
 msgstr ""
 
-#: crates/picco/src/app.rs:1901
+#: crates/picco/src/app.rs:1914
 msgid "Options…"
 msgstr ""
 
-#: crates/picco/src/app.rs:1905
+#: crates/picco/src/app.rs:1918
 msgid "Help"
 msgstr ""
 
-#: crates/picco/src/app.rs:1906 crates/picco/src/app.rs:3458
+#: crates/picco/src/app.rs:1919 crates/picco/src/app.rs:3480
 msgid "Keyboard Shortcuts"
 msgstr ""
 
-#: crates/picco/src/app.rs:1909 crates/picco/src/app.rs:3484
+#: crates/picco/src/app.rs:1922 crates/picco/src/app.rs:3506
 msgid "About Picco"
 msgstr ""
 
-#: crates/picco/src/app.rs:1917
+#: crates/picco/src/app.rs:1930
 msgid "Export Picture to Folder…"
 msgstr ""
 
-#: crates/picco/src/app.rs:1920
+#: crates/picco/src/app.rs:1933
 msgid "Save"
 msgstr ""
 
-#: crates/picco/src/app.rs:1920
+#: crates/picco/src/app.rs:1933
 msgid "Write the edits into the file; the original is kept"
 msgstr ""
 
-#: crates/picco/src/app.rs:1923
+#: crates/picco/src/app.rs:1936
 msgid "Save a Copy"
 msgstr ""
 
-#: crates/picco/src/app.rs:1926
+#: crates/picco/src/app.rs:1939
 msgid "Revert"
 msgstr ""
 
-#: crates/picco/src/app.rs:1926
+#: crates/picco/src/app.rs:1939
 msgid "Bring back the original saved by Save"
 msgstr ""
 
-#: crates/picco/src/app.rs:1930 crates/picco/src/app.rs:2163
+#: crates/picco/src/app.rs:1943 crates/picco/src/app.rs:2176
 msgid "Rename…"
 msgstr ""
 
-#: crates/picco/src/app.rs:1933 crates/picco/src/app.rs:2157 crates/picco/src/app.rs:2190
+#: crates/picco/src/app.rs:1946 crates/picco/src/app.rs:2170 crates/picco/src/app.rs:2203
 msgid "Locate on Disk"
 msgstr ""
 
-#: crates/picco/src/app.rs:1936 crates/picco/src/app.rs:2160
+#: crates/picco/src/app.rs:1949 crates/picco/src/app.rs:2173
 msgid "Open in Editor"
 msgstr ""
 
-#: crates/picco/src/app.rs:1941 crates/picco/src/app.rs:2174
+#: crates/picco/src/app.rs:1954 crates/picco/src/app.rs:2187
 msgid "Remove from Album"
 msgstr ""
 
-#: crates/picco/src/app.rs:1943 crates/picco/src/app.rs:2176
+#: crates/picco/src/app.rs:1956 crates/picco/src/app.rs:2189
 msgid "Move to Trash…"
 msgstr ""
 
-#: crates/picco/src/app.rs:1996 crates/picco/src/app.rs:3149
+#: crates/picco/src/app.rs:2009 crates/picco/src/app.rs:3162
 msgid "Exporting {done} of {total}…"
 msgstr ""
 
-#: crates/picco/src/app.rs:1998
+#: crates/picco/src/app.rs:2011
 msgid "Exported {pictures} to {folder}"
 msgstr ""
 
-#: crates/picco/src/app.rs:2004
+#: crates/picco/src/app.rs:2017
 msgid "Exported {done} of {total}; {failed} failed"
 msgstr ""
 
-#: crates/picco/src/app.rs:2043
+#: crates/picco/src/app.rs:2056
 msgid "Could not save {path}: {e}"
 msgstr ""
 
-#: crates/picco/src/app.rs:2058
+#: crates/picco/src/app.rs:2071
 msgid "Could not save a copy of {file}: {e}"
 msgstr ""
 
-#: crates/picco/src/app.rs:2067
+#: crates/picco/src/app.rs:2080
 msgid "Could not revert {path}: {e}"
 msgstr ""
 
-#: crates/picco/src/app.rs:2071
+#: crates/picco/src/app.rs:2084
 msgid "Reverted. The edits are back in the edit stack, where Undo can reach them."
 msgstr ""
 
-#: crates/picco/src/app.rs:2087 crates/picco/src/app.rs:2193
+#: crates/picco/src/app.rs:2100 crates/picco/src/app.rs:2206
 msgid "Could not open the file manager: {e}"
 msgstr ""
 
-#: crates/picco/src/app.rs:2095
+#: crates/picco/src/app.rs:2108
 msgid "Could not open {file}: {e}"
 msgstr ""
 
-#: crates/picco/src/app.rs:2112
+#: crates/picco/src/app.rs:2125
 msgid "Could not move to the trash: {e}"
 msgstr ""
 
-#: crates/picco/src/app.rs:2123
+#: crates/picco/src/app.rs:2136
 msgid "Moved {files} to the trash. It's not gone gone."
 msgstr ""
 
-#: crates/picco/src/app.rs:2130
+#: crates/picco/src/app.rs:2143
 msgid "View and Edit"
 msgstr ""
 
-#: crates/picco/src/app.rs:2135
+#: crates/picco/src/app.rs:2148
 msgid "Star"
 msgstr ""
 
-#: crates/picco/src/app.rs:2135
+#: crates/picco/src/app.rs:2148
 msgid "Unstar"
 msgstr ""
 
-#: crates/picco/src/app.rs:2138 crates/picco/src/app.rs:2233
+#: crates/picco/src/app.rs:2151 crates/picco/src/app.rs:2246
 msgid "Rotate Clockwise"
 msgstr ""
 
-#: crates/picco/src/app.rs:2141 crates/picco/src/app.rs:2236
+#: crates/picco/src/app.rs:2154 crates/picco/src/app.rs:2249
 msgid "Rotate Counterclockwise"
 msgstr ""
 
-#: crates/picco/src/app.rs:2145 crates/picco/src/app.rs:2254
+#: crates/picco/src/app.rs:2158 crates/picco/src/app.rs:2267
 msgid "Hold in Tray"
 msgstr ""
 
-#: crates/picco/src/app.rs:2149 crates/picco/src/app.rs:2266
+#: crates/picco/src/app.rs:2162 crates/picco/src/app.rs:2279
 msgid "Hide"
 msgstr ""
 
-#: crates/picco/src/app.rs:2149 crates/picco/src/app.rs:2266
+#: crates/picco/src/app.rs:2162 crates/picco/src/app.rs:2279
 msgid "Unhide"
 msgstr ""
 
-#: crates/picco/src/app.rs:2153
+#: crates/picco/src/app.rs:2166
 msgid "Export to Folder…"
 msgstr ""
 
-#: crates/picco/src/app.rs:2166 crates/picco/src/app.rs:2195
+#: crates/picco/src/app.rs:2179 crates/picco/src/app.rs:2208
 msgid "Copy Full Path"
 msgstr ""
 
-#: crates/picco/src/app.rs:2186
+#: crates/picco/src/app.rs:2199
 msgid "View Slideshow"
 msgstr ""
 
-#: crates/picco/src/app.rs:2203
+#: crates/picco/src/app.rs:2216
 msgid "Remove from Picco"
 msgstr ""
 
-#: crates/picco/src/app.rs:2204
+#: crates/picco/src/app.rs:2217
 msgid "Leave this folder out; no files are touched"
 msgstr ""
 
-#: crates/picco/src/app.rs:2211
+#: crates/picco/src/app.rs:2224
 msgid "Left out {name}. File > Add Folder to Picco brings it back."
 msgstr ""
 
-#: crates/picco/src/app.rs:2216
+#: crates/picco/src/app.rs:2229
 msgid "Add to Album"
 msgstr ""
 
-#: crates/picco/src/app.rs:2222
+#: crates/picco/src/app.rs:2235
 msgid "New Album…"
 msgstr ""
 
-#: crates/picco/src/app.rs:2229
+#: crates/picco/src/app.rs:2242
 msgid "Star / Unstar"
 msgstr ""
 
-#: crates/picco/src/app.rs:2241 crates/picco/src/viewer.rs:716
+#: crates/picco/src/app.rs:2254 crates/picco/src/viewer.rs:716
 msgid "I'm Feeling Lucky"
 msgstr ""
 
-#: crates/picco/src/app.rs:2242 crates/picco/src/viewer.rs:717
+#: crates/picco/src/app.rs:2255 crates/picco/src/viewer.rs:717
 msgid "Auto Contrast"
 msgstr ""
 
-#: crates/picco/src/app.rs:2243 crates/picco/src/viewer.rs:718
+#: crates/picco/src/app.rs:2256 crates/picco/src/viewer.rs:718
 msgid "Auto Color"
 msgstr ""
 
-#: crates/picco/src/app.rs:2244
+#: crates/picco/src/app.rs:2257
 msgid "Black-and-White"
 msgstr ""
 
-#: crates/picco/src/app.rs:2245 crates/picco-core/src/effects.rs:101
+#: crates/picco/src/app.rs:2258 crates/picco-core/src/effects.rs:101
 msgid "Warmify"
 msgstr ""
 
-#: crates/picco/src/app.rs:2246 crates/picco-core/src/effects.rs:102
+#: crates/picco/src/app.rs:2259 crates/picco-core/src/effects.rs:102
 msgid "Film Grain"
 msgstr ""
 
-#: crates/picco/src/app.rs:2247 crates/picco-core/src/effects.rs:98
+#: crates/picco/src/app.rs:2260 crates/picco-core/src/effects.rs:98
 msgid "Sharpen"
 msgstr ""
 
-#: crates/picco/src/app.rs:2259 crates/picco/src/viewer.rs:823
+#: crates/picco/src/app.rs:2272 crates/picco/src/viewer.rs:823
 msgid "Undo All Edits"
 msgstr ""
 
-#: crates/picco/src/app.rs:2272 crates/picco/src/app.rs:4082
+#: crates/picco/src/app.rs:2285 crates/picco/src/app.rs:4104
 msgid "Library"
 msgstr ""
 
-#: crates/picco/src/app.rs:2282 crates/picco/src/app.rs:2832
+#: crates/picco/src/app.rs:2295 crates/picco/src/app.rs:2845
 msgid "Starred Photos"
 msgstr ""
 
-#: crates/picco/src/app.rs:2302
+#: crates/picco/src/app.rs:2315
 msgid "Albums"
 msgstr ""
 
-#: crates/picco/src/app.rs:2317
+#: crates/picco/src/app.rs:2330
 msgid "Rename Album…"
 msgstr ""
 
-#: crates/picco/src/app.rs:2320
+#: crates/picco/src/app.rs:2333
 msgid "Delete Album…"
 msgstr ""
 
-#: crates/picco/src/app.rs:2336 crates/picco/src/app.rs:2845
+#: crates/picco/src/app.rs:2349 crates/picco/src/app.rs:2858
 msgid "Timeline"
 msgstr ""
 
-#: crates/picco/src/app.rs:2367
+#: crates/picco/src/app.rs:2380
 msgid "Places"
 msgstr ""
 
-#: crates/picco/src/app.rs:2387
+#: crates/picco/src/app.rs:2400
 msgid "Folders"
 msgstr ""
 
-#: crates/picco/src/app.rs:2390
+#: crates/picco/src/app.rs:2403
 msgid "Tree or list, and order"
 msgstr ""
 
-#: crates/picco/src/app.rs:2521
+#: crates/picco/src/app.rs:2534
 msgid "Flat List"
 msgstr ""
 
-#: crates/picco/src/app.rs:2522
+#: crates/picco/src/app.rs:2535
 msgid "Tree"
 msgstr ""
 
-#: crates/picco/src/app.rs:2522
+#: crates/picco/src/app.rs:2535
 msgid "Folders where they are on disk"
 msgstr ""
 
-#: crates/picco/src/app.rs:2525
+#: crates/picco/src/app.rs:2538
 msgid "Sort by Name"
 msgstr ""
 
-#: crates/picco/src/app.rs:2526
+#: crates/picco/src/app.rs:2539
 msgid "Sort by Date"
 msgstr ""
 
-#: crates/picco/src/app.rs:2527
+#: crates/picco/src/app.rs:2540
 msgid "Newest first, by year"
 msgstr ""
 
-#: crates/picco/src/app.rs:2528
+#: crates/picco/src/app.rs:2541
 msgid "Sort by Recent Changes"
 msgstr ""
 
-#: crates/picco/src/app.rs:2529
+#: crates/picco/src/app.rs:2542
 msgid "Sort by Size"
 msgstr ""
 
-#: crates/picco/src/app.rs:2677
+#: crates/picco/src/app.rs:2690
 msgid "Counting pixels…"
 msgstr ""
 
-#: crates/picco/src/app.rs:2679
+#: crates/picco/src/app.rs:2692
 msgid "No photos yet. Add a folder from the File menu — Picco promises not to upload anything."
 msgstr ""
 
-#: crates/picco/src/app.rs:2709
+#: crates/picco/src/app.rs:2722
 msgid "Nothing to show here."
 msgstr ""
 
-#: crates/picco/src/app.rs:2711
+#: crates/picco/src/app.rs:2724
 msgid "No matches. Maybe it was a dream?"
 msgstr ""
 
-#: crates/picco/src/app.rs:2758
+#: crates/picco/src/app.rs:2771
 msgid "Adding {folder}"
 msgstr ""
 
-#: crates/picco/src/app.rs:2829
+#: crates/picco/src/app.rs:2842
 msgid "Search results"
 msgstr ""
 
-#: crates/picco/src/app.rs:2836
+#: crates/picco/src/app.rs:2849
 msgid "Held photos from any folder"
 msgstr ""
 
-#: crates/picco/src/app.rs:2840
+#: crates/picco/src/app.rs:2853
 msgid "Album"
 msgstr ""
 
-#: crates/picco/src/app.rs:2851
+#: crates/picco/src/app.rs:2864
 msgid "Place"
 msgstr ""
 
-#: crates/picco/src/app.rs:2854
+#: crates/picco/src/app.rs:2867
 msgid "Duplicate Files"
 msgstr ""
 
-#: crates/picco/src/app.rs:2856 crates/picco/src/app.rs:3163
+#: crates/picco/src/app.rs:2869 crates/picco/src/app.rs:3176
 msgid "Comparing files…"
 msgstr ""
 
-#: crates/picco/src/app.rs:2858
+#: crates/picco/src/app.rs:2871
 msgid "Identical files, side by side"
 msgstr ""
 
-#: crates/picco/src/app.rs:2874
+#: crates/picco/src/app.rs:2887
 msgid "Search (Ctrl+F)"
 msgstr ""
 
-#: crates/picco/src/app.rs:2888
+#: crates/picco/src/app.rs:2901
 msgid "Only videos"
 msgstr ""
 
-#: crates/picco/src/app.rs:2889
+#: crates/picco/src/app.rs:2902
 msgid "Only starred photos"
 msgstr ""
 
-#: crates/picco/src/app.rs:2892 crates/picco/src/app.rs:3137
+#: crates/picco/src/app.rs:2905 crates/picco/src/app.rs:3150
 msgid "{n} selected"
 msgstr ""
 
-#: crates/picco/src/app.rs:3102
+#: crates/picco/src/app.rs:3115
 msgid "{status}  ({n} found so far)"
 msgstr ""
 
-#: crates/picco/src/app.rs:3110
+#: crates/picco/src/app.rs:3123
 msgid "ffmpeg not found: videos will stay mysterious"
 msgstr ""
 
-#: crates/picco/src/app.rs:3148
+#: crates/picco/src/app.rs:3161
 msgid "Exporting"
 msgstr ""
 
-#: crates/picco/src/app.rs:3157 crates/picco/src/app.rs:3159
+#: crates/picco/src/app.rs:3170 crates/picco/src/app.rs:3172
 msgid "Making the Movie"
 msgstr ""
 
-#: crates/picco/src/app.rs:3159
+#: crates/picco/src/app.rs:3172
 msgid "Encoding the movie…"
 msgstr ""
 
-#: crates/picco/src/app.rs:3163
+#: crates/picco/src/app.rs:3176
 msgid "Finding Duplicates"
 msgstr ""
 
-#: crates/picco/src/app.rs:3170
+#: crates/picco/src/app.rs:3183
 msgid "Export to Folder"
 msgstr ""
 
-#: crates/picco/src/app.rs:3171
+#: crates/picco/src/app.rs:3184
 msgid "Folder:"
 msgstr ""
 
-#: crates/picco/src/app.rs:3174 crates/picco/src/app.rs:3332 crates/picco/src/folder_manager.rs:154
+#: crates/picco/src/app.rs:3187 crates/picco/src/app.rs:3351 crates/picco/src/folder_manager.rs:154
 msgid "Browse…"
 msgstr ""
 
-#: crates/picco/src/app.rs:3176
+#: crates/picco/src/app.rs:3189
 msgid "Image size:"
 msgstr ""
 
-#: crates/picco/src/app.rs:3181
+#: crates/picco/src/app.rs:3194
 msgid "longest side, px"
 msgstr ""
 
-#: crates/picco/src/app.rs:3183
+#: crates/picco/src/app.rs:3196
 msgid "JPEG quality"
 msgstr ""
 
-#: crates/picco/src/app.rs:3184
+#: crates/picco/src/app.rs:3197
 msgid "Edits are applied; the originals stay untouched."
 msgstr ""
 
-#: crates/picco/src/app.rs:3185
+#: crates/picco/src/app.rs:3198
 msgid "Export {pictures}"
 msgstr ""
 
-#: crates/picco/src/app.rs:3203 crates/picco/src/app.rs:3206 crates/picco/src/app.rs:3246 crates/picco/src/app.rs:4092
+#: crates/picco/src/app.rs:3216 crates/picco/src/app.rs:3219 crates/picco/src/app.rs:3259 crates/picco/src/app.rs:4114
 msgid "Rename"
 msgstr ""
 
-#: crates/picco/src/app.rs:3211
+#: crates/picco/src/app.rs:3224
 msgid "Renamed to {name}"
 msgstr ""
 
-#: crates/picco/src/app.rs:3214
+#: crates/picco/src/app.rs:3227
 msgid "Could not rename: {e}"
 msgstr ""
 
-#: crates/picco/src/app.rs:3225
+#: crates/picco/src/app.rs:3238
 msgid "New Album"
 msgstr ""
 
-#: crates/picco/src/app.rs:3226 crates/picco/src/app.rs:3243
+#: crates/picco/src/app.rs:3239 crates/picco/src/app.rs:3256
 msgid "Album name"
 msgstr ""
 
-#: crates/picco/src/app.rs:3242
+#: crates/picco/src/app.rs:3255
 msgid "Rename Album"
 msgstr ""
 
-#: crates/picco/src/app.rs:3260 crates/picco/src/app.rs:3264
+#: crates/picco/src/app.rs:3273 crates/picco/src/app.rs:3277
 msgid "Delete Album"
 msgstr ""
 
-#: crates/picco/src/app.rs:3261
+#: crates/picco/src/app.rs:3274
 msgid "Delete the album \"{name}\"?"
 msgstr ""
 
-#: crates/picco/src/app.rs:3262
+#: crates/picco/src/app.rs:3275
 msgid "The photos stay where they are."
 msgstr ""
 
-#: crates/picco/src/app.rs:3265 crates/picco/src/app.rs:3283
+#: crates/picco/src/app.rs:3278 crates/picco/src/app.rs:3298
 msgid "Keep"
 msgstr ""
 
-#: crates/picco/src/app.rs:3279 crates/picco/src/app.rs:3282
+#: crates/picco/src/app.rs:3292 crates/picco/src/app.rs:3297
 msgid "Move to Trash"
 msgstr ""
 
-#: crates/picco/src/app.rs:3280
+#: crates/picco/src/app.rs:3293
 msgid "Move {files} to the trash?"
 msgstr ""
 
-#: crates/picco/src/app.rs:3298
+#: crates/picco/src/app.rs:3294
+msgid "Don't ask again"
+msgstr ""
+
+#: crates/picco/src/app.rs:3295
+msgid "Tools > Options brings the question back"
+msgstr ""
+
+#: crates/picco/src/app.rs:3317
 msgid "Move Photos"
 msgstr ""
 
-#: crates/picco/src/app.rs:3299
+#: crates/picco/src/app.rs:3318
 msgid "Move {files} to \"{name}\"?"
 msgstr ""
 
-#: crates/picco/src/app.rs:3300
+#: crates/picco/src/app.rs:3319
 msgid "Captions, stars and edits go along."
 msgstr ""
 
-#: crates/picco/src/app.rs:3302
+#: crates/picco/src/app.rs:3321
 msgid "Move"
 msgstr ""
 
-#: crates/picco/src/app.rs:3303 crates/picco/src/folder_manager.rs:127 crates/picco/src/tools.rs:345 crates/picco/src/tools.rs:721
+#: crates/picco/src/app.rs:3322 crates/picco/src/folder_manager.rs:127 crates/picco/src/tools.rs:345 crates/picco/src/tools.rs:721
 msgid "Cancel"
 msgstr ""
 
-#: crates/picco/src/app.rs:3321
+#: crates/picco/src/app.rs:3340
 msgid "Create Movie"
 msgstr ""
 
-#: crates/picco/src/app.rs:3322
+#: crates/picco/src/app.rs:3341
 msgid "{photos} in the order shown."
 msgstr ""
 
-#: crates/picco/src/app.rs:3327
+#: crates/picco/src/app.rs:3346
 msgid "seconds per photo"
 msgstr ""
 
-#: crates/picco/src/app.rs:3328
+#: crates/picco/src/app.rs:3347
 msgid "crossfade, seconds"
 msgstr ""
 
-#: crates/picco/src/app.rs:3329
+#: crates/picco/src/app.rs:3348
 msgid "Music (optional):"
 msgstr ""
 
-#: crates/picco/src/app.rs:3336
+#: crates/picco/src/app.rs:3355
 msgid "Music for the movie"
 msgstr ""
 
-#: crates/picco/src/app.rs:3342
+#: crates/picco/src/app.rs:3361
 msgid "Save as:"
 msgstr ""
 
-#: crates/picco/src/app.rs:3345
+#: crates/picco/src/app.rs:3364
 msgid "Make the Movie"
 msgstr ""
 
-#: crates/picco/src/app.rs:3378
+#: crates/picco/src/app.rs:3397
 msgid "Options"
 msgstr ""
 
-#: crates/picco/src/app.rs:3380
+#: crates/picco/src/app.rs:3399
 msgid "Look"
 msgstr ""
 
-#: crates/picco/src/app.rs:3383
+#: crates/picco/src/app.rs:3402
 msgid "As the system"
 msgstr ""
 
-#: crates/picco/src/app.rs:3384
+#: crates/picco/src/app.rs:3403
 msgid "Dark"
 msgstr ""
 
-#: crates/picco/src/app.rs:3385
+#: crates/picco/src/app.rs:3404
 msgid "Light"
 msgstr ""
 
-#: crates/picco/src/app.rs:3390
+#: crates/picco/src/app.rs:3409
 msgid "Photos keep their dark backdrop either way."
 msgstr ""
 
-#: crates/picco/src/app.rs:3391
+#: crates/picco/src/app.rs:3410
 msgid "Animations"
 msgstr ""
 
-#: crates/picco/src/app.rs:3391
+#: crates/picco/src/app.rs:3410
 msgid "A star flies onto a starred photo; the photos glide on after the wheel and spring back at the ends"
 msgstr ""
 
-#: crates/picco/src/app.rs:3395
+#: crates/picco/src/app.rs:3414
 msgid "Language"
 msgstr ""
 
-#: crates/picco/src/app.rs:3403
+#: crates/picco/src/app.rs:3422
 msgid "As the system ({language})"
 msgstr ""
 
-#: crates/picco/src/app.rs:3418
+#: crates/picco/src/app.rs:3435
+msgid "Files"
+msgstr ""
+
+#: crates/picco/src/app.rs:3436
+msgid "Ask before moving photos to the trash"
+msgstr ""
+
+#: crates/picco/src/app.rs:3440
 msgid "Settings saved and written down. All in order!"
 msgstr ""
 
-#: crates/picco/src/app.rs:3419
+#: crates/picco/src/app.rs:3441
 msgid "Noted. Picco won't forget."
 msgstr ""
 
-#: crates/picco/src/app.rs:3420
+#: crates/picco/src/app.rs:3442
 msgid "Roger that! Picco remembered."
 msgstr ""
 
-#: crates/picco/src/app.rs:3426
+#: crates/picco/src/app.rs:3448
 msgid "Thumbnails"
 msgstr ""
 
-#: crates/picco/src/app.rs:3429
+#: crates/picco/src/app.rs:3451
 msgid "Cache: {size} MB"
 msgstr ""
 
-#: crates/picco/src/app.rs:3431
+#: crates/picco/src/app.rs:3453
 msgid "Clear Thumbnail Cache"
 msgstr ""
 
-#: crates/picco/src/app.rs:3434
+#: crates/picco/src/app.rs:3456
 msgid "Thumbnail cache cleared; thumbnails will be redrawn as needed."
 msgstr ""
 
-#: crates/picco/src/app.rs:3437
+#: crates/picco/src/app.rs:3459
 msgid "Video tools"
 msgstr ""
 
-#: crates/picco/src/app.rs:3441
+#: crates/picco/src/app.rs:3463
 msgid "ffplay (sound)"
 msgstr ""
 
-#: crates/picco/src/app.rs:3445
+#: crates/picco/src/app.rs:3467
 msgid "{name}: not found"
 msgstr ""
 
-#: crates/picco/src/app.rs:3503
+#: crates/picco/src/app.rs:3525
 msgid "Version {version}"
 msgstr ""
 
-#: crates/picco/src/app.rs:3504
+#: crates/picco/src/app.rs:3526
 msgid "No cloud. No uploads. Your photos stay exactly where you left them."
 msgstr ""
 
-#: crates/picco/src/app.rs:3508
+#: crates/picco/src/app.rs:3530
 msgid "Open-source licenses"
 msgstr ""
 
-#: crates/picco/src/app.rs:3653
+#: crates/picco/src/app.rs:3675
 msgid "Original size"
 msgstr ""
 
-#: crates/picco/src/app.rs:3654
+#: crates/picco/src/app.rs:3676
 msgid "800 pixels"
 msgstr ""
 
-#: crates/picco/src/app.rs:3655
+#: crates/picco/src/app.rs:3677
 msgid "1024 pixels"
 msgstr ""
 
-#: crates/picco/src/app.rs:3656
+#: crates/picco/src/app.rs:3678
 msgid "1600 pixels"
 msgstr ""
 
-#: crates/picco/src/app.rs:3657
+#: crates/picco/src/app.rs:3679
 msgid "2048 pixels"
 msgstr ""
 
-#: crates/picco/src/app.rs:3658
+#: crates/picco/src/app.rs:3680
 msgid "Custom"
 msgstr ""
 
-#: crates/picco/src/app.rs:4039
+#: crates/picco/src/app.rs:4061
 msgid "{first} to {last}"
 msgstr ""
 
-#: crates/picco/src/app.rs:4052
+#: crates/picco/src/app.rs:4074
 msgid "{count}, {missing} not in Picco"
 msgstr ""
 
-#: crates/picco/src/app.rs:4084
+#: crates/picco/src/app.rs:4106
 msgid "Arrows"
 msgstr ""
 
-#: crates/picco/src/app.rs:4084
+#: crates/picco/src/app.rs:4106
 msgid "Move between photos"
 msgstr ""
 
-#: crates/picco/src/app.rs:4085 crates/picco/src/app.rs:4105
+#: crates/picco/src/app.rs:4107 crates/picco/src/app.rs:4127
 msgid "First / last photo"
 msgstr ""
 
-#: crates/picco/src/app.rs:4086
+#: crates/picco/src/app.rs:4108
 msgid "A screenful up / down"
 msgstr ""
 
-#: crates/picco/src/app.rs:4087
+#: crates/picco/src/app.rs:4109
 msgid "Open the photo"
 msgstr ""
 
-#: crates/picco/src/app.rs:4088
+#: crates/picco/src/app.rs:4110
 msgid "Select all / invert / clear"
 msgstr ""
 
-#: crates/picco/src/app.rs:4089
+#: crates/picco/src/app.rs:4111
 msgid "Hold in the Photo Tray"
 msgstr ""
 
-#: crates/picco/src/app.rs:4090
+#: crates/picco/src/app.rs:4112
 msgid "Star or unstar"
 msgstr ""
 
-#: crates/picco/src/app.rs:4091
+#: crates/picco/src/app.rs:4113
 msgid "New album from the selection"
 msgstr ""
 
-#: crates/picco/src/app.rs:4093
+#: crates/picco/src/app.rs:4115
 msgid "Move to the trash"
 msgstr ""
 
-#: crates/picco/src/app.rs:4094
+#: crates/picco/src/app.rs:4116
 msgid "Locate on disk"
 msgstr ""
 
-#: crates/picco/src/app.rs:4095
+#: crates/picco/src/app.rs:4117
 msgid "Open in another program"
 msgstr ""
 
-#: crates/picco/src/app.rs:4096
+#: crates/picco/src/app.rs:4118
 msgid "Export to a folder"
 msgstr ""
 
-#: crates/picco/src/app.rs:4097
+#: crates/picco/src/app.rs:4119
 msgid "Ctrl+1 / Ctrl+2, Ctrl+wheel"
 msgstr ""
 
-#: crates/picco/src/app.rs:4098
+#: crates/picco/src/app.rs:4120
 msgid "Search"
 msgstr ""
 
-#: crates/picco/src/app.rs:4102
+#: crates/picco/src/app.rs:4124
 msgid "Photo"
 msgstr ""
 
-#: crates/picco/src/app.rs:4104
+#: crates/picco/src/app.rs:4126
 msgid "Left / Right, wheel"
 msgstr ""
 
-#: crates/picco/src/app.rs:4104
+#: crates/picco/src/app.rs:4126
 msgid "Previous / next photo"
 msgstr ""
 
-#: crates/picco/src/app.rs:4106
+#: crates/picco/src/app.rs:4128
 msgid "Ctrl+wheel, pinch"
 msgstr ""
 
-#: crates/picco/src/app.rs:4106
+#: crates/picco/src/app.rs:4128
 msgid "Zoom"
 msgstr ""
 
-#: crates/picco/src/app.rs:4107
+#: crates/picco/src/app.rs:4129
 msgid "Double-click, Esc"
 msgstr ""
 
-#: crates/picco/src/app.rs:4107
+#: crates/picco/src/app.rs:4129
 msgid "Back to the library"
 msgstr ""
 
-#: crates/picco/src/app.rs:4108
+#: crates/picco/src/app.rs:4130
 msgid "Full screen"
 msgstr ""
 
-#: crates/picco/src/app.rs:4109
+#: crates/picco/src/app.rs:4131
 msgid "Undo / redo an edit"
 msgstr ""
 
-#: crates/picco/src/app.rs:4110
+#: crates/picco/src/app.rs:4132
 msgid "\\ (hold)"
 msgstr ""
 
-#: crates/picco/src/app.rs:4110
+#: crates/picco/src/app.rs:4132
 msgid "Show the original"
 msgstr ""
 
-#: crates/picco/src/app.rs:4114
+#: crates/picco/src/app.rs:4136
 msgid "Everywhere"
 msgstr ""
 
-#: crates/picco/src/app.rs:4116
+#: crates/picco/src/app.rs:4138
 msgid "Rotate clockwise / counterclockwise"
 msgstr ""
 
-#: crates/picco/src/app.rs:4117
+#: crates/picco/src/app.rs:4139
 msgid "I'm Feeling Lucky / black and white"
 msgstr ""
 
-#: crates/picco/src/app.rs:4118
+#: crates/picco/src/app.rs:4140
 msgid "Copy the files, to paste into a chat or a folder"
 msgstr ""
 
-#: crates/picco/src/app.rs:4119
+#: crates/picco/src/app.rs:4141
 msgid "Properties and tags / add a tag"
 msgstr ""
 
-#: crates/picco/src/app.rs:4120
+#: crates/picco/src/app.rs:4142
 msgid "Slideshow (arrows, Space, -/+ and Esc in it)"
 msgstr ""
 
-#: crates/picco/src/app.rs:4121
+#: crates/picco/src/app.rs:4143
 msgid "This list"
 msgstr ""
 
-#: crates/picco/src/app.rs:1094
+#: crates/picco/src/app.rs:1102
 msgid "{n} photo of this album is in folders Picco does not watch; add them with File > Add Folder to Picco: {folders}"
 msgid_plural "{n} photos of this album are in folders Picco does not watch; add them with File > Add Folder to Picco: {folders}"
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/picco/src/app.rs:4129
+#: crates/picco/src/app.rs:4151
 msgid "{n} photo"
 msgid_plural "{n} photos"
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/picco/src/app.rs:4130
+#: crates/picco/src/app.rs:4152
 msgid "{n} video"
 msgid_plural "{n} videos"
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/picco/src/app.rs:4131
+#: crates/picco/src/app.rs:4153
 msgid "{n} picture"
 msgid_plural "{n} pictures"
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/picco/src/app.rs:4132
+#: crates/picco/src/app.rs:4154
 msgid "{n} file"
 msgid_plural "{n} files"
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/picco/src/app.rs:4133 crates/picco/src/folder_manager.rs:275
+#: crates/picco/src/app.rs:4155 crates/picco/src/folder_manager.rs:275
 msgid "{n} folder"
 msgid_plural "{n} folders"
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/picco/src/app.rs:4134
+#: crates/picco/src/app.rs:4156
 msgid "{n} effect"
 msgid_plural "{n} effects"
 msgstr[0] ""
 msgstr[1] ""
 
-#: crates/picco/src/app.rs:4135
+#: crates/picco/src/app.rs:4157
 msgid "{n} group"
 msgid_plural "{n} groups"
 msgstr[0] ""
@@ -2356,54 +2372,54 @@ msgstr ""
 msgid "Multiple Exposure"
 msgstr ""
 
-#: crates/picco-core/src/exif.rs:427
+#: crates/picco-core/src/exif.rs:453
 msgid "Camera"
 msgstr ""
 
-#: crates/picco-core/src/exif.rs:428
+#: crates/picco-core/src/exif.rs:454
 msgid "Lens"
 msgstr ""
 
-#: crates/picco-core/src/exif.rs:429
+#: crates/picco-core/src/exif.rs:455
 msgid "Date taken"
 msgstr ""
 
-#: crates/picco-core/src/exif.rs:430
+#: crates/picco-core/src/exif.rs:456
 msgid "Exposure"
 msgstr ""
 
-#: crates/picco-core/src/exif.rs:435
+#: crates/picco-core/src/exif.rs:461
 msgid "Aperture"
 msgstr ""
 
-#: crates/picco-core/src/exif.rs:436
+#: crates/picco-core/src/exif.rs:462
 msgid "ISO"
 msgstr ""
 
-#: crates/picco-core/src/exif.rs:437
+#: crates/picco-core/src/exif.rs:463
 msgid "Focal length"
 msgstr ""
 
-#: crates/picco-core/src/exif.rs:438
+#: crates/picco-core/src/exif.rs:464
 msgid "Flash"
 msgstr ""
 
-#: crates/picco-core/src/exif.rs:438 crates/picco-core/src/exif.rs:685
+#: crates/picco-core/src/exif.rs:464 crates/picco-core/src/exif.rs:711
 msgid "Fired"
 msgstr ""
 
-#: crates/picco-core/src/exif.rs:438 crates/picco-core/src/exif.rs:685
+#: crates/picco-core/src/exif.rs:464 crates/picco-core/src/exif.rs:711
 msgid "Did not fire"
 msgstr ""
 
-#: crates/picco-core/src/exif.rs:439
+#: crates/picco-core/src/exif.rs:465
 msgid "Size (camera)"
 msgstr ""
 
-#: crates/picco-core/src/exif.rs:440
+#: crates/picco-core/src/exif.rs:466
 msgid "Software"
 msgstr ""
 
-#: crates/picco-core/src/exif.rs:448
+#: crates/picco-core/src/exif.rs:474
 msgid "GPS"
 msgstr ""

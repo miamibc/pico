@@ -139,6 +139,47 @@ FutureFilter=1,42,cafebabe;finetune2=1,0.274854,0.050526,0.084211,00000000,0.000
 }
 
 #[test]
+fn trash_question_can_be_turned_off() {
+    let fixture = Fixture::new("trash-ask");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    let ask = |harness: &Harness<'_, PiccoApp>| {
+        let ctx = harness.ctx.clone();
+        harness.state().settings_for_test(&ctx).get("ask_before_trash").cloned()
+    };
+    assert_eq!(ask(&harness).as_deref(), Some("true"));
+
+    // Ticked, then kept: nothing moves, and the question stays.
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.key_press(Key::Delete);
+    harness.run_steps(3);
+    harness.get_by_label("Don't ask again").click();
+    harness.step();
+    harness.get_by_label("Keep").click();
+    harness.run_steps(2);
+    assert!(fixture.dir.join("a.png").is_file());
+    assert_eq!(ask(&harness).as_deref(), Some("true"));
+    harness.key_press(Key::Delete);
+    harness.run_steps(3);
+    harness.get_by_label("Don't ask again");
+    harness.get_by_label("Keep").click();
+    harness.run_steps(2);
+
+    // Options turns it off, and back on.
+    harness.get_by_label("Tools").click();
+    harness.run_steps(2);
+    harness.get_by_label("Options…").click();
+    harness.run_steps(3);
+    harness.get_by_label("Ask before moving photos to the trash").click();
+    harness.step();
+    assert_eq!(ask(&harness).as_deref(), Some("false"));
+    harness.get_by_label("Ask before moving photos to the trash").click();
+    harness.step();
+    assert_eq!(ask(&harness).as_deref(), Some("true"));
+}
+
+#[test]
 fn star_rotate_and_caption_are_saved_to_ini() {
     let fixture = Fixture::new("viewer");
     let mut harness = harness(&fixture.dir);
