@@ -19,11 +19,15 @@ use pico_core::media::MediaKind;
 use pico_core::meta::PhotoMeta;
 use pico_core::render;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, channel};
+use std::sync::{Arc, Mutex, OnceLock};
 
 /// Longest side of the working copy; larger photos are downscaled for display.
 const WORKING_SIDE: u32 = 2560;
+/// Longest side of the smaller copy edits are previewed on while a slider
+/// moves, so the picture keeps up with it.
+const PREVIEW_SIDE: u32 = 1280;
 
 /// Strongest zoom, in screen pixels per photo pixel.
 const MAX_ZOOM: f32 = 3.0;
@@ -61,10 +65,43 @@ struct Prepared {
     /// Working-copy pixels per photo pixel.
     scale: f32,
     texture: (RenderKey, egui::TextureHandle),
+    /// The picture with the photo's saved edits, which `texture` may only
+    /// preview.
+    key: RenderKey,
+    /// The smaller copy, when the picture was first made from it.
+    preview: Option<PreviewInfo>,
+    /// The sharp picture still being made after a preview.
+    sharp: Option<(Receiver<Rendered>, Stop)>,
 }
 
-/// A decoded working copy, its scale and its picture, or why decoding failed.
-type PreparedResult = Result<(DynamicImage, f32, egui::ColorImage), String>;
+/// The working copy decoded, its scale and a first picture of the photo with
+/// its edits, or why decoding failed.
+type PreparedResult = Result<Made, String>;
+
+struct Made {
+    base: Arc<DynamicImage>,
+    scale: f32,
+    image: egui::ColorImage,
+}
+
+/// The smaller copy, its size, and working-copy pixels per pixel of it.
+type PreviewInfo = (PreviewCopy, [u32; 2], f32);
+
+/// Tells a render in the background to give up once dropped.
+struct Stop(Arc<AtomicBool>);
+
+impl Stop {
+    fn new() -> (Self, Arc<AtomicBool>) {
+        let flag = Arc::new(AtomicBool::new(false));
+        (Self(Arc::clone(&flag)), flag)
+    }
+}
+
+impl Drop for Stop {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+}
 
 /// A rendered picture.
 type Rendered = egui::ColorImage;
@@ -74,6 +111,15 @@ type Size = (u32, u32);
 
 /// What a texture shows: the file plus the edits it was rendered with.
 type RenderKey = (PathBuf, String);
+/// The smaller copy for previews, made by the first render that wants it.
+type PreviewCopy = Arc<OnceLock<DynamicImage>>;
+/// The start of a photo's edit stack and the picture it makes, before the
+/// rotation.
+type KeptRender = (PathBuf, Vec<Filter>, Arc<DynamicImage>);
+/// Pictures kept for the smaller copy and for the working copy.
+type KeptRenders = Arc<Mutex<[Vec<KeptRender>; 2]>>;
+/// How many pictures are kept for each copy.
+const KEPT: usize = 4;
 
 /// How the photo is zoomed; the user picks it, and it stays from photo to photo.
 #[derive(Default, Clone, Copy, PartialEq)]
@@ -101,7 +147,16 @@ pub struct Viewer {
     ahead: std::collections::HashMap<PathBuf, Result<Prepared, String>>,
     ahead_jobs: std::collections::HashMap<PathBuf, (RenderKey, Receiver<PreparedResult>)>,
     texture: Option<(RenderKey, egui::TextureHandle)>,
-    rendering: Option<(RenderKey, Receiver<Rendered>)>,
+    /// The picture being rendered, whether it previews edits not saved yet,
+    /// and what makes it give up when dropped.
+    rendering: Option<(RenderKey, Receiver<Rendered>, bool, Stop)>,
+    /// The working copy made smaller for previews, made once when first
+    /// wanted, and how many working-copy pixels one of its pixels stands for.
+    preview: Option<(PathBuf, PreviewCopy, [u32; 2], f32)>,
+    /// Starts of edit stacks already rendered: each render begins from the
+    /// longest one it shares, so trying out the edit on top, or adding one,
+    /// does not apply all the edits under it again.
+    kept: KeptRenders,
     error: Option<String>,
     caption: String,
     caption_for: Option<PathBuf>,
@@ -152,6 +207,8 @@ pub struct Viewer {
     photo_area: Option<egui::Rect>,
     /// Starring shows no flying star (Options > Animations off).
     pub still: bool,
+    /// The photo's thumbnail, with its edits, shown until the photo is ready.
+    pub placeholder: Option<egui::TextureHandle>,
 }
 
 impl Viewer {
@@ -206,7 +263,8 @@ impl Viewer {
     }
 
     fn show_photo(&mut self, ui: &mut egui::Ui, file: &MediaFile, position: (usize, usize)) -> Option<ViewerAction> {
-        if self.draft.as_ref().is_some_and(|(path, _)| path != &file.path) {
+        // A draft ends with another photo, or once the app saved it.
+        if self.draft.as_ref().is_some_and(|(path, stack)| path != &file.path || stack == &file.meta.filters) {
             self.draft = None;
         }
         if self.tool.as_ref().is_some_and(|(path, _)| path != &file.path) {
@@ -262,6 +320,11 @@ impl Viewer {
                     }
                 });
             });
+        }
+        // Until the app saves the new edits, they are what to show; else the
+        // picture before them would be rendered for a moment.
+        if let Some(ViewerAction::SetFilters(stack)) = &action {
+            self.draft = Some((file.path.clone(), stack.clone()));
         }
 
         let meta = self.effective_meta(file);
@@ -479,8 +542,8 @@ impl Viewer {
             None => ((base.width() as f32 / scale).round() as u32, (base.height() as f32 / scale).round() as u32),
         };
         let per_px = original.0 as f32 / base.width() as f32;
-        let [w, h] = texture.size();
-        let edited = ((w as f32 * per_px).round() as u32, (h as f32 * per_px).round() as u32);
+        let [w, h] = self.shown_size(key, texture).into();
+        let edited = ((w * per_px).round() as u32, (h * per_px).round() as u32);
         // Turning the photo swaps its sides without changing its size.
         let turned = key.1.starts_with('1') || key.1.starts_with('3');
         let same = if turned { (original.1, original.0) } else { original };
@@ -617,7 +680,7 @@ impl Viewer {
     }
 
     fn edit_panel(&mut self, ui: &mut egui::Ui, file: &MediaFile) -> Option<ViewerAction> {
-        let image_px = self.texture.as_ref().map_or(egui::vec2(1.0, 1.0), |(_, t)| t.size_vec2());
+        let image_px = self.texture.as_ref().map_or(egui::vec2(1.0, 1.0), |(key, t)| self.shown_size(key, t));
         let tool_action = match &mut self.tool {
             Some((_, Tool::Crop(crop))) => Some(crop.controls(ui, image_px, file.meta.rotate)),
             Some((_, Tool::Straighten { amount })) => Some(tools::straighten_controls(ui, amount)),
@@ -799,7 +862,7 @@ impl Viewer {
         ui.painter().rect_filled(area, 0.0, egui::Color32::from_gray(16));
         // Handles are cheap to clone and keep `self` free for the zoom state.
         if let Some((key, texture)) = self.texture.clone() {
-            let size = texture.size_vec2();
+            let size = self.shown_size(&key, &texture);
             // Working-copy pixels per photo pixel.
             let base_scale = match &self.base {
                 Some((path, _, scale)) if path == &key.0 => *scale,
@@ -912,6 +975,15 @@ impl Viewer {
             ui.centered_and_justified(|ui| {
                 ui.label(tr!("Pico squinted at this file and gave up:\n{error}", error = error))
             });
+        } else if let Some(thumb) = &self.placeholder {
+            // Stretched to about the size the photo will take, no bigger than
+            // the photo itself.
+            let size = thumb.size_vec2();
+            let photo_side = self.header_size.as_ref().and_then(|(_, size)| *size).map(|(w, h)| w.max(h) as f32);
+            let limit = photo_side.map_or(f32::INFINITY, |side| side / size.max_elem());
+            let fit = (area.width() / size.x).min(area.height() / size.y).min(limit);
+            let rect = egui::Rect::from_center_size(area.center(), size * fit);
+            ui.painter().image(thumb.id(), rect, grid::full_uv(), egui::Color32::WHITE);
         } else {
             ui.centered_and_justified(|ui| ui.spinner());
         }
@@ -1029,7 +1101,7 @@ impl Viewer {
             self.adopt(&path, prepared);
         }
 
-        if let Some((key, rx)) = &self.rendering
+        if let Some((key, rx, ..)) = &self.rendering
             && let Ok(image) = rx.try_recv()
         {
             let texture = ctx.load_texture("viewer", image, egui::TextureOptions::LINEAR);
@@ -1038,31 +1110,78 @@ impl Viewer {
         }
 
         let Some((base_path, base, scale)) = &self.base else { return };
-        if base_path != &file.path || self.rendering.is_some() {
+        if base_path != &file.path {
             return;
         }
-        let wanted = render_key(file, meta);
+        // Edits not saved yet (a slider moving, a tool open) are previewed on
+        // the smaller copy; saved ones get the whole working copy.
+        let previewing = meta.filters != file.meta.filters || meta.rotate != file.meta.rotate;
+        let small = previewing && base.width().max(base.height()) > PREVIEW_SIDE;
+        let mut wanted = render_key(file, meta);
+        if small {
+            wanted.1.push_str(PREVIEW_MARK);
+        }
+        if let Some((key, _, was_previewing, _)) = &self.rendering {
+            // One preview after another is let finish: it is a single edit
+            // (the rest is kept), and showing it keeps the picture moving
+            // with the slider. Anything else out of date gives up before its
+            // next edit, and the wanted picture starts now.
+            if key == &wanted || (*was_previewing && previewing) {
+                return;
+            }
+            self.rendering = None;
+        }
         if self.texture.as_ref().is_some_and(|(key, _)| key == &wanted) {
             return;
         }
+        if small && self.preview.as_ref().is_none_or(|(path, ..)| path != base_path) {
+            let (size, per_px) = preview_size(base);
+            self.preview = Some((base_path.clone(), Arc::new(OnceLock::new()), size, per_px));
+        }
+        let preview =
+            self.preview.as_ref().filter(|_| small).map(|(_, cell, size, per_px)| (Arc::clone(cell), *size, *per_px));
         let (tx, rx) = channel();
-        let (base, meta, scale) = (Arc::clone(base), meta.clone(), *scale);
+        let (base, meta, scale, path) = (Arc::clone(base), meta.clone(), *scale, base_path.clone());
+        let (kept, slot) = (Arc::clone(&self.kept), usize::from(!small));
         let ctx = ctx.clone();
+        let (stop, stopped) = Stop::new();
         std::thread::spawn(move || {
-            let rgba = render::apply_edits_scaled((*base).clone(), &meta, scale).to_rgba8();
-            let size = [rgba.width() as usize, rgba.height() as usize];
-            let _ = tx.send(egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()));
+            let scale = preview.as_ref().map_or(scale, |(_, _, per_px)| scale / per_px);
+            let copy = || match &preview {
+                Some((cell, [w, h], _)) => cell.get_or_init(|| base.resize_exact(*w, *h, FilterType::Triangle)).clone(),
+                None => (*base).clone(),
+            };
+            let made = render_kept(copy, &meta.filters.0, scale, (&kept, slot, &path), &stopped);
+            let Some(img) = made.filter(|_| !stopped.load(Ordering::Relaxed)) else { return };
+            let _ = tx.send(color_image(render::turn(img, meta.rotate)));
             ctx.request_repaint();
         });
-        self.rendering = Some((wanted, rx));
+        self.rendering = Some((wanted, rx, previewing, stop));
+    }
+
+    /// The size of the picture on screen in working-copy pixels: a preview
+    /// is made smaller and shown as big as the full picture.
+    fn shown_size(&self, key: &RenderKey, texture: &egui::TextureHandle) -> egui::Vec2 {
+        let per_px = match &self.preview {
+            Some((path, _, _, per_px)) if key.1.ends_with(PREVIEW_MARK) && path == &key.0 => *per_px,
+            _ => 1.0,
+        };
+        texture.size_vec2() * per_px
     }
 
     /// Puts a prepared photo on screen.
     fn adopt(&mut self, path: &std::path::Path, prepared: Result<Prepared, String>) {
         match prepared {
-            Ok(Prepared { base, scale, texture }) => {
+            Ok(Prepared { base, scale, texture, key, preview, sharp }) => {
                 self.base = Some((path.to_path_buf(), base, scale));
                 self.texture = Some(texture);
+                if let Some((cell, size, per_px)) = preview {
+                    self.preview = Some((path.to_path_buf(), cell, size, per_px));
+                }
+                // The sharp picture, once made, takes the preview's place.
+                if let Some((rx, stop)) = sharp {
+                    self.rendering = Some((key, rx, false, stop));
+                }
             }
             Err(e) => self.error = Some(e),
         }
@@ -1074,12 +1193,18 @@ impl Viewer {
         if let Some((key, rx)) = self.base_loading.take() {
             self.ahead_jobs.insert(key.0.clone(), (key, rx));
         }
-        // Its edits being rendered would land on the next photo.
-        self.rendering = None;
+        // Its edits being rendered would land on the next photo: the sharp
+        // picture of its saved edits goes along, anything else is let go.
+        let rendering = self.rendering.take();
         if let (Some((path, base, scale)), Some(texture)) = (self.base.take(), self.texture.take())
             && texture.0.0 == path
         {
-            self.ahead.insert(path, Ok(Prepared { base, scale, texture }));
+            let key = (path.clone(), texture.0.1.trim_end_matches(PREVIEW_MARK).to_owned());
+            let preview =
+                self.preview.take().filter(|(p, ..)| p == &path).map(|(_, cell, size, per_px)| (cell, size, per_px));
+            let sharp =
+                rendering.filter(|(k, _, previewing, _)| k == &key && !previewing).map(|(_, rx, _, stop)| (rx, stop));
+            self.ahead.insert(path, Ok(Prepared { base, scale, texture, key, preview, sharp }));
         }
     }
 
@@ -1106,7 +1231,7 @@ impl Viewer {
         self.ahead_jobs.retain(|path, _| wanted(path));
         self.ahead.retain(|path, prepared| match neighbours.iter().find(|f| &f.path == path) {
             // Edited since it was prepared: made again.
-            Some(file) => prepared.as_ref().map_or(true, |p| p.texture.0 == render_key(file, &file.meta)),
+            Some(file) => prepared.as_ref().map_or(true, |p| p.key == render_key(file, &file.meta)),
             None => path == &current.path,
         });
         if self.base_loading.is_some() || self.rendering.is_some() || current.kind != MediaKind::Photo {
@@ -1121,6 +1246,29 @@ impl Viewer {
                 self.ahead_jobs.insert(file.path.clone(), prepare(ctx, file));
             }
         }
+    }
+
+    /// The picture on screen: whether it is a preview, its texture's size
+    /// and its size as shown, in working-copy pixels.
+    #[cfg(test)]
+    pub fn picture_sizes(&self) -> Option<(bool, egui::Vec2, egui::Vec2)> {
+        let (key, texture) = self.texture.as_ref()?;
+        Some((key.1.ends_with(PREVIEW_MARK), texture.size_vec2(), self.shown_size(key, texture)))
+    }
+
+    /// The starts of edit stacks kept rendered, for the smaller copy and for
+    /// the working copy.
+    #[cfg(test)]
+    pub fn kept(&self) -> [Vec<String>; 2] {
+        self.kept.lock().unwrap().clone().map(|kept| {
+            kept.into_iter().map(|(path, filters, _)| format!("{}|{}", path.display(), FilterStack(filters))).collect()
+        })
+    }
+
+    /// The edits of the picture on screen and of the one being rendered.
+    #[cfg(test)]
+    pub fn picture_edits(&self) -> [Option<String>; 2] {
+        [self.texture.as_ref().map(|(key, _)| key.1.clone()), self.rendering.as_ref().map(|(key, ..)| key.1.clone())]
     }
 
     /// Photos prepared ahead, ready to show.
@@ -1204,6 +1352,9 @@ impl Viewer {
 }
 
 /// What a texture of `file` with edits `meta` shows.
+/// Ends the render key of a picture made from the smaller preview copy.
+const PREVIEW_MARK: &str = "|preview";
+
 fn render_key(file: &MediaFile, meta: &PhotoMeta) -> RenderKey {
     (file.path.clone(), format!("{}|{}", meta.rotate, meta.filters))
 }
@@ -1217,29 +1368,87 @@ fn prepare(ctx: &egui::Context, file: &MediaFile) -> (RenderKey, Receiver<Prepar
     let working_side = WORKING_SIDE.min(ctx.input(|i| i.max_texture_side) as u32);
     let ctx = ctx.clone();
     std::thread::spawn(move || {
-        let result = render::decode(&path, kind, &meta)
-            .map(|img| {
-                let side = img.width().max(img.height());
-                let (img, scale) = if side > working_side {
-                    (img.resize(working_side, working_side, FilterType::Triangle), working_side as f32 / side as f32)
-                } else {
-                    (img, 1.0)
-                };
-                let rgba = render::apply_edits_scaled(img.clone(), &meta, scale).to_rgba8();
-                let size = [rgba.width() as usize, rgba.height() as usize];
-                (img, scale, egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()))
-            })
-            .map_err(|e| e.to_string());
-        let _ = tx.send(result);
+        let img = match render::decode(&path, kind, &meta) {
+            Ok(img) => img,
+            Err(e) => {
+                let _ = tx.send(Err(e.to_string()));
+                ctx.request_repaint();
+                return;
+            }
+        };
+        let side = img.width().max(img.height());
+        let (img, scale) = if side > working_side {
+            (img.resize(working_side, working_side, FilterType::Triangle), working_side as f32 / side as f32)
+        } else {
+            (img, 1.0)
+        };
+        let image = color_image(render::apply_edits_scaled(img.clone(), &meta, scale));
+        let _ = tx.send(Ok(Made { base: Arc::new(img), scale, image }));
         ctx.request_repaint();
     });
     (render_key(file, &file.meta), rx)
 }
 
 fn into_prepared(ctx: &egui::Context, key: RenderKey, result: PreparedResult) -> Result<Prepared, String> {
-    let (base, scale, image) = result?;
+    let Made { base, scale, image } = result?;
     let texture = ctx.load_texture("viewer", image, egui::TextureOptions::LINEAR);
-    Ok(Prepared { base: Arc::new(base), scale, texture: (key, texture) })
+    Ok(Prepared { base, scale, texture: (key.clone(), texture), key, preview: None, sharp: None })
+}
+
+/// The size of the smaller copy of `base`, and how many of `base`'s pixels
+/// one of its pixels stands for.
+fn preview_size(base: &DynamicImage) -> ([u32; 2], f32) {
+    let fit = PREVIEW_SIDE as f32 / base.width().max(base.height()) as f32;
+    let size = [base.width(), base.height()].map(|side| ((side as f32 * fit).round() as u32).max(1));
+    (size, base.width() as f32 / size[0] as f32)
+}
+
+fn color_image(img: DynamicImage) -> egui::ColorImage {
+    let rgba = img.to_rgba8();
+    egui::ColorImage::from_rgba_unmultiplied([rgba.width() as usize, rgba.height() as usize], rgba.as_raw())
+}
+
+/// Applies `filters` to the copy `copy` makes, starting from the longest
+/// start of them already kept for this photo and copy (`slot`), and keeps
+/// what it makes: the stack without its last edit (the one usually tried
+/// out next) and the whole stack. None when `stop` was set.
+fn render_kept(
+    copy: impl FnOnce() -> DynamicImage,
+    filters: &[Filter],
+    scale: f32,
+    (kept, slot, path): (&KeptRenders, usize, &std::path::Path),
+    stop: &AtomicBool,
+) -> Option<DynamicImage> {
+    let stopped = || stop.load(Ordering::Relaxed);
+    let start = kept.lock().unwrap_or_else(|e| e.into_inner())[slot]
+        .iter()
+        .filter(|(p, done, _)| p == path && filters.starts_with(done))
+        .max_by_key(|(_, done, _)| done.len())
+        .map(|(_, done, img)| (done.len(), Arc::clone(img)));
+    let (mut done, mut img) = match start {
+        Some((done, img)) => (done, (*img).clone()),
+        None => (0, copy()),
+    };
+    let keep = |filters: &[Filter], img: &DynamicImage| {
+        let mut kept = kept.lock().unwrap_or_else(|e| e.into_inner());
+        let list = &mut kept[slot];
+        list.retain(|(p, f, _)| !(p == path && f == filters));
+        if list.len() >= KEPT {
+            list.remove(0);
+        }
+        list.push((path.to_path_buf(), filters.to_vec(), Arc::new(img.clone())));
+    };
+    let last = filters.len().saturating_sub(1);
+    if done < last {
+        img = render::apply_filters_until(img, &filters[done..last], scale, stopped)?;
+        keep(&filters[..last], &img);
+        done = last;
+    }
+    if done < filters.len() {
+        img = render::apply_filters_until(img, &filters[done..], scale, stopped)?;
+        keep(filters, &img);
+    }
+    Some(img)
 }
 
 fn from_player(action: PlayerAction) -> ViewerAction {

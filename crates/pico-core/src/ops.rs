@@ -6,6 +6,7 @@
 //! recipes in `picnik.rs` describe how Picnik (Apache-2.0) combined them.
 
 use image::{DynamicImage, RgbaImage};
+use rayon::prelude::*;
 
 /// Linear RGBA with channels in 0..=1 (not premultiplied).
 #[derive(Clone, Debug, PartialEq)]
@@ -18,15 +19,17 @@ pub struct Img {
 impl Img {
     pub fn from_dynamic(img: &DynamicImage) -> Self {
         let rgba = img.to_rgba8();
-        let px = rgba.pixels().map(|p| p.0.map(|c| c as f32 / 255.0)).collect();
+        let px = rgba.as_raw().par_chunks_exact(4).map(|p| [0, 1, 2, 3].map(|c| p[c] as f32 / 255.0)).collect();
         Self { width: rgba.width() as usize, height: rgba.height() as usize, px }
     }
 
     pub fn to_dynamic(&self) -> DynamicImage {
         let mut out = RgbaImage::new(self.width as u32, self.height as u32);
-        for (dst, src) in out.pixels_mut().zip(&self.px) {
-            dst.0 = src.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
-        }
+        out.par_chunks_exact_mut(4).zip(&self.px).for_each(|(dst, src)| {
+            for (d, s) in dst.iter_mut().zip(src) {
+                *d = (s.clamp(0.0, 1.0) * 255.0).round() as u8;
+            }
+        });
         DynamicImage::ImageRgba8(out)
     }
 
@@ -38,18 +41,15 @@ impl Img {
         self.px[y * self.width + x]
     }
 
-    pub fn map(&mut self, f: impl Fn([f32; 4]) -> [f32; 4]) {
-        for p in &mut self.px {
-            *p = f(*p);
-        }
+    /// Replaces every pixel with `f(pixel)`, on all processor cores.
+    pub fn map(&mut self, f: impl Fn([f32; 4]) -> [f32; 4] + Sync) {
+        self.px.par_iter_mut().for_each(|p| *p = f(*p));
     }
 
-    /// Calls `f(x, y, pixel)` for every pixel.
-    pub fn map_xy(&mut self, f: impl Fn(usize, usize, [f32; 4]) -> [f32; 4]) {
+    /// Calls `f(x, y, pixel)` for every pixel, on all processor cores.
+    pub fn map_xy(&mut self, f: impl Fn(usize, usize, [f32; 4]) -> [f32; 4] + Sync) {
         let width = self.width;
-        for (i, p) in self.px.iter_mut().enumerate() {
-            *p = f(i % width, i / width, *p);
-        }
+        self.px.par_iter_mut().enumerate().for_each(|(i, p)| *p = f(i % width, i / width, *p));
     }
 
     pub fn max_side(&self) -> f32 {
@@ -86,42 +86,98 @@ pub fn mix(a: [f32; 4], b: [f32; 4], t: f32) -> [f32; 4] {
 /// (Flash's quality 3 means three passes, which approximates a Gaussian).
 /// Pixels outside the image repeat the edge.
 pub fn blur(img: &Img, size_x: f32, size_y: f32, passes: usize) -> Img {
+    // Two buffers taking turns, rather than a new image for every pass.
     let mut out = img.clone();
+    let mut spare = Img::filled(img.width, img.height, [0.0; 4]);
     for _ in 0..passes {
-        out = box_pass(&out, size_x, true);
-        out = box_pass(&out, size_y, false);
+        for (size, horizontal) in [(size_x, true), (size_y, false)] {
+            if box_pass(&out, &mut spare, size, horizontal) {
+                std::mem::swap(&mut out, &mut spare);
+            }
+        }
     }
     out
 }
 
-fn box_pass(img: &Img, size: f32, horizontal: bool) -> Img {
+/// One box blur pass of `img` into `out`, along rows or columns; false when
+/// the box is too small to change anything (and `out` is left alone).
+fn box_pass(img: &Img, out: &mut Img, size: f32, horizontal: bool) -> bool {
     let radius = ((size - 1.0) / 2.0).max(0.0);
     if radius < 0.5 {
-        return img.clone();
+        return false;
     }
     let r = radius.round() as isize;
-    let (len, lines) = if horizontal { (img.width, img.height) } else { (img.height, img.width) };
-    let idx = |line: usize, i: usize| if horizontal { line * img.width + i } else { i * img.width + line };
-    let mut out = img.clone();
+    let (w, h) = (img.width, img.height);
+    if horizontal {
+        out.px.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+            slide(w, r, |x| img.px[y * w + x], |x, p| row[x] = p);
+        });
+    } else {
+        // Strips of columns side by side, each going down the rows with a
+        // running sum per column (the same sums as one column at a time),
+        // then written back row by row.
+        const STRIP: usize = 64;
+        let window = (2 * r + 1) as f32;
+        let row_at = |y: isize, x0: usize, n: usize| {
+            let y = y.clamp(0, h as isize - 1) as usize;
+            &img.px[y * w + x0..y * w + x0 + n]
+        };
+        let strips: Vec<Vec<[f32; 4]>> = (0..w.div_ceil(STRIP))
+            .into_par_iter()
+            .map(|strip| {
+                let x0 = strip * STRIP;
+                let n = STRIP.min(w - x0);
+                let mut sums = vec![[0.0f32; 4]; n];
+                for i in -r..=r {
+                    for (sum, p) in sums.iter_mut().zip(row_at(i, x0, n)) {
+                        for c in 0..4 {
+                            sum[c] += p[c];
+                        }
+                    }
+                }
+                let mut done = Vec::with_capacity(h * n);
+                for y in 0..h as isize {
+                    done.extend(sums.iter().map(|sum| sum.map(|s| s / window)));
+                    for ((sum, add), sub) in sums.iter_mut().zip(row_at(y + r + 1, x0, n)).zip(row_at(y - r, x0, n)) {
+                        for c in 0..4 {
+                            sum[c] += add[c] - sub[c];
+                        }
+                    }
+                }
+                done
+            })
+            .collect();
+        out.px.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+            for (strip, done) in strips.iter().enumerate() {
+                let x0 = strip * STRIP;
+                let n = STRIP.min(w - x0);
+                row[x0..x0 + n].copy_from_slice(&done[y * n..(y + 1) * n]);
+            }
+        });
+    }
+    true
+}
+
+/// A running box sum of radius `r` along one line of `len` pixels read
+/// through `sample`, the edges repeated; `put` gets each average.
+#[inline]
+fn slide(len: usize, r: isize, sample: impl Fn(usize) -> [f32; 4], mut put: impl FnMut(usize, [f32; 4])) {
     let window = (2 * r + 1) as f32;
-    for line in 0..lines {
-        let sample = |i: isize| img.px[idx(line, i.clamp(0, len as isize - 1) as usize)];
-        let mut sum = [0.0f32; 4];
-        for i in -r..=r {
-            let p = sample(i);
-            for c in 0..4 {
-                sum[c] += p[c];
-            }
-        }
-        for i in 0..len {
-            out.px[idx(line, i)] = sum.map(|s| s / window);
-            let (add, sub) = (sample(i as isize + r + 1), sample(i as isize - r));
-            for c in 0..4 {
-                sum[c] += add[c] - sub[c];
-            }
+    let at = |i: isize| sample(i.clamp(0, len as isize - 1) as usize);
+    let mut sum = [0.0f32; 4];
+    for i in -r..=r {
+        let p = at(i);
+        for c in 0..4 {
+            sum[c] += p[c];
         }
     }
-    out
+    for i in 0..len {
+        put(i, sum.map(|s| s / window));
+        let (add, sub) = (at(i as isize + r + 1), at(i as isize - r));
+        for c in 0..4 {
+            sum[c] += add[c] - sub[c];
+        }
+    }
 }
 
 // ---------------------------------------------------------------- blending
@@ -182,15 +238,15 @@ impl Blend {
 /// Puts `top` over `base` with a blend mode, an overall opacity and an optional
 /// per-pixel mask (0 keeps `base`, 1 applies `top` fully). Keeps `base`'s alpha.
 pub fn blend(base: &mut Img, top: &Img, mode: Blend, alpha: f32, mask: Option<&[f32]>) {
-    for (i, (b, t)) in base.px.iter_mut().zip(&top.px).enumerate() {
+    base.px.par_iter_mut().zip(&top.px).enumerate().for_each(|(i, (b, t))| {
         let amount = alpha * t[3] * mask.map_or(1.0, |m| m[i]);
         if amount <= 0.0 {
-            continue;
+            return;
         }
         for c in 0..3 {
             b[c] = lerp(b[c], mode.channel(b[c], t[c]).clamp(0.0, 1.0), amount.min(1.0));
         }
-    }
+    });
 }
 
 /// A circular gradient: `inner` value inside `inner_radius` of the center,
@@ -208,6 +264,7 @@ pub struct Ring {
 pub fn circular_mask(w: usize, h: usize, ring: Ring) -> Vec<f32> {
     let span = (ring.outer_radius - ring.inner_radius).max(1e-3);
     (0..w * h)
+        .into_par_iter()
         .map(|i| {
             let (x, y) = ((i % w) as f32 + 0.5, (i / w) as f32 + 0.5);
             let d = ((x - ring.cx).powi(2) + (y - ring.cy).powi(2)).sqrt();
@@ -468,20 +525,19 @@ pub fn noise(w: usize, h: usize, seed: u32, low: f32, high: f32, gray: bool) -> 
 pub fn inner_glow(img: &mut Img, color: u32, blur_x: f32, blur_y: f32, strength: f32, alpha: f32) {
     let (w, h) = (img.width, img.height);
     // Blur a mask that is 1 inside the image and 0 beyond it, padded so the
-    // outside actually participates in the blur.
-    let pad_x = (blur_x * 1.5).ceil() as usize + 1;
-    let pad_y = (blur_y * 1.5).ceil() as usize + 1;
-    let (pw, ph) = (w + 2 * pad_x, h + 2 * pad_y);
-    let mut mask = Img::filled(pw, ph, [0.0; 4]);
-    for y in 0..h {
-        for x in 0..w {
-            mask.px[(y + pad_y) * pw + x + pad_x] = [1.0; 4];
-        }
-    }
-    let mask = blur(&mask, blur_x, blur_y, 3);
+    // outside actually participates in the blur. The mask is a row times a
+    // column, and so is its blur: one row and one column are blurred.
+    let edge = |len: usize, size: f32| {
+        let pad = (size * 1.5).ceil() as usize + 1;
+        let mut line = Img::filled(len + 2 * pad, 1, [0.0; 4]);
+        line.px[pad..pad + len].fill([1.0; 4]);
+        let line = blur(&line, size, 0.0, 3);
+        line.px[pad..pad + len].iter().map(|p| p[0]).collect::<Vec<f32>>()
+    };
+    let (across, down) = (edge(w, blur_x), edge(h, blur_y));
     let c = rgb(color);
     img.map_xy(|x, y, p| {
-        let inside = mask.px[(y + pad_y) * pw + x + pad_x][0];
+        let inside = across[x] * down[y];
         let glow = ((1.0 - inside) * strength).clamp(0.0, 1.0) * alpha;
         [lerp(p[0], c[0], glow), lerp(p[1], c[1], glow), lerp(p[2], c[2], glow), p[3]]
     });
@@ -490,11 +546,11 @@ pub fn inner_glow(img: &mut Img, color: u32, blur_x: f32, blur_y: f32, strength:
 /// Unsharp-style local contrast: adds the difference from a blurred copy.
 pub fn local_contrast(img: &mut Img, radius: f32, strength: f32) {
     let blurred = blur(img, radius, radius, 3);
-    for (p, b) in img.px.iter_mut().zip(&blurred.px) {
+    img.px.par_iter_mut().zip(&blurred.px).for_each(|(p, b)| {
         for c in 0..3 {
             p[c] = (p[c] + (p[c] - b[c]) * strength).clamp(0.0, 1.0);
         }
-    }
+    });
 }
 
 /// Averages `size`-pixel blocks.
@@ -617,5 +673,29 @@ mod tests {
         tint(&mut img, 0x80cfff);
         assert!(luma(img.px[0]) < luma(img.px[1]));
         assert!(img.px[0][2] > img.px[0][0], "dark pixel is bluish");
+    }
+
+    #[test]
+    fn inner_glow_matches_the_whole_mask_blurred() {
+        // The glow as first written: the whole padded mask blurred in 2D.
+        let (w, h, bx, by) = (60, 40, 25.0, 15.0);
+        let (pad_x, pad_y) = ((bx * 1.5f32).ceil() as usize + 1, (by * 1.5f32).ceil() as usize + 1);
+        let pw = w + 2 * pad_x;
+        let mut mask = Img::filled(pw, h + 2 * pad_y, [0.0; 4]);
+        for y in 0..h {
+            for x in 0..w {
+                mask.px[(y + pad_y) * pw + x + pad_x] = [1.0; 4];
+            }
+        }
+        let mask = blur(&mask, bx, by, 3);
+        let mut img = Img::filled(w, h, [0.8, 0.6, 0.4, 1.0]);
+        inner_glow(&mut img, 0x000000, bx, by, 1.2, 1.0);
+        for y in 0..h {
+            for x in 0..w {
+                let inside = mask.px[(y + pad_y) * pw + x + pad_x][0];
+                let expected = 0.8 * (1.0 - ((1.0 - inside) * 1.2).clamp(0.0, 1.0));
+                assert!((img.at(x, y)[0] - expected).abs() < 1e-5, "{x},{y}: {:?} vs {expected}", img.at(x, y));
+            }
+        }
     }
 }

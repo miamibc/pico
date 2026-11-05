@@ -16,3 +16,8 @@ strip = true
 # quick while Pico's own code stays easy to debug.
 [profile.dev.package."*"]
 opt-level = 2
+
+# The photo filters too: an edited photo would otherwise take seconds to show
+# in a debug build. Pico's interface code stays unoptimized for debugging.
+[profile.dev.package.pico-core]
+opt-level = 2

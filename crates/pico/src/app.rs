@@ -6,7 +6,7 @@ use crate::grid::{
 };
 use crate::info::{InfoPanel, TagAction};
 use crate::slideshow::{Slideshow, SlideshowAction};
-use crate::thumbs::ThumbCache;
+use crate::thumbs::{Thumb, ThumbCache};
 use crate::viewer::{self, Viewer, ViewerAction};
 use eframe::egui;
 use pico_core::album_file::{self, Album, Entry};
@@ -3050,6 +3050,14 @@ impl PicoApp {
             }
         }
         self.viewer.still = !self.animations;
+        // Shown, stretched, until the photo is ready.
+        self.viewer.placeholder = match file.kind {
+            pico_core::media::MediaKind::Photo => match self.thumbs.get(&file.path, file.kind, &file.meta) {
+                Thumb::Ready(texture) => Some(texture.clone()),
+                _ => None,
+            },
+            _ => None,
+        };
         let action = self.viewer.show(ui, file, (position, listing.len().max(1)));
         // Next, previous, the one after next and so on.
         let neighbours: Vec<&MediaFile> = (1..=viewer::AHEAD)
@@ -3742,6 +3750,18 @@ impl PicoApp {
 
     pub fn viewer_loaded(&self) -> bool {
         self.current.and_then(|at| self.file(at)).is_some_and(|file| self.viewer.is_loaded(file))
+    }
+
+    pub fn viewer_picture_sizes(&self) -> Option<(bool, egui::Vec2, egui::Vec2)> {
+        self.viewer.picture_sizes()
+    }
+
+    pub fn viewer_picture_edits(&self) -> [Option<String>; 2] {
+        self.viewer.picture_edits()
+    }
+
+    pub fn viewer_kept(&self) -> [Vec<String>; 2] {
+        self.viewer.kept()
     }
 
     pub fn viewer_prepared_ahead(&self) -> usize {

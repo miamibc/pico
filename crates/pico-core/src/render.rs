@@ -1,6 +1,7 @@
 //! Turning a media file plus its Picasa edits into pixels.
 
 use crate::adjust;
+use crate::filters::Filter;
 use crate::media::MediaKind;
 use crate::meta::PhotoMeta;
 use crate::video;
@@ -56,8 +57,30 @@ pub fn apply_edits(img: DynamicImage, meta: &PhotoMeta) -> DynamicImage {
 
 /// Like [`apply_edits`] on a copy that is `scale` times the original size.
 pub fn apply_edits_scaled(img: DynamicImage, meta: &PhotoMeta, scale: f32) -> DynamicImage {
-    let img = meta.filters.0.iter().fold(img, |img, filter| adjust::apply(img, filter, scale));
-    match meta.rotate % 4 {
+    turn(apply_filters(img, &meta.filters.0, scale), meta.rotate)
+}
+
+/// Applies `filters` in order to a copy that is `scale` times the original
+/// size, without the quarter-turn rotation: a part of the stack can be kept
+/// and the rest applied on top later.
+pub fn apply_filters(img: DynamicImage, filters: &[Filter], scale: f32) -> DynamicImage {
+    filters.iter().fold(img, |img, filter| adjust::apply(img, filter, scale))
+}
+
+/// Like [`apply_filters`], but gives up (None) before any filter once `stop`
+/// says the result is no longer wanted.
+pub fn apply_filters_until(
+    img: DynamicImage,
+    filters: &[Filter],
+    scale: f32,
+    stop: impl Fn() -> bool,
+) -> Option<DynamicImage> {
+    filters.iter().try_fold(img, |img, filter| (!stop()).then(|| adjust::apply(img, filter, scale)))
+}
+
+/// The quarter-turn rotation Picasa keeps outside the edit stack.
+pub fn turn(img: DynamicImage, rotate: u8) -> DynamicImage {
+    match rotate % 4 {
         1 => img.rotate90(),
         2 => img.rotate180(),
         3 => img.rotate270(),
@@ -83,6 +106,22 @@ mod tests {
         let meta = PhotoMeta { rotate: 1, ..Default::default() };
         let out = apply_edits(DynamicImage::new_rgb8(200, 100), &meta);
         assert_eq!((out.width(), out.height()), (100, 200));
+    }
+
+    #[test]
+    fn gives_up_between_filters_when_told() {
+        let filters = FilterStack::parse("bw=1;sepia=1;warm=1;").0;
+        let img = || DynamicImage::new_rgb8(8, 8);
+        let done = std::cell::Cell::new(0);
+        // Asked before each filter: the third time, the answer is to stop.
+        let stop = || {
+            done.set(done.get() + 1);
+            done.get() > 2
+        };
+        assert!(apply_filters_until(img(), &filters, 1.0, stop).is_none());
+        assert_eq!(done.get(), 3, "two filters applied, the third never started");
+        let all = apply_filters_until(img(), &filters, 1.0, || false).unwrap();
+        assert_eq!(all, apply_filters(img(), &filters, 1.0));
     }
 }
 

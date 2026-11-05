@@ -2927,6 +2927,7 @@ dependencies = [
  "epaint_default_fonts",
  "image",
  "miniz_oxide 0.8.9",
+ "rayon",
 ]
 
 [[package]]

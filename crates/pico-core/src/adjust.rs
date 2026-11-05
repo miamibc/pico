@@ -9,6 +9,7 @@ use crate::effects;
 use crate::filters::Filter;
 use crate::ops::Img;
 use image::{DynamicImage, RgbaImage};
+use rayon::prelude::*;
 
 /// Default values from `filterdesc.xml`, used when a filter omits parameters
 /// (Picasa writes e.g. a bare `unsharp=1;` from its menu command).
@@ -147,22 +148,22 @@ fn curves(f: impl Fn(usize, f32) -> f32) -> Curves {
 
 fn map_pixels(img: DynamicImage, curves: Curves) -> DynamicImage {
     let mut rgba = img.into_rgba8();
-    for p in rgba.pixels_mut() {
+    rgba.par_chunks_exact_mut(4).for_each(|p| {
         for c in 0..3 {
-            p.0[c] = curves[c][p.0[c] as usize];
+            p[c] = curves[c][p[c] as usize];
         }
-    }
+    });
     DynamicImage::ImageRgba8(rgba)
 }
 
-fn map_rgb(img: DynamicImage, f: impl Fn([f32; 3]) -> [f32; 3]) -> DynamicImage {
+fn map_rgb(img: DynamicImage, f: impl Fn([f32; 3]) -> [f32; 3] + Sync) -> DynamicImage {
     let mut rgba = img.into_rgba8();
-    for p in rgba.pixels_mut() {
-        let rgb = f([p.0[0], p.0[1], p.0[2]].map(|c| c as f32 / 255.0));
-        for (channel, value) in p.0.iter_mut().zip(rgb) {
+    rgba.par_chunks_exact_mut(4).for_each(|p| {
+        let rgb = f([p[0], p[1], p[2]].map(|c| c as f32 / 255.0));
+        for (channel, value) in p.iter_mut().zip(rgb) {
             *channel = to_u8(value);
         }
-    }
+    });
     DynamicImage::ImageRgba8(rgba)
 }
 
@@ -234,13 +235,15 @@ pub fn straighten(img: DynamicImage, degrees: f32) -> DynamicImage {
     let zoom = (cos_abs + h / w * sin_abs).max(cos_abs + w / h * sin_abs) * 1.01;
     let (cx, cy) = (w / 2.0, h / 2.0);
     let mut out = RgbaImage::new(src.width(), src.height());
-    for (x, y, p) in out.enumerate_pixels_mut() {
-        let (dx, dy) = ((x as f32 + 0.5 - cx) / zoom, (y as f32 + 0.5 - cy) / zoom);
+    let width = src.width() as usize;
+    out.par_chunks_exact_mut(4).enumerate().for_each(|(i, p)| {
+        let (x, y) = ((i % width) as f32, (i / width) as f32);
+        let (dx, dy) = ((x + 0.5 - cx) / zoom, (y + 0.5 - cy) / zoom);
         // Inverse rotation: where in the source this output pixel comes from.
         let sx = cos * dx + sin * dy + cx - 0.5;
         let sy = -sin * dx + cos * dy + cy - 0.5;
-        *p = bilinear(&src, sx, sy);
-    }
+        p.copy_from_slice(&bilinear(&src, sx, sy).0);
+    });
     DynamicImage::ImageRgba8(out)
 }
 
@@ -264,16 +267,40 @@ fn bilinear(img: &RgbaImage, x: f32, y: f32) -> image::Rgba<u8> {
 
 /// Unsharp mask: adds back the difference between the image and its blur.
 fn sharpen(img: DynamicImage, amount: f32) -> DynamicImage {
-    let original: RgbaImage = img.into_rgba8();
-    let blurred = image::imageops::blur(&original, 1.2);
-    let mut out = original.clone();
-    for (o, b) in out.pixels_mut().zip(blurred.pixels()) {
+    let mut out: RgbaImage = img.into_rgba8();
+    let blurred = blur_in_bands(&out, 1.2);
+    out.par_chunks_exact_mut(4).zip(blurred.par_chunks_exact(4)).for_each(|(o, b)| {
         for c in 0..3 {
-            let v = o.0[c] as f32 + amount * (o.0[c] as f32 - b.0[c] as f32);
-            o.0[c] = v.clamp(0.0, 255.0).round() as u8;
+            let v = o[c] as f32 + amount * (o[c] as f32 - b[c] as f32);
+            o[c] = v.clamp(0.0, 255.0).round() as u8;
         }
-    }
+    });
     DynamicImage::ImageRgba8(out)
+}
+
+/// `image`'s Gaussian blur, done on bands of rows side by side. Each band is
+/// blurred with enough rows around it that its own rows come out exactly as
+/// in one blur of the whole image.
+fn blur_in_bands(img: &RgbaImage, sigma: f32) -> RgbaImage {
+    const BAND: u32 = 64;
+    let (w, h) = img.dimensions();
+    // Well beyond the kernel's reach (about three sigmas).
+    let margin = (sigma * 4.0).ceil() as u32 + 2;
+    let bands: Vec<RgbaImage> = (0..h.div_ceil(BAND))
+        .into_par_iter()
+        .map(|band| {
+            let (y0, y1) = (band * BAND, ((band + 1) * BAND).min(h));
+            let (from, to) = (y0.saturating_sub(margin), (y1 + margin).min(h));
+            let piece = image::imageops::crop_imm(img, 0, from, w, to - from).to_image();
+            let blurred = image::imageops::blur(&piece, sigma);
+            image::imageops::crop_imm(&blurred, 0, y0 - from, w, y1 - y0).to_image()
+        })
+        .collect();
+    let mut out = RgbaImage::new(w, h);
+    for (band, piece) in bands.iter().enumerate() {
+        image::imageops::replace(&mut out, piece, 0, band as i64 * BAND as i64);
+    }
+    out
 }
 
 #[cfg(test)]

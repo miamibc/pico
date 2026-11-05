@@ -1554,6 +1554,94 @@ fn ini_crop(fixture: &Fixture, file: &str) -> [f32; 4] {
 }
 
 #[test]
+fn edited_photos_open_sharp_whether_prepared_ahead_or_not() {
+    let fixture = Fixture::new("opening");
+    for name in ["x1.png", "x2.png"] {
+        RgbImage::from_pixel(3000, 2000, Rgb([90, 120, 150])).save(fixture.dir.join(name)).unwrap();
+    }
+    let edits = "filters=bw=1;glow2=1,0.500000,3.000000;\r\n";
+    let ini = format!("[Picasa]\r\nname=Big\r\n[x1.png]\r\n{edits}[x2.png]\r\n{edits}");
+    std::fs::write(fixture.dir.join(".picasa.ini"), ini).unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().open_file_named("x1.png");
+    harness.step();
+    // The thumbnail stands in until the sharp picture is made.
+    wait_until(&mut harness, "the sharp picture", |app| app.viewer_loaded());
+    let (preview, full, shown) = harness.state().viewer_picture_sizes().unwrap();
+    assert!(!preview && full == shown && full.x > 1280.0, "{full:?}");
+    // The next one was prepared meanwhile, and ends up sharp as well.
+    wait_until(&mut harness, "the photo ahead", |app| app.viewer_prepared_ahead() > 0);
+    harness.state_mut().open_file_named("x2.png");
+    harness.step();
+    wait_until(&mut harness, "the next sharp picture", |app| app.viewer_loaded());
+    let (preview, next, _) = harness.state().viewer_picture_sizes().unwrap();
+    assert!(!preview && next == full, "{next:?}");
+}
+
+#[test]
+fn sliders_preview_on_a_smaller_copy_then_render_in_full() {
+    let fixture = Fixture::new("preview");
+    RgbImage::from_pixel(3000, 2000, Rgb([90, 90, 90])).save(fixture.dir.join("big.png")).unwrap();
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.state_mut().open_file_named("big.png");
+    harness.state_mut().open_edit_panel();
+    harness.step();
+    wait_until(&mut harness, "the photo", |app| app.viewer_loaded());
+    let (preview, full, _) = harness.state().viewer_picture_sizes().unwrap();
+    assert!(!preview);
+    // The working copy: 2560 wide, or the GPU's largest texture.
+    assert!(full.x > 1280.0 && (full.x / full.y - 1.5).abs() < 0.01, "{full:?}");
+    // A saved edit under the one tried out.
+    harness.get_by_label("B&W").click();
+    harness.step();
+    wait_until(&mut harness, "the B&W render", |app| app.viewer_loaded());
+
+    // While the slider moves, the picture comes from the smaller copy but
+    // is shown as big as the full one.
+    let slider = harness.get_by_label("Fill Light").rect();
+    harness.drag_at(slider.left_center() + egui::vec2(4.0, 0.0));
+    harness.step();
+    harness.hover_at(slider.center() - egui::vec2(10.0, 0.0));
+    harness.step();
+    harness.hover_at(slider.center());
+    wait_until(&mut harness, "the preview", |app| {
+        app.viewer_picture_sizes().is_some_and(|(preview, ..)| preview) && app.viewer_picture_edits()[1].is_none()
+    });
+    let (_, texture, shown) = harness.state().viewer_picture_sizes().unwrap();
+    assert_eq!(texture.x, 1280.0, "{texture:?}");
+    assert!((shown - full).length() < 2.0, "{shown:?}");
+    // B&W is rendered once and kept; each move applies only the Tuning.
+    let [kept, _] = harness.state().viewer_kept();
+    assert!(kept.iter().any(|key| key.ends_with("big.png|bw=1;")), "{kept:?}");
+
+    // Let go: saved, and rendered in full, without the picture before the
+    // edit coming back for a moment.
+    harness.drop_at(slider.center());
+    for _ in 0..200 {
+        harness.step();
+        for edits in harness.state().viewer_picture_edits().into_iter().flatten() {
+            assert!(edits.contains("finetune2"), "the picture before the edit: {edits}");
+        }
+        if harness.state().viewer_loaded() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(fixture.ini().contains("finetune2=1,"), "{}", fixture.ini());
+    assert!(harness.state().viewer_loaded(), "the full picture");
+    // The full picture keeps its stack, and the stack under its last edit,
+    // so the next try of that edit, or a new one on top, starts from there.
+    let [_, kept] = harness.state().viewer_kept();
+    assert!(kept.iter().any(|key| key.ends_with("big.png|bw=1;")), "{kept:?}");
+    assert!(kept.iter().any(|key| key.contains("big.png|bw=1;finetune2=1,")), "{kept:?}");
+    let (preview, texture, _) = harness.state().viewer_picture_sizes().unwrap();
+    assert!(!preview);
+    assert_eq!(texture, full);
+}
+
+#[test]
 fn crop_tool_drag_on_rotated_photo_and_straighten() {
     let fixture = Fixture::new("tools");
     let mut harness = harness(&fixture.dir);
