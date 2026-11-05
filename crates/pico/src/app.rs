@@ -2267,6 +2267,12 @@ impl PicoApp {
     fn folder_list(&mut self, ui: &mut egui::Ui) {
         ui.heading(tr!("Library"));
         ui.separator();
+        // One scroll for the whole list: an open Timeline or Places can be
+        // taller than the window.
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| self.library_sections(ui));
+    }
+
+    fn library_sections(&mut self, ui: &mut egui::Ui) {
         let starred = self.folders.iter().flat_map(|f| &f.files).filter(|f| f.meta.star).count();
         if ui
             .selectable_label(self.source == Some(Source::Starred), format!("★ {}  ({starred})", tr!("Starred Photos")))
@@ -2380,43 +2386,41 @@ impl PicoApp {
                     .on_hover_text(tr!("Tree or list, and order"));
             })
             .body(|ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    let mut rows = Vec::new();
-                    if self.folder_tree {
-                        for node in self.folder_nodes() {
-                            self.folder_node(ui, &node, "tree", &mut rows);
-                        }
-                    } else if self.folder_sort == FolderSort::Date {
-                        let order = self.folder_order();
-                        let mut years: Vec<(String, Vec<usize>)> = Vec::new();
-                        for index in order {
-                            let year = self.folder_first_date(index).get(..4).unwrap_or("?").to_owned();
-                            match years.last_mut() {
-                                Some((y, list)) if *y == year => list.push(index),
-                                _ => years.push((year, vec![index])),
-                            }
-                        }
-                        for (year, list) in years {
-                            let title = format!("{year}  ({})", plural(list.len(), "folder"));
-                            let key = format!("folders/{year}");
-                            let year_open = self.section_open(&key, true);
-                            let year_section = egui::CollapsingHeader::new(title)
-                                .id_salt(("year", &year))
-                                .open(Some(year_open))
-                                .show(ui, |ui| {
-                                    for index in list {
-                                        rows.push((index, self.folder_row(ui, index)));
-                                    }
-                                });
-                            self.section_clicked(&year_section.header_response, &key, year_open);
-                        }
-                    } else {
-                        for index in self.folder_order() {
-                            rows.push((index, self.folder_row(ui, index)));
+                let mut rows = Vec::new();
+                if self.folder_tree {
+                    for node in self.folder_nodes() {
+                        self.folder_node(ui, &node, "tree", &mut rows);
+                    }
+                } else if self.folder_sort == FolderSort::Date {
+                    let order = self.folder_order();
+                    let mut years: Vec<(String, Vec<usize>)> = Vec::new();
+                    for index in order {
+                        let year = self.folder_first_date(index).get(..4).unwrap_or("?").to_owned();
+                        match years.last_mut() {
+                            Some((y, list)) if *y == year => list.push(index),
+                            _ => years.push((year, vec![index])),
                         }
                     }
-                    self.folder_rows_done(ui, rows);
-                });
+                    for (year, list) in years {
+                        let title = format!("{year}  ({})", plural(list.len(), "folder"));
+                        let key = format!("folders/{year}");
+                        let year_open = self.section_open(&key, true);
+                        let year_section = egui::CollapsingHeader::new(title)
+                            .id_salt(("year", &year))
+                            .open(Some(year_open))
+                            .show(ui, |ui| {
+                                for index in list {
+                                    rows.push((index, self.folder_row(ui, index)));
+                                }
+                            });
+                        self.section_clicked(&year_section.header_response, &key, year_open);
+                    }
+                } else {
+                    for index in self.folder_order() {
+                        rows.push((index, self.folder_row(ui, index)));
+                    }
+                }
+                self.folder_rows_done(ui, rows);
             });
         self.note_section(ui.ctx(), id, "folders");
     }
