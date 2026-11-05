@@ -580,7 +580,7 @@ msgstr "Зернистость фотоплёнки"
 msgid "Sharpen"
 msgstr "Увеличить резкость"
 
-#: crates/pico/src/app.rs:2259 crates/pico/src/viewer.rs:822
+#: crates/pico/src/app.rs:2259 crates/pico/src/viewer.rs:823
 msgid "Undo All Edits"
 msgstr "Отменить все правки"
 
@@ -836,7 +836,7 @@ msgstr "Подписи, звёздочки и правки переедут вм
 msgid "Move"
 msgstr "Перенести"
 
-#: crates/pico/src/app.rs:3303 crates/pico/src/folder_manager.rs:127 crates/pico/src/tools.rs:334 crates/pico/src/tools.rs:425
+#: crates/pico/src/app.rs:3303 crates/pico/src/folder_manager.rs:127 crates/pico/src/tools.rs:345 crates/pico/src/tools.rs:721
 msgid "Cancel"
 msgstr "Отмена"
 
@@ -1196,7 +1196,7 @@ msgstr "Вид"
 msgid "Page Format"
 msgstr "Формат листа"
 
-#: crates/pico/src/collage_view.rs:132 crates/pico/src/tools.rs:325
+#: crates/pico/src/collage_view.rs:132 crates/pico/src/tools.rs:336
 msgid "Portrait"
 msgstr "Книжная"
 
@@ -1660,83 +1660,91 @@ msgstr "пауза"
 msgid "Space pause, arrows move, -/+ speed, Esc exit"
 msgstr "Пробел — пауза, стрелки — листать, -/+ — скорость, Esc — выход"
 
-#: crates/pico/src/tools.rs:40
+#: crates/pico/src/tools.rs:42
 msgid "Manual"
 msgstr "Вручную"
 
-#: crates/pico/src/tools.rs:44
+#: crates/pico/src/tools.rs:46
 msgid "Square"
 msgstr "Квадрат"
 
-#: crates/pico/src/tools.rs:49
+#: crates/pico/src/tools.rs:51
 msgid "As shot"
 msgstr "Как снято"
 
-#: crates/pico/src/tools.rs:50
+#: crates/pico/src/tools.rs:52
 msgid "As the screen"
 msgstr "Как экран"
 
-#: crates/pico/src/tools.rs:277
+#: crates/pico/src/tools.rs:276
 msgid "Drag over the photo to choose what stays"
 msgstr "Обведите на фото то, что останется"
 
-#: crates/pico/src/tools.rs:313 crates/pico/src/viewer.rs:707
+#: crates/pico/src/tools.rs:323 crates/pico/src/viewer.rs:707
 msgid "Crop"
 msgstr "Кадрирование"
 
-#: crates/pico/src/tools.rs:314
+#: crates/pico/src/tools.rs:324
 msgid "Drag over the photo. Everything outside the box goes away (not really: Undo brings it back)."
 msgstr "Обведите рамкой часть фото. Всё за рамкой исчезнет (не совсем: «Отменить» вернёт)."
 
-#: crates/pico/src/tools.rs:316
+#: crates/pico/src/tools.rs:326
 msgid "Aspect"
 msgstr "Пропорции"
 
-#: crates/pico/src/tools.rs:331 crates/pico/src/tools.rs:422 crates/pico/src/tools.rs:447
+#: crates/pico/src/tools.rs:342 crates/pico/src/tools.rs:718 crates/pico/src/tools.rs:743
 msgid "Apply"
 msgstr "Применить"
 
-#: crates/pico/src/tools.rs:337
+#: crates/pico/src/tools.rs:348
 msgid "Reset"
 msgstr "Сбросить"
 
-#: crates/pico/src/tools.rs:387
-msgid "Click the photo to place the center."
-msgstr "Щёлкните по фото, чтобы поставить центр."
+#: crates/pico/src/tools.rs:676
+msgid "On the photo, drag the solid line (full tint) and the dashed one (no tint), or the circle between them to move both."
+msgstr "Тяните на фото сплошную линию (полный тон) и пунктирную (тона нет) или кружок между ними, чтобы сдвинуть обе."
 
-#: crates/pico/src/tools.rs:409
+#: crates/pico/src/tools.rs:680
+msgid "Click or drag on the photo to place the center; drag the circle to change its size."
+msgstr "Щёлкните или тяните по фото, чтобы поставить центр; тяните круг, чтобы изменить его размер."
+
+#: crates/pico/src/tools.rs:682
+msgid "Click or drag on the photo to place the center."
+msgstr "Щёлкните или тяните по фото, чтобы поставить центр."
+
+#: crates/pico/src/tools.rs:705
 msgid "Direction"
 msgstr "Направление"
 
-#: crates/pico/src/tools.rs:411
+#: crates/pico/src/tools.rs:707
 msgid "From top"
 msgstr "Сверху"
 
-#: crates/pico/src/tools.rs:411
+#: crates/pico/src/tools.rs:707
 msgid "From right"
 msgstr "Справа"
 
-#: crates/pico/src/tools.rs:411
+#: crates/pico/src/tools.rs:707
 msgid "From bottom"
 msgstr "Снизу"
 
-#: crates/pico/src/tools.rs:411
+#: crates/pico/src/tools.rs:707
 msgid "From left"
 msgstr "Слева"
 
-#: crates/pico/src/tools.rs:428
+#: crates/pico/src/tools.rs:724
 msgid "Defaults"
 msgstr "По умолчанию"
 
-#: crates/pico/src/tools.rs:440 crates/pico/src/viewer.rs:711
+#: crates/pico/src/tools.rs:736 crates/pico/src/viewer.rs:711
 msgid "Straighten"
 msgstr "Выравнивание"
 
-#: crates/pico/src/tools.rs:441
+#: crates/pico/src/tools.rs:737
 msgid "Line up the horizon with the grid."
 msgstr "Выровняйте горизонт по сетке."
 
-#: crates/pico/src/tools.rs:443 crates/pico-core/src/effects.rs:179
+#: crates/pico/src/tools.rs:739 crates/pico-core/src/effects.rs:179
 msgid "Angle"
 msgstr "Угол"
 
@@ -1780,7 +1788,7 @@ msgstr "Повернуть против часовой (Ctrl+Shift+R)"
 msgid "Rotate clockwise (Ctrl+R)"
 msgstr "Повернуть по часовой (Ctrl+R)"
 
-#: crates/pico/src/viewer.rs:466 crates/pico/src/viewer.rs:933
+#: crates/pico/src/viewer.rs:466 crates/pico/src/viewer.rs:934
 msgid "Original"
 msgstr "Оригинал"
 
@@ -1860,39 +1868,39 @@ msgstr "Эффекты"
 msgid "Creative Kit"
 msgstr "Фотостудия"
 
-#: crates/pico/src/viewer.rs:804
+#: crates/pico/src/viewer.rs:805
 msgid "No edits yet. The photo is perfect, apparently."
 msgstr "Правок пока нет. Видимо, фото идеально."
 
-#: crates/pico/src/viewer.rs:808
+#: crates/pico/src/viewer.rs:809
 msgid "{n} not shown yet (kept in the file)"
 msgstr "Ещё не показано: {n} (сохраняются в файле)"
 
-#: crates/pico/src/viewer.rs:809
+#: crates/pico/src/viewer.rs:810
 msgid "Pico keeps edits it cannot draw yet, so Picasa still sees them."
 msgstr "Pico сохраняет правки, которые пока не умеет рисовать, чтобы их видела Picasa."
 
-#: crates/pico/src/viewer.rs:813
+#: crates/pico/src/viewer.rs:814
 msgid "Undo"
 msgstr "Отменить"
 
-#: crates/pico/src/viewer.rs:814
+#: crates/pico/src/viewer.rs:815
 msgid "Remove the last edit (Ctrl+Z)"
 msgstr "Отменить последнюю правку (Ctrl+Z)"
 
-#: crates/pico/src/viewer.rs:817
+#: crates/pico/src/viewer.rs:818
 msgid "Redo"
 msgstr "Вернуть"
 
-#: crates/pico/src/viewer.rs:818
+#: crates/pico/src/viewer.rs:819
 msgid "Bring the edit back (Ctrl+Y)"
 msgstr "Вернуть правку (Ctrl+Y)"
 
-#: crates/pico/src/viewer.rs:983
+#: crates/pico/src/viewer.rs:972
 msgid "Pico squinted at this file and gave up:\n{error}"
 msgstr "Pico прищурился, глядя на этот файл, и сдался:\n{error}"
 
-#: crates/pico/src/viewer.rs:805
+#: crates/pico/src/viewer.rs:806
 msgid "{n} edit"
 msgid_plural "{n} edits"
 msgstr[0] "{n} правка"

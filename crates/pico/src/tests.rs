@@ -1847,6 +1847,43 @@ fn effect_tool_places_center_on_rotated_photo() {
 }
 
 #[test]
+fn graduated_tint_ends_are_dragged_on_the_photo() {
+    let fixture = Fixture::new("gradient");
+    let mut harness = harness(&fixture.dir);
+    wait_until(&mut harness, "the folder scan", |app| app.folder_count() == 1);
+    harness.get_by_label("a.png").click();
+    harness.step();
+    harness.key_press(Key::Enter);
+    harness.state_mut().open_edit_panel();
+    wait_until(&mut harness, "the photo", |app| app.viewer_loaded());
+    harness.get_by_label("Graduated Tint").click();
+    harness.run_steps(4);
+    // Full tint down to 0.375 of the height, gone from 0.625: the dashed end
+    // line, taken away from its handle, goes down to 0.875.
+    let photo = harness.get_by_label("Photo").rect();
+    let at = |x: f32, y: f32| photo.min + photo.size() * egui::vec2(x, y);
+    harness.drag_at(at(0.2, 0.625));
+    harness.step();
+    harness.hover_at(at(0.2, 0.7));
+    harness.step();
+    harness.hover_at(at(0.2, 0.875));
+    harness.step();
+    harness.drop_at(at(0.2, 0.875));
+    harness.step();
+    screenshot(&mut harness, "graduated-tint");
+    harness.key_press(Key::Enter);
+    harness.step();
+
+    let ini = fixture.ini();
+    let params = ini.split("dir_tint=1,").nth(1).expect("tint saved").split(';').next().unwrap();
+    let values: Vec<&str> = params.split(',').collect();
+    let number = |i: usize| values[i].parse::<f32>().unwrap();
+    assert!((number(1) - 0.625).abs() < 0.02, "the middle moved down: {params}");
+    assert!((number(2) - 0.5).abs() < 0.02, "the feather doubled: {params}");
+    assert_eq!(values[5], "0", "still from the top: {params}");
+}
+
+#[test]
 fn slideshow_advances_pauses_and_returns() {
     let fixture = Fixture::new("slideshow");
     let dir = fixture.dir.clone();

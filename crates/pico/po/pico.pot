@@ -578,7 +578,7 @@ msgstr ""
 msgid "Sharpen"
 msgstr ""
 
-#: crates/pico/src/app.rs:2259 crates/pico/src/viewer.rs:822
+#: crates/pico/src/app.rs:2259 crates/pico/src/viewer.rs:823
 msgid "Undo All Edits"
 msgstr ""
 
@@ -834,7 +834,7 @@ msgstr ""
 msgid "Move"
 msgstr ""
 
-#: crates/pico/src/app.rs:3303 crates/pico/src/folder_manager.rs:127 crates/pico/src/tools.rs:334 crates/pico/src/tools.rs:425
+#: crates/pico/src/app.rs:3303 crates/pico/src/folder_manager.rs:127 crates/pico/src/tools.rs:345 crates/pico/src/tools.rs:721
 msgid "Cancel"
 msgstr ""
 
@@ -1186,7 +1186,7 @@ msgstr ""
 msgid "Page Format"
 msgstr ""
 
-#: crates/pico/src/collage_view.rs:132 crates/pico/src/tools.rs:325
+#: crates/pico/src/collage_view.rs:132 crates/pico/src/tools.rs:336
 msgid "Portrait"
 msgstr ""
 
@@ -1650,83 +1650,91 @@ msgstr ""
 msgid "Space pause, arrows move, -/+ speed, Esc exit"
 msgstr ""
 
-#: crates/pico/src/tools.rs:40
+#: crates/pico/src/tools.rs:42
 msgid "Manual"
 msgstr ""
 
-#: crates/pico/src/tools.rs:44
+#: crates/pico/src/tools.rs:46
 msgid "Square"
 msgstr ""
 
-#: crates/pico/src/tools.rs:49
+#: crates/pico/src/tools.rs:51
 msgid "As shot"
 msgstr ""
 
-#: crates/pico/src/tools.rs:50
+#: crates/pico/src/tools.rs:52
 msgid "As the screen"
 msgstr ""
 
-#: crates/pico/src/tools.rs:277
+#: crates/pico/src/tools.rs:276
 msgid "Drag over the photo to choose what stays"
 msgstr ""
 
-#: crates/pico/src/tools.rs:313 crates/pico/src/viewer.rs:707
+#: crates/pico/src/tools.rs:323 crates/pico/src/viewer.rs:707
 msgid "Crop"
 msgstr ""
 
-#: crates/pico/src/tools.rs:314
+#: crates/pico/src/tools.rs:324
 msgid "Drag over the photo. Everything outside the box goes away (not really: Undo brings it back)."
 msgstr ""
 
-#: crates/pico/src/tools.rs:316
+#: crates/pico/src/tools.rs:326
 msgid "Aspect"
 msgstr ""
 
-#: crates/pico/src/tools.rs:331 crates/pico/src/tools.rs:422 crates/pico/src/tools.rs:447
+#: crates/pico/src/tools.rs:342 crates/pico/src/tools.rs:718 crates/pico/src/tools.rs:743
 msgid "Apply"
 msgstr ""
 
-#: crates/pico/src/tools.rs:337
+#: crates/pico/src/tools.rs:348
 msgid "Reset"
 msgstr ""
 
-#: crates/pico/src/tools.rs:387
-msgid "Click the photo to place the center."
+#: crates/pico/src/tools.rs:676
+msgid "On the photo, drag the solid line (full tint) and the dashed one (no tint), or the circle between them to move both."
 msgstr ""
 
-#: crates/pico/src/tools.rs:409
+#: crates/pico/src/tools.rs:680
+msgid "Click or drag on the photo to place the center; drag the circle to change its size."
+msgstr ""
+
+#: crates/pico/src/tools.rs:682
+msgid "Click or drag on the photo to place the center."
+msgstr ""
+
+#: crates/pico/src/tools.rs:705
 msgid "Direction"
 msgstr ""
 
-#: crates/pico/src/tools.rs:411
+#: crates/pico/src/tools.rs:707
 msgid "From top"
 msgstr ""
 
-#: crates/pico/src/tools.rs:411
+#: crates/pico/src/tools.rs:707
 msgid "From right"
 msgstr ""
 
-#: crates/pico/src/tools.rs:411
+#: crates/pico/src/tools.rs:707
 msgid "From bottom"
 msgstr ""
 
-#: crates/pico/src/tools.rs:411
+#: crates/pico/src/tools.rs:707
 msgid "From left"
 msgstr ""
 
-#: crates/pico/src/tools.rs:428
+#: crates/pico/src/tools.rs:724
 msgid "Defaults"
 msgstr ""
 
-#: crates/pico/src/tools.rs:440 crates/pico/src/viewer.rs:711
+#: crates/pico/src/tools.rs:736 crates/pico/src/viewer.rs:711
 msgid "Straighten"
 msgstr ""
 
-#: crates/pico/src/tools.rs:441
+#: crates/pico/src/tools.rs:737
 msgid "Line up the horizon with the grid."
 msgstr ""
 
-#: crates/pico/src/tools.rs:443 crates/pico-core/src/effects.rs:179
+#: crates/pico/src/tools.rs:739 crates/pico-core/src/effects.rs:179
 msgid "Angle"
 msgstr ""
 
@@ -1770,7 +1778,7 @@ msgstr ""
 msgid "Rotate clockwise (Ctrl+R)"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:466 crates/pico/src/viewer.rs:933
+#: crates/pico/src/viewer.rs:466 crates/pico/src/viewer.rs:934
 msgid "Original"
 msgstr ""
 
@@ -1850,39 +1858,39 @@ msgstr ""
 msgid "Creative Kit"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:804
+#: crates/pico/src/viewer.rs:805
 msgid "No edits yet. The photo is perfect, apparently."
 msgstr ""
 
-#: crates/pico/src/viewer.rs:808
+#: crates/pico/src/viewer.rs:809
 msgid "{n} not shown yet (kept in the file)"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:809
+#: crates/pico/src/viewer.rs:810
 msgid "Pico keeps edits it cannot draw yet, so Picasa still sees them."
 msgstr ""
 
-#: crates/pico/src/viewer.rs:813
+#: crates/pico/src/viewer.rs:814
 msgid "Undo"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:814
+#: crates/pico/src/viewer.rs:815
 msgid "Remove the last edit (Ctrl+Z)"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:817
+#: crates/pico/src/viewer.rs:818
 msgid "Redo"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:818
+#: crates/pico/src/viewer.rs:819
 msgid "Bring the edit back (Ctrl+Y)"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:983
+#: crates/pico/src/viewer.rs:972
 msgid "Pico squinted at this file and gave up:\n{error}"
 msgstr ""
 
-#: crates/pico/src/viewer.rs:805
+#: crates/pico/src/viewer.rs:806
 msgid "{n} edit"
 msgid_plural "{n} edits"
 msgstr[0] ""

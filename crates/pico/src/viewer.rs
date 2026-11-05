@@ -10,7 +10,7 @@ use crate::star;
 use crate::tools::{self, CropTool, Tool, ToolAction};
 use eframe::egui;
 use pico_core::adjust;
-use pico_core::effects::{self, Group, ParamValue};
+use pico_core::effects::{self, Group};
 use pico_core::filters::{Filter, FilterStack, Value};
 use pico_core::image::DynamicImage;
 use pico_core::image::imageops::FilterType;
@@ -352,7 +352,7 @@ impl Viewer {
                     Some((_, Tool::Straighten { amount })) => {
                         (*amount != 0.0).then(|| ToolAction::Apply(tools::straighten_filter(*amount)))
                     }
-                    Some((_, Tool::Effect { spec, params })) => {
+                    Some((_, Tool::Effect { spec, params, .. })) => {
                         Some(ToolAction::Apply(effects::to_filter(spec, params)))
                     }
                     None => None,
@@ -691,7 +691,7 @@ impl Viewer {
                 Some(action)
             }
             Some((_, Tool::Straighten { amount })) => Some(tools::straighten_controls(ui, amount)),
-            Some((_, Tool::Effect { spec, params })) => Some(tools::effect_controls(ui, spec, params)),
+            Some((_, Tool::Effect { spec, params, .. })) => Some(tools::effect_controls(ui, spec, params)),
             None => None,
         };
         if let Some(tool_action) = tool_action {
@@ -788,7 +788,8 @@ impl Viewer {
                 commit = true;
             } else {
                 self.draft = None;
-                self.tool = Some((file.path.clone(), Tool::Effect { spec, params: effects::defaults(spec) }));
+                self.tool =
+                    Some((file.path.clone(), Tool::Effect { spec, params: effects::defaults(spec), grab: None }));
                 return None;
             }
         }
@@ -850,7 +851,7 @@ impl Viewer {
             Some((_, Tool::Straighten { amount })) if *amount != 0.0 => {
                 meta.filters.0.push(tools::straighten_filter(*amount));
             }
-            Some((_, Tool::Effect { spec, params })) => meta.filters.0.push(effects::to_filter(spec, params)),
+            Some((_, Tool::Effect { spec, params, .. })) => meta.filters.0.push(effects::to_filter(spec, params)),
             _ => {}
         }
         meta
@@ -959,22 +960,10 @@ impl Viewer {
                     crop.paint(ui.painter(), rect);
                 }
                 Some((_, Tool::Straighten { .. })) => tools::paint_grid(ui.painter(), rect),
-                Some((_, Tool::Effect { params, .. })) => {
-                    let to_screen = |p: egui::Pos2| rect.min + p.to_vec2() * rect.size();
-                    for value in params.iter_mut() {
-                        if let ParamValue::Point(x, y) = value {
-                            if response.clicked()
-                                && let Some(pos) = response.interact_pointer_pos()
-                            {
-                                let shown = ((pos - rect.min) / rect.size()).to_pos2();
-                                let source = tools::unrotate_point(shown, meta.rotate);
-                                (*x, *y) = (source.x.clamp(0.0, 1.0), source.y.clamp(0.0, 1.0));
-                            }
-                            let marker = to_screen(tools::rotate_point(egui::pos2(*x, *y), meta.rotate));
-                            ui.painter().circle_stroke(marker, 9.0, egui::Stroke::new(2.0, egui::Color32::WHITE));
-                            ui.painter().circle_stroke(marker, 11.0, egui::Stroke::new(1.0, egui::Color32::BLACK));
-                        }
-                    }
+                Some((_, Tool::Effect { spec, params, grab })) => {
+                    // Screen pixels per pixel of the photo.
+                    let per_px = rect.width() / (size.x / base_scale);
+                    tools::effect_handles(ui.painter(), &response, rect, meta.rotate, per_px, spec, params, grab);
                 }
                 None => {}
             }
@@ -1297,7 +1286,7 @@ impl Viewer {
         match &self.tool {
             Some((_, Tool::Crop(crop))) => format!("crop {:?}", crop.rect),
             Some((_, Tool::Straighten { amount })) => format!("straighten {amount}"),
-            Some((_, Tool::Effect { spec, params })) => format!("effect {} {params:?}", spec.id),
+            Some((_, Tool::Effect { spec, params, .. })) => format!("effect {} {params:?}", spec.id),
             None => "none".into(),
         }
     }

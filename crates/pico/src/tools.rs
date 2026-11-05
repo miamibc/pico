@@ -15,6 +15,8 @@ pub enum Tool {
     Effect {
         spec: &'static Spec,
         params: Vec<ParamValue>,
+        /// The handle on the photo being dragged.
+        grab: Option<Grab>,
     },
 }
 
@@ -387,13 +389,298 @@ pub fn rotate_point(p: Pos2, rotate: u8) -> Pos2 {
     (0..(4 - rotate % 4) % 4).fold(p, |p, _| unrotate_point(p, 1))
 }
 
+/// A handle on the photo for an effect's point, size or gradient.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Grab {
+    /// The point the effect is centred on, or the middle of a gradient.
+    Center,
+    /// The edge of the circle the effect keeps clear (Size, Focal Size).
+    Ring,
+    /// Where a gradient starts: tinted fully up to here.
+    Start,
+    /// Where a gradient ends: no tint from here.
+    End,
+}
+
+/// How near, in screen pixels, a press takes hold of a handle.
+const HANDLE_REACH: f32 = 10.0;
+
+/// The circle of an effect (see [`has_ring`]): the index of the value that
+/// sizes it, and its radius on screen. `diagonal` is the photo's on screen,
+/// `per_px` screen pixels per pixel of the photo.
+fn ring(spec: &Spec, params: &[ParamValue], diagonal: f32, per_px: f32) -> Option<(usize, f32)> {
+    let value = |i: usize| params.get(i).map(|p| p.number());
+    let half = diagonal / 2.0;
+    match spec.id {
+        // Size -1..=1 is a radius of 0..=1 half diagonals.
+        "radblur" | "radsat" => Some((1, (value(1)? + 1.0) / 2.0 * half)),
+        "focalpixelate" => Some((2, value(2)? / 2.0 * half)),
+        // Focal Size in pixels of the photo.
+        "PicnikFocalPixelate" | "FocalZoom" => Some((2, value(2)? * per_px)),
+        _ => None,
+    }
+}
+
+/// Whether the effect keeps a circle around its centre, sized by a slider.
+fn has_ring(spec: &Spec) -> bool {
+    matches!(spec.id, "radblur" | "radsat" | "focalpixelate" | "PicnikFocalPixelate" | "FocalZoom")
+}
+
+/// The value at the ring's index that gives a radius of `radius` on screen.
+fn ring_value(spec: &Spec, radius: f32, diagonal: f32, per_px: f32) -> f32 {
+    let half = diagonal / 2.0;
+    match spec.id {
+        "radblur" | "radsat" => radius / half * 2.0 - 1.0,
+        "focalpixelate" => radius / half * 2.0,
+        _ => radius / per_px,
+    }
+}
+
+/// A graduated tint along one side of the photo: `rotation` quarter turns
+/// from the top. Positions along it run 0..1 from that side.
+struct Gradient {
+    rotation: i32,
+    /// Full tint up to here, none from `end` on.
+    start: f32,
+    end: f32,
+    /// Where across the gradient its handles sit.
+    across: f32,
+}
+
+impl Gradient {
+    fn read(params: &[ParamValue]) -> Option<Self> {
+        let (ParamValue::Point(x, y), ParamValue::Number(feather), ParamValue::Rotation(rotation)) =
+            (*params.first()?, *params.get(1)?, *params.get(4)?)
+        else {
+            return None;
+        };
+        let (at, across) = match rotation.rem_euclid(4) {
+            1 => (1.0 - x, y),
+            2 => (1.0 - y, x),
+            3 => (x, y),
+            _ => (y, x),
+        };
+        Some(Self { rotation: rotation.rem_euclid(4), start: at - feather / 2.0, end: at + feather / 2.0, across })
+    }
+
+    fn write(&self, params: &mut [ParamValue]) {
+        let at = ((self.start + self.end) / 2.0).clamp(0.0, 1.0);
+        let point = match self.rotation {
+            1 => (1.0 - at, self.across),
+            2 => (self.across, 1.0 - at),
+            3 => (at, self.across),
+            _ => (self.across, at),
+        };
+        params[0] = ParamValue::Point(point.0, point.1);
+        params[1] = ParamValue::Number((self.end - self.start).clamp(0.0, 1.0));
+        params[4] = ParamValue::Rotation(self.rotation);
+    }
+
+    /// The photo point (unit, before the quarter turns) at `along` and
+    /// `across` the gradient.
+    fn point(&self, along: f32, across: f32) -> Pos2 {
+        match self.rotation {
+            1 => pos2(1.0 - along, across),
+            2 => pos2(across, 1.0 - along),
+            3 => pos2(along, across),
+            _ => pos2(across, along),
+        }
+    }
+
+    /// How far along the gradient a photo point is.
+    fn along(&self, p: Pos2) -> f32 {
+        match self.rotation {
+            1 => 1.0 - p.x,
+            2 => 1.0 - p.y,
+            3 => p.x,
+            _ => p.y,
+        }
+    }
+
+    /// Moves the start or the end to `along`; past the other one, the tint
+    /// turns to come from the opposite side. Feather stays within 0..=1.
+    fn pull(&mut self, which: Grab, along: f32) {
+        let (moved, other) = if which == Grab::Start { (along, self.end) } else { (along, self.start) };
+        let moved = moved.clamp(other - 1.0, other + 1.0);
+        let (start, end) = if which == Grab::Start { (moved, other) } else { (other, moved) };
+        if start <= end {
+            (self.start, self.end) = (start, end);
+        } else {
+            // Seen from the other side, positions run the other way.
+            self.rotation = (self.rotation + 2) % 4;
+            (self.start, self.end) = (1.0 - start, 1.0 - end);
+        }
+    }
+}
+
+/// Draws the handles of an effect being adjusted over the photo shown in
+/// `rect`, and lets the mouse move them: the centre, the circle around it,
+/// or a gradient's start and end. A click elsewhere puts the centre there,
+/// as in Picasa. `per_px` is screen pixels per pixel of the photo.
+#[allow(clippy::too_many_arguments)]
+pub fn effect_handles(
+    painter: &egui::Painter,
+    response: &egui::Response,
+    rect: Rect,
+    rotate: u8,
+    per_px: f32,
+    spec: &Spec,
+    params: &mut [ParamValue],
+    grab: &mut Option<Grab>,
+) {
+    let Some(point_at) = params.iter().position(|p| matches!(p, ParamValue::Point(..))) else { return };
+    let to_screen = |p: Pos2| rect.min + rotate_point(p, rotate).to_vec2() * rect.size();
+    let to_photo = |p: Pos2| {
+        let shown = ((p - rect.min) / rect.size()).to_pos2();
+        let p = unrotate_point(shown, rotate);
+        pos2(p.x.clamp(0.0, 1.0), p.y.clamp(0.0, 1.0))
+    };
+    let diagonal = rect.size().length();
+    let gradient = (spec.id == "dir_tint").then(|| Gradient::read(params)).flatten();
+    let center = match params[point_at] {
+        ParamValue::Point(x, y) => to_screen(pos2(x, y)),
+        _ => return,
+    };
+    let circle = ring(spec, params, diagonal, per_px);
+    // The gradient's lines across the photo, and their handles.
+    let line = |g: &Gradient, along: f32| [to_screen(g.point(along, 0.0)), to_screen(g.point(along, 1.0))];
+    let handle = |g: &Gradient, along: f32| to_screen(g.point(along, g.across));
+    // Up and down the screen, or across it.
+    let upright = gradient.as_ref().is_some_and(|g| (g.rotation + rotate as i32) % 2 == 0);
+
+    let near = |p: Pos2| -> Option<Grab> {
+        if let Some(g) = &gradient {
+            let off = |along: f32| {
+                let [a, b] = line(g, along);
+                if upright { (p.y - a.y).abs() } else { (p.x - a.x).abs().min((p.x - b.x).abs()) }
+            };
+            if p.distance(handle(g, (g.start + g.end) / 2.0)) <= HANDLE_REACH {
+                return Some(Grab::Center);
+            }
+            for (which, along) in [(Grab::Start, g.start), (Grab::End, g.end)] {
+                if off(along) <= HANDLE_REACH {
+                    return Some(which);
+                }
+            }
+            return None;
+        }
+        if p.distance(center) <= HANDLE_REACH {
+            return Some(Grab::Center);
+        }
+        circle.filter(|(_, r)| (p.distance(center) - r).abs() <= HANDLE_REACH).map(|_| Grab::Ring)
+    };
+
+    let press = response.ctx.input(|i| i.pointer.press_origin());
+    if response.drag_started() {
+        // A drag away from the handles takes the centre along.
+        *grab = Some(press.and_then(near).unwrap_or(Grab::Center));
+    }
+    let pointer = response.interact_pointer_pos();
+    let moved_to = match (response.clicked(), response.dragged(), *grab) {
+        (true, _, _) => pointer.map(|p| (Grab::Center, p)),
+        (_, true, Some(which)) => pointer.map(|p| (which, p)),
+        _ => None,
+    };
+    if let Some((which, p)) = moved_to {
+        match (which, (spec.id == "dir_tint").then(|| Gradient::read(params)).flatten()) {
+            (Grab::Start | Grab::End, Some(mut g)) => {
+                g.pull(which, g.along(to_photo(p)));
+                g.write(params);
+            }
+            (Grab::Center, Some(mut g)) => {
+                let half = (g.end - g.start) / 2.0;
+                let at = g.along(to_photo(p));
+                (g.start, g.end) = (at - half, at + half);
+                g.across = match g.rotation % 2 {
+                    0 => to_photo(p).x,
+                    _ => to_photo(p).y,
+                };
+                g.write(params);
+            }
+            (Grab::Ring, _) => {
+                if let Some((index, _)) = circle {
+                    let value = ring_value(spec, p.distance(center), diagonal, per_px);
+                    let (min, max) = match spec.params.get(index) {
+                        Some(Param::Slider { min, max, .. }) => (*min, *max),
+                        _ => (f32::MIN, f32::MAX),
+                    };
+                    params[index] = ParamValue::Number(value.clamp(min, max));
+                }
+            }
+            _ => {
+                let at = to_photo(p);
+                params[point_at] = ParamValue::Point(at.x, at.y);
+            }
+        }
+    }
+    if response.drag_stopped() {
+        *grab = None;
+    }
+    // The pointer tells what a press would take.
+    let resize = if upright { egui::CursorIcon::ResizeVertical } else { egui::CursorIcon::ResizeHorizontal };
+    let cursor = match grab.or_else(|| response.hover_pos().and_then(near)) {
+        Some(Grab::Center) => egui::CursorIcon::Move,
+        Some(Grab::Start | Grab::End) => resize,
+        Some(Grab::Ring) => egui::CursorIcon::ResizeHorizontal,
+        None if response.hovered() => egui::CursorIcon::Crosshair,
+        None => egui::CursorIcon::Default,
+    };
+    if cursor != egui::CursorIcon::Default {
+        response.ctx.set_cursor_icon(cursor);
+    }
+
+    // Drawn from the values as they are now.
+    let painter = painter.with_clip_rect(rect);
+    let white = Stroke::new(2.0, Color32::WHITE);
+    let dark = Stroke::new(4.0, Color32::from_black_alpha(140));
+    let square = |at: Pos2| {
+        let r = Rect::from_center_size(at, Vec2::splat(9.0));
+        painter.rect_filled(r.expand(1.0), 1.0, Color32::from_black_alpha(160));
+        painter.rect_filled(r, 1.0, Color32::WHITE);
+    };
+    let center = match params[point_at] {
+        ParamValue::Point(x, y) => to_screen(pos2(x, y)),
+        _ => return,
+    };
+    if let Some(g) = (spec.id == "dir_tint").then(|| Gradient::read(params)).flatten() {
+        // The start solid, the end dashed; the middle holds the gradient.
+        let [a, b] = line(&g, g.start);
+        painter.line_segment([a, b], dark);
+        painter.line_segment([a, b], white);
+        let [a, b] = line(&g, g.end);
+        painter.add(egui::Shape::dashed_line(&[a, b], dark, 8.0, 6.0));
+        painter.add(egui::Shape::dashed_line(&[a, b], white, 8.0, 6.0));
+        square(handle(&g, g.start));
+        square(handle(&g, g.end));
+        let middle = handle(&g, (g.start + g.end) / 2.0);
+        painter.circle_stroke(middle, 7.0, dark);
+        painter.circle_stroke(middle, 7.0, white);
+        return;
+    }
+    if let Some((_, radius)) = ring(spec, params, diagonal, per_px) {
+        painter.circle_stroke(center, radius, dark);
+        painter.circle_stroke(center, radius, Stroke::new(1.5, Color32::WHITE));
+        square(center + Vec2::X * radius);
+    }
+    painter.circle_stroke(center, 9.0, dark);
+    painter.circle_stroke(center, 9.0, white);
+}
+
 /// Controls for an effect's parameters, built from its spec.
 pub fn effect_controls(ui: &mut egui::Ui, spec: &Spec, params: &mut [ParamValue]) -> Option<ToolAction> {
     ui.heading(crate::i18n::tr(spec.label));
     for (param, value) in spec.params.iter().zip(params.iter_mut()) {
         match (*param, value) {
             (Param::Point, ParamValue::Point(..)) => {
-                ui.label(tr!("Click the photo to place the center."));
+                ui.label(match spec.id {
+                    "dir_tint" => tr!(
+                        "On the photo, drag the solid line (full tint) and the dashed one (no tint), or the circle between them to move both."
+                    ),
+                    _ if has_ring(spec) => {
+                        tr!("Click or drag on the photo to place the center; drag the circle to change its size.")
+                    }
+                    _ => tr!("Click or drag on the photo to place the center."),
+                });
             }
             (Param::Slider { label, min, max, .. }, ParamValue::Number(v)) => {
                 ui.add(egui::Slider::new(v, min..=max).text(crate::i18n::tr(label)));
@@ -579,5 +866,61 @@ mod tests {
         assert!((tool.unit_ratio(image_px).unwrap() - 1.6).abs() < 1e-5);
         tool.portrait = true;
         assert!((tool.unit_ratio(image_px).unwrap() - 1.0 / 1.6).abs() < 1e-5);
+    }
+
+    fn tint(x: f32, y: f32, feather: f32, rotation: i32) -> Vec<ParamValue> {
+        vec![
+            ParamValue::Point(x, y),
+            ParamValue::Number(feather),
+            ParamValue::Number(0.25),
+            ParamValue::Color(0xff3a6ea5),
+            ParamValue::Rotation(rotation),
+        ]
+    }
+
+    #[test]
+    fn gradient_ends_move_its_point_and_feather() {
+        let mut params = tint(0.3, 0.5, 0.25, 0);
+        let mut g = Gradient::read(&params).unwrap();
+        assert!((g.start - 0.375).abs() < 1e-6 && (g.end - 0.625).abs() < 1e-6);
+        g.pull(Grab::End, 0.875);
+        g.write(&mut params);
+        assert_eq!(params[0], ParamValue::Point(0.3, 0.625), "the middle moved, across stayed");
+        assert_eq!(params[1], ParamValue::Number(0.5));
+
+        // From the right: positions run from the right edge.
+        let g = Gradient::read(&tint(0.8, 0.4, 0.2, 1)).unwrap();
+        assert!((g.start - 0.1).abs() < 1e-6 && (g.end - 0.3).abs() < 1e-6, "{} {}", g.start, g.end);
+        assert!(g.point(g.start, g.across).distance(pos2(0.9, 0.4)) < 1e-6);
+    }
+
+    #[test]
+    fn pulling_the_start_past_the_end_turns_the_tint_around() {
+        let mut params = tint(0.5, 0.5, 0.2, 0);
+        let mut g = Gradient::read(&params).unwrap();
+        g.pull(Grab::Start, 0.8);
+        g.write(&mut params);
+        // Full tint now from the bottom, down to 0.8 and gone at 0.6.
+        assert_eq!(params[4], ParamValue::Rotation(2));
+        let g = Gradient::read(&params).unwrap();
+        assert!((g.point(g.start, 0.0).y - 0.8).abs() < 1e-5 && (g.point(g.end, 0.0).y - 0.6).abs() < 1e-5);
+        // Feather stops at 1.
+        let mut g = Gradient::read(&tint(0.5, 0.5, 0.2, 0)).unwrap();
+        g.pull(Grab::End, 3.0);
+        assert!((g.end - g.start - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn rings_turn_into_slider_values_and_back() {
+        let spec = effects::spec("radblur").unwrap();
+        let params = vec![ParamValue::Point(0.5, 0.5), ParamValue::Number(0.2), ParamValue::Number(0.0)];
+        let (index, radius) = ring(spec, &params, 500.0, 1.0).unwrap();
+        assert_eq!(index, 1);
+        assert!((ring_value(spec, radius, 500.0, 1.0) - 0.2).abs() < 1e-5);
+        let zoom = effects::spec("FocalZoom").unwrap();
+        let params = effects::defaults(zoom);
+        let (index, radius) = ring(zoom, &params, 500.0, 0.5).unwrap();
+        assert_eq!((index, radius), (2, 125.0), "250 photo pixels at half size");
+        assert!(ring(effects::spec("dir_tint").unwrap(), &params, 500.0, 1.0).is_none());
     }
 }
