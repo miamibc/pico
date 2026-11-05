@@ -46,7 +46,17 @@ pub struct CropTool {
 enum Drag {
     New(Pos2),
     Move(Vec2),
+    /// An edge or a corner pulled: `x` is -1 for the left edge, 1 for the
+    /// right one, 0 for neither; `y` likewise for top and bottom.
+    Resize {
+        x: i8,
+        y: i8,
+        start: Rect,
+    },
 }
+
+/// How close to an edge, in screen pixels, a press grabs it.
+const GRAB: f32 = 8.0;
 
 impl CropTool {
     /// Width / height of the selection in unit space, if the aspect is locked.
@@ -60,21 +70,60 @@ impl CropTool {
         Some(ratio * image_px.y / image_px.x)
     }
 
-    /// Handles dragging on the photo: drag outside the selection to draw a new
-    /// one, inside to move it.
+    /// The selection's edges or corner near the screen point `p`, as the
+    /// `x` and `y` of [`Drag::Resize`].
+    fn edges_at(&self, image_rect: Rect, p: Pos2) -> Option<(i8, i8)> {
+        let unit = self.rect?;
+        let rect = Rect::from_min_max(
+            image_rect.min + unit.min.to_vec2() * image_rect.size(),
+            image_rect.min + unit.max.to_vec2() * image_rect.size(),
+        );
+        if !rect.expand(GRAB).contains(p) {
+            return None;
+        }
+        let side = |p: f32, min: f32, max: f32| {
+            let (to_min, to_max) = ((p - min).abs(), (p - max).abs());
+            if to_min.min(to_max) > GRAB {
+                0
+            } else if to_min < to_max {
+                -1
+            } else {
+                1
+            }
+        };
+        let edges = (side(p.x, rect.min.x, rect.max.x), side(p.y, rect.min.y, rect.max.y));
+        (edges != (0, 0)).then_some(edges)
+    }
+
+    /// Handles dragging on the photo: drag an edge or a corner of the
+    /// selection to resize it, inside to move it, elsewhere to draw a new one.
     pub fn interact(&mut self, response: &egui::Response, image_rect: Rect, image_px: Vec2) {
         let to_unit = |p: Pos2| {
             let v = (p - image_rect.min) / image_rect.size();
             pos2(v.x.clamp(0.0, 1.0), v.y.clamp(0.0, 1.0))
         };
+        // The pointer shows what a press would grab.
+        let cursor = match &self.drag {
+            Some(Drag::Resize { x, y, .. }) => Some(resize_cursor(*x, *y)),
+            Some(Drag::Move(_)) => Some(egui::CursorIcon::Grabbing),
+            Some(Drag::New(_)) => None,
+            None => response.hover_pos().and_then(|p| match self.edges_at(image_rect, p) {
+                Some((x, y)) => Some(resize_cursor(x, y)),
+                None => self.rect.filter(|r| r.contains(to_unit(p))).map(|_| egui::CursorIcon::Grab),
+            }),
+        };
+        if let Some(cursor) = cursor {
+            response.ctx.set_cursor_icon(cursor);
+        }
         // Anchor at the press, not where egui recognised the drag a few pixels later.
         let press = response.ctx.input(|i| i.pointer.press_origin());
         if response.drag_started()
-            && let Some(p) = press.or(response.interact_pointer_pos())
+            && let Some(screen) = press.or(response.interact_pointer_pos())
         {
-            let p = to_unit(p);
-            self.drag = Some(match self.rect {
-                Some(rect) if rect.contains(p) => Drag::Move(p - rect.min),
+            let p = to_unit(screen);
+            self.drag = Some(match (self.rect, self.edges_at(image_rect, screen)) {
+                (Some(start), Some((x, y))) => Drag::Resize { x, y, start },
+                (Some(rect), None) if rect.contains(p) => Drag::Move(p - rect.min),
                 _ => Drag::New(p),
             });
         }
@@ -91,6 +140,7 @@ impl CropTool {
                         self.rect = Some(Rect::from_min_size(min, size));
                     }
                 }
+                Some(Drag::Resize { x, y, start }) => self.rect = Some(self.resize(start, x, y, p, image_px)),
                 None => {}
             }
         }
@@ -115,6 +165,52 @@ impl CropTool {
         let h = w / ratio;
         let corner = pos2(anchor.x + w.copysign(dx), anchor.y + h.copysign(dy));
         Rect::from_two_pos(anchor, corner)
+    }
+
+    /// `start` with the edges `x` and `y` (as in [`Drag::Resize`]) pulled to
+    /// `p`. A locked aspect holds: a corner keeps the opposite corner in
+    /// place, an edge keeps the opposite edge and the middle of the others.
+    fn resize(&self, start: Rect, x: i8, y: i8, p: Pos2, image_px: Vec2) -> Rect {
+        let Some(ratio) = self.unit_ratio(image_px) else {
+            let (mut a, mut b) = (start.min, start.max);
+            match x {
+                -1 => a.x = p.x,
+                1 => b.x = p.x,
+                _ => {}
+            }
+            match y {
+                -1 => a.y = p.y,
+                1 => b.y = p.y,
+                _ => {}
+            }
+            return Rect::from_two_pos(a, b);
+        };
+        let opposite = |side: i8, min: f32, max: f32| if side < 0 { max } else { min };
+        if x != 0 && y != 0 {
+            let anchor = pos2(opposite(x, start.min.x, start.max.x), opposite(y, start.min.y, start.max.y));
+            return self.fit(anchor, p, image_px);
+        }
+        // One edge: its size follows the pointer, the other side's follows the
+        // aspect, centred where it was and kept inside the photo.
+        let span = |anchor: f32, to: f32, limit: f32| {
+            let room = if to < anchor { anchor } else { 1.0 - anchor };
+            let size = (to - anchor).abs().min(room).min(limit);
+            let end = anchor + size.copysign(to - anchor);
+            (anchor.min(end), anchor.max(end))
+        };
+        let centred = |size: f32, centre: f32| {
+            let min = (centre - size / 2.0).clamp(0.0, 1.0 - size);
+            (min, min + size)
+        };
+        if x != 0 {
+            let (x0, x1) = span(opposite(x, start.min.x, start.max.x), p.x, ratio);
+            let (y0, y1) = centred((x1 - x0) / ratio, start.center().y);
+            Rect::from_min_max(pos2(x0, y0), pos2(x1, y1))
+        } else {
+            let (y0, y1) = span(opposite(y, start.min.y, start.max.y), p.y, 1.0 / ratio);
+            let (x0, x1) = centred((y1 - y0) * ratio, start.center().x);
+            Rect::from_min_max(pos2(x0, y0), pos2(x1, y1))
+        }
     }
 
     /// Re-shapes the current selection after the aspect changes.
@@ -159,6 +255,10 @@ impl CropTool {
             painter.line_segment([pos2(rect.min.x, y), pos2(rect.max.x, y)], thirds);
         }
         painter.rect_stroke(rect, 0.0, Stroke::new(2.0, Color32::WHITE), egui::StrokeKind::Outside);
+        // Corners to take hold of; the edges between them pull too.
+        for corner in [rect.left_top(), rect.right_top(), rect.left_bottom(), rect.right_bottom()] {
+            painter.rect_filled(Rect::from_center_size(corner, Vec2::splat(8.0)), 1.0, Color32::WHITE);
+        }
     }
 
     pub fn controls(&mut self, ui: &mut egui::Ui, image_px: Vec2, rotate: u8) -> Option<ToolAction> {
@@ -203,6 +303,16 @@ impl CropTool {
         let source = Rect::from_two_pos(unrotate_point(rect.min, rotate), unrotate_point(rect.max, rotate));
         let rect64 = Rect64::from_unit([source.min.x, source.min.y, source.max.x, source.max.y]);
         Some(ToolAction::Apply(Filter::new("crop64", vec!["1".to_owned(), rect64.to_string()])))
+    }
+}
+
+/// The pointer over an edge (`x` or `y` alone) or a corner of the selection.
+fn resize_cursor(x: i8, y: i8) -> egui::CursorIcon {
+    match (x, y) {
+        (_, 0) => egui::CursorIcon::ResizeHorizontal,
+        (0, _) => egui::CursorIcon::ResizeVertical,
+        _ if x == y => egui::CursorIcon::ResizeNwSe,
+        _ => egui::CursorIcon::ResizeNeSw,
     }
 }
 
@@ -354,5 +464,47 @@ mod tests {
         // Square in pixels: unit width is half the unit height on a 2:1 photo.
         assert!((rect.width() * 400.0 - rect.height() * 200.0).abs() < 0.5, "{rect:?}");
         assert!(rect.max.y <= 1.0 && rect.max.x <= 1.0);
+    }
+
+    #[test]
+    fn edges_and_corners_resize_the_selection() {
+        let start = Rect::from_min_max(pos2(0.2, 0.2), pos2(0.6, 0.6));
+        let image_px = vec2(400.0, 400.0);
+        let manual = CropTool { rect: Some(start), ..Default::default() };
+        // The right edge alone; then the top-left corner.
+        assert_eq!(
+            manual.resize(start, 1, 0, pos2(0.8, 0.9), image_px),
+            Rect::from_min_max(pos2(0.2, 0.2), pos2(0.8, 0.6))
+        );
+        assert_eq!(
+            manual.resize(start, -1, -1, pos2(0.1, 0.0), image_px),
+            Rect::from_min_max(pos2(0.1, 0.0), pos2(0.6, 0.6))
+        );
+
+        let square = CropTool { rect: Some(start), aspect: 4, ..Default::default() };
+        // A corner keeps the opposite one and the aspect.
+        let rect = square.resize(start, 1, 1, pos2(0.9, 0.7), image_px);
+        assert_eq!(rect.min, start.min);
+        assert!((rect.width() - rect.height()).abs() < 1e-5 && (rect.width() - 0.7).abs() < 1e-5, "{rect:?}");
+        // An edge keeps the opposite edge and the middle of the other sides.
+        let rect = square.resize(start, 1, 0, pos2(0.8, 0.5), image_px);
+        assert!((rect.min.x - 0.2).abs() < 1e-5 && (rect.width() - 0.6).abs() < 1e-5, "{rect:?}");
+        assert!((rect.height() - 0.6).abs() < 1e-5 && (rect.center().y - 0.4).abs() < 1e-5, "{rect:?}");
+        // It stops at the photo's edge: the height cannot pass 1.
+        let rect = square.resize(start, 1, 0, pos2(1.0, 0.5), image_px);
+        assert!(rect.max.x <= 1.0 && rect.min.y >= 0.0 && rect.max.y <= 1.0, "{rect:?}");
+        assert!((rect.width() - rect.height()).abs() < 1e-5, "{rect:?}");
+    }
+
+    #[test]
+    fn presses_near_the_edges_grab_them() {
+        let tool =
+            CropTool { rect: Some(Rect::from_min_max(pos2(0.25, 0.25), pos2(0.75, 0.75))), ..Default::default() };
+        let image = Rect::from_min_size(Pos2::ZERO, vec2(400.0, 400.0));
+        assert_eq!(tool.edges_at(image, pos2(100.0, 100.0)), Some((-1, -1)));
+        assert_eq!(tool.edges_at(image, pos2(305.0, 200.0)), Some((1, 0)));
+        assert_eq!(tool.edges_at(image, pos2(200.0, 296.0)), Some((0, 1)));
+        assert_eq!(tool.edges_at(image, pos2(200.0, 200.0)), None, "inside moves");
+        assert_eq!(tool.edges_at(image, pos2(20.0, 20.0)), None, "outside draws anew");
     }
 }
