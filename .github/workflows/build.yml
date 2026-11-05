@@ -1,4 +1,4 @@
-# Builds and tests Pico on Linux, Windows and macOS, and keeps the binaries
+# Builds and tests Picco on Linux, Windows and macOS, and keeps the binaries
 # as downloadable artifacts. macOS can only be built on a Mac, hence CI.
 name: build
 
@@ -16,13 +16,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            binary: target/release/pico
+            binary: target/release/picco
           - os: windows-latest
-            binary: target/release/pico.exe
+            binary: target/release/picco.exe
           - os: macos-latest # Apple Silicon
-            binary: target/release/pico
+            binary: target/release/picco
           - os: macos-15-intel
-            binary: target/release/pico
+            binary: target/release/picco
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -35,10 +35,10 @@ jobs:
           cargo fmt --all --check
           cargo clippy --all-targets -- -D warnings
       - name: Core tests
-        run: cargo test -p pico-core
+        run: cargo test -p picco-core
       - name: Build
-        run: cargo build --release -p pico
+        run: cargo build --release -p picco
       - uses: actions/upload-artifact@v4
         with:
-          name: pico-${{ matrix.os }}
+          name: picco-${{ matrix.os }}
           path: ${{ matrix.binary }}

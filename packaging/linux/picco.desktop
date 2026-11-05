@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Picco
+Comment=The photo organizer you remember
+Exec=picco %F
+Icon=picco
+Terminal=false
+Categories=Graphics;Photography;Viewer;
+StartupWMClass=Picco

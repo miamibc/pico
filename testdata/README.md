@@ -1,12 +1,12 @@
 # Test library
 
-`library/` is a photo library for manual test runs of Pico; each folder covers
+`library/` is a photo library for manual test runs of Picco; each folder covers
 one way `.picasa.ini` files appear in the wild. It is generated, not committed:
 
 ```sh
 python3 testdata/make_testdata.py        # needs Pillow and ffmpeg; photos from ~/Pictures
-cargo run -p pico -- testdata/library    # open it in Pico
-cargo test -p pico testdata_tour -- --ignored   # screenshots of every folder in target/ui-shots/
+cargo run -p picco -- testdata/library    # open it in Picco
+cargo test -p picco testdata_tour -- --ignored   # screenshots of every folder in target/ui-shots/
 ```
 
 | Folder | What it checks |
@@ -17,7 +17,7 @@ cargo test -p pico testdata_tour -- --ignored   # screenshots of every folder in
 | `04-ansi-cp1251` | Russian Windows: Windows-1251 text without the marker |
 | `05-both-dot-and-legacy` | Both files; `.picasa.ini` must win |
 | `06-exif-orientation` | EXIF orientations 1–8, some combined with Picasa rotation |
-| `07-picnik-and-unknown-filters` | Edits Pico cannot draw yet (Picnik, Straighten, unknown, disabled); must survive saving |
+| `07-picnik-and-unknown-filters` | Edits Picco cannot draw yet (Picnik, Straighten, unknown, disabled); must survive saving |
 | `08-video` | Video thumbnails and trim points (`moviestart`/`movieend`) |
 | `09-formats-no-ini` | Many formats, transparency, a broken JPEG, a non-photo file, no INI |
 | `10-crop-rotate-giraffe` | Crop and rotation order, double crop, crop then B&W |
@@ -35,4 +35,4 @@ never lost or downloaded again; they are too big for the repository.
 |---|---|---|
 | `demo-photos/` | The demo library of the README and website screenshots (`make screenshots`), 80 photos in 8 topics with `.picasa.ini` files | CC0 photos from Wikimedia Commons, listed in `docs/screenshots/make_screenshots.py`; `make screenshots` downloads only the ones missing |
 | `data-download/` | What `make places`, `make exif-tags` and `make maker-tags` download (GeoNames, Natural Earth, exiv2 and ExifTool tag pages, ExifRead); its `exifread` tests hold a few more RAW samples | The sources in `docs/data-updates.md`; those targets download afresh each time |
-| `raw-samples/` | Camera RAW files for `crates/pico-core/src/raw.rs` (its `real_raw_files` test reads them): Sony ILCE-7CM2 ARW, Nikon Z8 NEF | CC0 samples from [raw.pixls.us](https://raw.pixls.us/) (`Sony/ILCE-7CM2`, `Nikon/Z 8`) |
+| `raw-samples/` | Camera RAW files for `crates/picco-core/src/raw.rs` (its `real_raw_files` test reads them): Sony ILCE-7CM2 ARW, Nikon Z8 NEF | CC0 samples from [raw.pixls.us](https://raw.pixls.us/) (`Sony/ILCE-7CM2`, `Nikon/Z 8`) |

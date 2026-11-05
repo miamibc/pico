@@ -12,7 +12,7 @@ build:
 
 release:
 	cargo build --release
-	@echo "Built target/release/pico"
+	@echo "Built target/release/picco"
 
 # Windows .exe built on Linux. One-time setup:
 #   rustup target add x86_64-pc-windows-gnu
@@ -21,11 +21,11 @@ release:
 ZIG_BIN ?= $(HOME)/tools/zig-venv/bin
 
 windows:
-	PATH="$(ZIG_BIN):$$PATH" cargo zigbuild --release -p pico --target x86_64-pc-windows-gnu
-	@echo "Built target/x86_64-pc-windows-gnu/release/pico.exe"
+	PATH="$(ZIG_BIN):$$PATH" cargo zigbuild --release -p picco --target x86_64-pc-windows-gnu
+	@echo "Built target/x86_64-pc-windows-gnu/release/picco.exe"
 
 run:
-	cargo run --release -p pico -- $(PICTURES)
+	cargo run --release -p picco -- $(PICTURES)
 
 test:
 	cargo test
@@ -48,7 +48,7 @@ testdata:
 
 # Screenshots of every test-library folder in target/ui-shots/.
 tour: testdata
-	cargo test -p pico testdata_tour -- --ignored
+	cargo test -p picco testdata_tour -- --ignored
 
 # README and website screenshots in docs/screenshots, dark and light, of a demo
 # library of CC0 photos from Wikimedia Commons (needs Python with Pillow, and the
@@ -63,28 +63,28 @@ screenshots:
 	@[ ! -e $(DEMO_LINK) ] || [ -L $(DEMO_LINK) ] || { echo "$(DEMO_LINK) is a real folder: move it into $(DEMO)"; exit 1; }
 	ln -sfn $(DEMO) $(DEMO_LINK)
 	rm -rf target/screenshots
-	PICO_DEMO=$(DEMO_LINK) PICO_SHOTS=$(CURDIR)/target/screenshots cargo test -p pico website_shots -- --ignored
-	PICO_DEMO=$(DEMO_LINK) PICO_SHOTS=$(CURDIR)/target/screenshots PICO_SUFFIX=-light cargo test -p pico website_shots -- --ignored
+	PICCO_DEMO=$(DEMO_LINK) PICCO_SHOTS=$(CURDIR)/target/screenshots cargo test -p picco website_shots -- --ignored
+	PICCO_DEMO=$(DEMO_LINK) PICCO_SHOTS=$(CURDIR)/target/screenshots PICCO_SUFFIX=-light cargo test -p picco website_shots -- --ignored
 	python3 -I docs/screenshots/make_screenshots.py webp target/screenshots docs/screenshots
 
 # Draws the logos for the window and Help → About, and for README the title
 # logo with its text turned into outlines, light and dark (needs Inkscape and
 # the Kamerik 105 font the title is set in).
 logo:
-	inkscape docs/logo/pico.svg -w 256 -h 256 -o crates/pico/assets/pico-256.png
-	inkscape docs/logo/pico-logo-with-title.svg -w 800 -o crates/pico/assets/pico-logo-with-title.png
-	inkscape docs/logo/pico-logo-with-title.svg --export-text-to-path --export-plain-svg -o docs/logo/pico-logo-with-title-paths.svg
-	sed 's/fill:#1e293b/fill:#e2e8f0/g' docs/logo/pico-logo-with-title-paths.svg > docs/logo/pico-logo-with-title-paths-dark.svg
+	inkscape docs/logo/picco.svg -w 256 -h 256 -o crates/picco/assets/picco-256.png
+	inkscape docs/logo/picco-logo-with-title.svg -w 800 -o crates/picco/assets/picco-logo-with-title.png
+	inkscape docs/logo/picco-logo-with-title.svg --export-text-to-path --export-plain-svg -o docs/logo/picco-logo-with-title-paths.svg
+	sed 's/fill:#1e293b/fill:#e2e8f0/g' docs/logo/picco-logo-with-title-paths.svg > docs/logo/picco-logo-with-title-paths-dark.svg
 
-# Lists the crates Pico ships and their license texts for Help → About; run
+# Lists the crates Picco ships and their license texts for Help → About; run
 # after changing dependencies.
 licenses:
-	python3 -I crates/pico/assets/make_licenses.py
+	python3 -I crates/picco/assets/make_licenses.py
 
-# Collects the interface texts into crates/pico/po/pico.pot and brings the
+# Collects the interface texts into crates/picco/po/picco.pot and brings the
 # translations (*.po) up to date; run after changing texts in the code.
 po:
-	python3 -I crates/pico/po/update.py
+	python3 -I crates/picco/po/update.py
 
 # Rarely changing data, refreshed from the internet (see docs/data-updates.md).
 # Downloads go to testdata/data-download (kept, out of git).
@@ -92,7 +92,7 @@ DATA_DL = testdata/data-download
 NE_URL = https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson
 
 # Place names for Places: GeoNames towns, Natural Earth countries, seas and
-# continents, packed into crates/pico-core/data/places.bin.
+# continents, packed into crates/picco-core/data/places.bin.
 places:
 	mkdir -p $(DATA_DL)
 	curl -fL -o $(DATA_DL)/cities1000.zip https://download.geonames.org/export/dump/cities1000.zip
@@ -101,33 +101,36 @@ places:
 	for f in ne_50m_admin_0_countries ne_10m_geography_marine_polys ne_50m_geography_regions_polys; do \
 		curl -fL -o $(DATA_DL)/$$f.geojson $(NE_URL)/$$f.geojson || exit 1; \
 	done
-	python3 -I crates/pico-core/data/make_places.py $(DATA_DL) crates/pico-core/data/places.bin
+	python3 -I crates/picco-core/data/make_places.py $(DATA_DL) crates/picco-core/data/places.bin
 
 # The standard EXIF tag names for Properties, from the exiv2 and ExifTool
-# references, into crates/pico-core/src/exif_tags.rs.
+# references, into crates/picco-core/src/exif_tags.rs.
 exif-tags:
 	mkdir -p $(DATA_DL)
 	curl -fL -o $(DATA_DL)/exiv2.html https://exiv2.org/tags.html
 	curl -fL -o $(DATA_DL)/gps.html https://exiftool.org/TagNames/GPS.html
-	python3 -I crates/pico-core/data/make_exif_tags.py $(DATA_DL) crates/pico-core/src/exif_tags.rs
+	python3 -I crates/picco-core/data/make_exif_tags.py $(DATA_DL) crates/picco-core/src/exif_tags.rs
 
 # Installs the binary into ~/.cargo/bin; on Linux also the menu entry and
 # icon into ~/.local/share (GNOME on Wayland takes the icon only from there).
 # Names and value meanings of the camera makers' notes (MakerNote), from
-# ExifRead's tables (BSD-3-Clause), into crates/pico-core/src/maker_tags.rs.
+# ExifRead's tables (BSD-3-Clause), into crates/picco-core/src/maker_tags.rs.
 EXIFREAD = 3.5.1
 maker-tags:
 	mkdir -p $(DATA_DL)/exifread
 	curl -fL -o $(DATA_DL)/exifread.tar.gz https://github.com/ianare/exif-py/archive/refs/tags/$(EXIFREAD).tar.gz
 	tar xzf $(DATA_DL)/exifread.tar.gz -C $(DATA_DL)/exifread
-	python3 -I crates/pico-core/data/make_maker_tags.py $(DATA_DL)/exifread crates/pico-core/src/maker_tags.rs
-	rustfmt --edition 2024 crates/pico-core/src/maker_tags.rs
+	python3 -I crates/picco-core/data/make_maker_tags.py $(DATA_DL)/exifread crates/picco-core/src/maker_tags.rs
+	rustfmt --edition 2024 crates/picco-core/src/maker_tags.rs
 
 install:
-	cargo install --path crates/pico
-	install -Dm644 docs/logo/pico.svg $(HOME)/.local/share/icons/hicolor/scalable/apps/pico.svg
-	install -Dm644 crates/pico/assets/pico-256.png $(HOME)/.local/share/icons/hicolor/256x256/apps/pico.png
-	sed 's|^Exec=pico|Exec=$(HOME)/.cargo/bin/pico|' packaging/linux/pico.desktop > $(HOME)/.local/share/applications/pico.desktop
+	cargo install --path crates/picco
+	install -Dm644 docs/logo/picco.svg $(HOME)/.local/share/icons/hicolor/scalable/apps/picco.svg
+	install -Dm644 crates/picco/assets/picco-256.png $(HOME)/.local/share/icons/hicolor/256x256/apps/picco.png
+	sed 's|^Exec=picco|Exec=$(HOME)/.cargo/bin/picco|' packaging/linux/picco.desktop > $(HOME)/.local/share/applications/picco.desktop
 
 clean:
 	cargo clean
+
+preview:
+	make build && ./target/debug/picco testdata/raw-samples/

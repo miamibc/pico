@@ -2904,7 +2904,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pico"
+name = "picco"
 version = "0.6.0"
 dependencies = [
  "arboard",
@@ -2912,14 +2912,14 @@ dependencies = [
  "egui",
  "egui_kittest",
  "egui_system_font_provider",
- "pico-core",
+ "picco-core",
  "rfd",
  "sys-locale",
  "zbus",
 ]
 
 [[package]]
-name = "pico-core"
+name = "picco-core"
 version = "0.6.0"
 dependencies = [
  "ab_glyph",

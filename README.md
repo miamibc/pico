@@ -1,5 +1,5 @@
-<img src="docs/logo/pico-logo-with-title-paths.svg#gh-light-mode-only" width="100%" alt="Pico, the photo organizer you remember">
-<img src="docs/logo/pico-logo-with-title-paths-dark.svg#gh-dark-mode-only" width="100%" alt="Pico, the photo organizer you remember">
+<img src="docs/logo/picco-logo-with-title-paths.svg#gh-light-mode-only" width="100%" alt="Picco, the photo organizer you remember">
+<img src="docs/logo/picco-logo-with-title-paths-dark.svg#gh-dark-mode-only" width="100%" alt="Picco, the photo organizer you remember">
 
 **English** · [Русский](README.ru.md)
 
@@ -7,17 +7,17 @@ A small, fast, offline photo organizer for Linux, Windows and macOS that keeps
 your Picasa library alive.
 
 Google stopped Picasa in 2016, but millions of photo folders still carry its
-`.picasa.ini` files with stars, captions, albums and edits. **Pico** is a new
+`.picasa.ini` files with stars, captions, albums and edits. **Picco** is a new
 photo organizer written from scratch in Rust that reads and writes those files,
-so a library built in Picasa years ago opens in Pico as it was, and keeps
+so a library built in Picasa years ago opens in Picco as it was, and keeps
 working the other way round.
 
-Pico is small (a single file, no installer needed) and works completely
+Picco is small (a single file, no installer needed) and works completely
 offline: nothing is uploaded anywhere, and originals are never touched until
 you press **Save**.
 
-<img src="docs/screenshots/pico-1.webp#gh-dark-mode-only" width="100%" alt="The library: every folder in one continuous ribbon">
-<img src="docs/screenshots/pico-1-light.webp#gh-light-mode-only" width="100%" alt="The library: every folder in one continuous ribbon">
+<img src="docs/screenshots/picco-1.webp#gh-dark-mode-only" width="100%" alt="The library: every folder in one continuous ribbon">
+<img src="docs/screenshots/picco-1-light.webp#gh-light-mode-only" width="100%" alt="The library: every folder in one continuous ribbon">
 
 ## Library
 
@@ -31,8 +31,8 @@ you press **Save**.
 - Drag and drop between folders and albums, selection with a rectangle,
   context menus, kinetic scrolling.
 
-<img src="docs/screenshots/pico-4.webp#gh-dark-mode-only" width="100%" alt="Places: photos grouped by where they were taken">
-<img src="docs/screenshots/pico-4-light.webp#gh-light-mode-only" width="100%" alt="Places: photos grouped by where they were taken">
+<img src="docs/screenshots/picco-4.webp#gh-dark-mode-only" width="100%" alt="Places: photos grouped by where they were taken">
+<img src="docs/screenshots/picco-4-light.webp#gh-light-mode-only" width="100%" alt="Places: photos grouped by where they were taken">
 
 ## Editing
 
@@ -46,19 +46,19 @@ you press **Save**.
 - Every edit is non-destructive and stored the way Picasa stored it;
   **Original** shows the photo before edits while the button is held.
 
-<img src="docs/screenshots/pico-2.webp#gh-dark-mode-only" width="100%" alt="Editing: basic fixes, tuning and effects">
-<img src="docs/screenshots/pico-2-light.webp#gh-light-mode-only" width="100%" alt="Editing: basic fixes, tuning and effects">
+<img src="docs/screenshots/picco-2.webp#gh-dark-mode-only" width="100%" alt="Editing: basic fixes, tuning and effects">
+<img src="docs/screenshots/picco-2-light.webp#gh-light-mode-only" width="100%" alt="Editing: basic fixes, tuning and effects">
 
 ## Properties for the curious
 
-Pico shows **every** metadata field: EXIF, XMP, IPTC, ICC, PNG, WebP, video
+Picco shows **every** metadata field: EXIF, XMP, IPTC, ICC, PNG, WebP, video
 streams, and the **camera makers' notes** of Canon, Nikon, Olympus, Fujifilm,
 Sony, Apple, DJI and others. Fields that should agree across metadata kinds
 but don't get a **!** mark — an easy way to tell an edited file from one
 straight out of the camera.
 
-<img src="docs/screenshots/pico-3.webp#gh-dark-mode-only" width="100%" alt="Properties: every metadata field, checked against each other">
-<img src="docs/screenshots/pico-3-light.webp#gh-light-mode-only" width="100%" alt="Properties: every metadata field, checked against each other">
+<img src="docs/screenshots/picco-3.webp#gh-dark-mode-only" width="100%" alt="Properties: every metadata field, checked against each other">
+<img src="docs/screenshots/picco-3-light.webp#gh-light-mode-only" width="100%" alt="Properties: every metadata field, checked against each other">
 
 ## Create
 
@@ -68,8 +68,8 @@ straight out of the camera.
 - **Slideshows** that play videos too, **export** with downsizing and a choice
   of JPEG quality.
 
-<img src="docs/screenshots/pico-5.webp#gh-dark-mode-only" width="100%" alt="Collage from the selected photos">
-<img src="docs/screenshots/pico-5-light.webp#gh-light-mode-only" width="100%" alt="Collage from the selected photos">
+<img src="docs/screenshots/picco-5.webp#gh-dark-mode-only" width="100%" alt="Collage from the selected photos">
+<img src="docs/screenshots/picco-5-light.webp#gh-light-mode-only" width="100%" alt="Collage from the selected photos">
 
 ## Everything else
 
@@ -87,15 +87,15 @@ processors use the same `x86_64` (64-bit) or `x86` (32-bit) builds.
 
 | System | 64-bit | 32-bit | ARM |
 |---|---|---|---|
-| Linux (glibc 2.28+, 2019 and newer) | `pico-linux-x86_64` | `pico-linux-x86` | `pico-linux-arm64`, `pico-linux-armv7` (32-bit, Raspberry Pi) |
-| Windows 10/11 | `pico-windows-x86_64` | `pico-windows-x86` | `pico-windows-arm64` |
-| macOS 11+ | `pico-macos` — one app for both Apple Silicon and Intel | — | — |
+| Linux (glibc 2.28+, 2019 and newer) | `picco-linux-x86_64` | `picco-linux-x86` | `picco-linux-arm64`, `picco-linux-armv7` (32-bit, Raspberry Pi) |
+| Windows 10/11 | `picco-windows-x86_64` | `picco-windows-x86` | `picco-windows-arm64` |
+| macOS 11+ | `picco-macos` — one app for both Apple Silicon and Intel | — | — |
 
 The macOS build is not signed with an Apple certificate: on first launch,
-open `Pico.app` with right click → **Open** (or **System Settings →
+open `Picco.app` with right click → **Open** (or **System Settings →
 Privacy & Security → Open Anyway**). For video, HEIC, AVIF and JPEG XL, install
 ffmpeg with `brew install ffmpeg`, or put `ffmpeg`, `ffprobe` and `ffplay` into
-`Pico.app/Contents/MacOS`.
+`Picco.app/Contents/MacOS`.
 
 Releases are built by `.github/workflows/release.yml`. For now it is enabled
 only for Linux x86_64, arm64 and armv7, Windows x86_64 and macOS. Every push to `main` builds the
@@ -110,24 +110,24 @@ save Actions minutes; uncomment them to build everything.
 
 You need Rust 1.95 or newer (`rustup`). Video, HEIC, AVIF and JPEG XL need
 `ffmpeg` (together with `ffprobe`; `ffplay` for sound) in `PATH` or next to
-the program. Everything else works without it, camera RAW files too: Pico
+the program. Everything else works without it, camera RAW files too: Picco
 shows the JPEG the camera keeps inside them (Sony ARW, Nikon NEF, Canon CR2,
 DNG, Fujifilm RAF and other TIFF-based RAWs).
 
 ```sh
 make release          # or: cargo build --release
 make run              # open ~/Pictures
-./target/release/pico ~/Photos ~/Downloads   # open your own folders
+./target/release/picco ~/Photos ~/Downloads   # open your own folders
 ```
 
-The finished program is a single file, `target/release/pico`, which you can
+The finished program is a single file, `target/release/picco`, which you can
 copy anywhere. `make install` puts it into `~/.cargo/bin`.
 
-**Windows.** `make windows` builds `pico.exe` right on Linux (via zig; setup
+**Windows.** `make windows` builds `picco.exe` right on Linux (via zig; setup
 is described in a comment in the `Makefile`); on Windows itself a plain
 `cargo build --release` works. The program needs only the system DLLs of
 Windows 10/11. For video, put `ffmpeg.exe`, `ffprobe.exe` and `ffplay.exe`
-next to `pico.exe`.
+next to `picco.exe`.
 
 **macOS** is built on a Mac (`cargo build --release`) or in GitHub Actions.
 `.github/workflows/build.yml` checks and builds Linux, Windows and macOS
@@ -146,8 +146,8 @@ tests), `make testdata` (a test library in `testdata/library`, see
   with GPS, grouped by place: the nearest city, otherwise the country, sea or
   ocean, continent; works offline) and **Folders**.
   Folders given on the command line or added with
-  **File → Add Folder to Pico…** are remembered. Folder Manager shows the disk tree on the left and, for the
-  selected folder, **Watch for photos** or **Leave out of Pico** on the right.
+  **File → Add Folder to Picco…** are remembered. Folder Manager shows the disk tree on the left and, for the
+  selected folder, **Watch for photos** or **Leave out of Picco** on the right.
   The rule of the nearest folder wins: you can watch `~/Pictures`, leave out
   `~/Pictures/Screenshots`, and inside it turn one folder back on. The path can
   be typed in or picked with the system dialog (**Browse…**). The tree opens to
@@ -170,16 +170,16 @@ tests), `make testdata` (a test library in `testdata/library`, see
   **Ctrl** — add to the selection). Near the edge of the window the grid
   scrolls by itself.
 - **Drag and drop.** Thumbnails (all selected ones at once) can be dropped on
-  a folder on the left — Pico asks and moves the files together with their
+  a folder on the left — Picco asks and moves the files together with their
   captions, stars, edits and saved original; on an album — to add them to the
   album; on the tray (when shown) — to put them in the tray. Folders (and files — by their
-  folder) from a file manager can be dropped right into the Pico window, and
+  folder) from a file manager can be dropped right into the Picco window, and
   they are added to the library.
 - Right click on a thumbnail opens a menu: star, rotate, album, hide, export,
   locate on disk, rename, copy path, move to trash. If the photo was not
   selected, the menu works on it alone; otherwise on the whole selection.
   Right click on a folder on the left: slideshow, locate on disk, copy path,
-  rescan, remove from Pico.
+  rescan, remove from Picco.
 - The sections on the left (**Albums**, **Folders**, **Timeline**, **Places**)
   can be collapsed. The **…** button next to **Folders**: a flat list or a tree (folders where they sit on the disk), sorted
   by name, date (newest first, grouped by year), recent changes or size.
@@ -204,7 +204,7 @@ tests), `make testdata` (a test library in `testdata/library`, see
   it. The percent shows the zoom on screen; a click on it, the slider or
   Ctrl+wheel keep that zoom. The chosen mode stays from photo to photo and
   between runs. A zoomed photo can be dragged with the mouse. When you zoom
-  into a large shot, Pico loads it at full resolution, so 1:1 shows real
+  into a large shot, Picco loads it at full resolution, so 1:1 shows real
   pixels. Two photos on each side are prepared in advance, so
   paging shows no blank frame.
 - Above the photo is a line about it: name, date taken (from EXIF; for MP4 and
@@ -222,7 +222,7 @@ tests), `make testdata` (a test library in `testdata/library`, see
   library: file and folder names, captions, keywords.
 - The status bar at the bottom right: name, date taken and size of the photo
   under the cursor (or the selected one), and for several photos — how many
-  are selected and how much they weigh. While Pico looks for photos, it also
+  are selected and how much they weigh. While Picco looks for photos, it also
   shows how many have been found so far.
 - Badges in the corner of a thumbnail: **✏** — the photo has edits, **📍** —
   it is known where it was taken (the tooltip says the same).
@@ -237,7 +237,7 @@ tests), `make testdata` (a test library in `testdata/library`, see
 - **Alt+Enter** (or **View → Properties and Tags**) opens a panel on the right
   with the photo's histogram (red, green, blue, with the edits; the same in the
   library and the viewer), properties (size, resolution, camera, shutter speed,
-  ISO, GPS…) and tags. Below them is all of the file's metadata by section (Pico
+  ISO, GPS…) and tags. Below them is all of the file's metadata by section (Picco
   remembers which are open and which are collapsed between runs): every EXIF
   field (internal and binary ones in hex), XMP, IPTC, the ICC profile, JPEG,
   PNG and WebP headers, video tags, and the camera maker's notes (MakerNote:
@@ -266,7 +266,7 @@ album from the selected photos, **Add to Album → name** adds them to an
 existing one, **Remove from Album** or **Delete** (when the album is open)
 takes them out of the album without touching the file. Photos in an album can
 be rearranged by dragging — sorting switches to **View → Sort → Custom
-Order**. Photos from folders that are not in Pico are shown as black tiles
+Order**. Photos from folders that are not in Picco are shown as black tiles
 with an **Add Folder** button. Right click on an album on the left — **Rename
 Album…** and **Delete Album…** (the photos stay where they are).
 
@@ -309,7 +309,7 @@ video's own size, up to the screen's. **Save Frame as Photo** in the bottom bar 
 the current frame next to the video. In a slideshow a video plays to the end, from its start, and crossfades into
 the next slide while it still plays.
 A video turned with the rotate buttons plays turned, in slideshows too, and
-its saved frames are turned the same way. Videos are not edited in Pico:
+its saved frames are turned the same way. Videos are not edited in Picco:
 **Edit** is greyed out for them.
 
 ### Movie from photos
@@ -383,36 +383,36 @@ in the viewer and the slideshow are always on a dark background.
 **Animations** turns the flying star and the scrolling with weight on or off.
 
 **Language**: as in the system (the default), English or Russian; it changes at
-once. Translations are gettext `.po` files in `crates/pico/po`; how to add a
-language is in `crates/pico/po/README.md`.
+once. Translations are gettext `.po` files in `crates/picco/po`; how to add a
+language is in `crates/picco/po/README.md`.
 
 ## Where things are stored
 
 - `.picasa.ini` in every folder — stars, captions, edits (compatible with
   Picasa).
 - `.picasaoriginals/` — originals of photos saved with **Save**.
-- `~/.config/pico/watched_folders.txt` and `excluded_folders.txt` — the
+- `~/.config/picco/watched_folders.txt` and `excluded_folders.txt` — the
   library's folders and the ones left out of it.
-- `~/.config/pico/settings.txt` — what Pico remembers between runs: thumbnail
+- `~/.config/picco/settings.txt` — what Picco remembers between runs: thumbnail
   size, captions, sorting, the filmstrip, the Photo Tray, the folder list view,
   the properties panel, the zoom mode, theme, language, animations, the window size, the widths of the left and right panels, which
   sections on the left and in the properties panel are open, and the last open
   folder (`key=value` lines, can be edited by hand; written a second after a
   change and on exit).
-- `~/.config/pico/<token>.pal` — albums in the Picasa format: name,
+- `~/.config/picco/<token>.pal` — albums in the Picasa format: name,
   description, date and photos in album order.
-- `~/.cache/pico/thumbs/` — the thumbnail cache, safe to delete.
+- `~/.cache/picco/thumbs/` — the thumbnail cache, safe to delete.
 
 ## For developers 
 
-- `crates/pico-core` — everything without a UI: `.picasa.ini` (`ini`, `meta`),
+- `crates/picco-core` — everything without a UI: `.picasa.ini` (`ini`, `meta`),
   collages (`collage`), the edit stack (`filters`, `rect64`), effects
   (`adjust`, `effects`, `ops`, `render`), files (`media`, `library`, `export`,
   `fileops`), metadata (`exif`, `exif_tags`, `maker_notes`, `maker_tags`,
   `xmp`, `metadata`, and `agree` for the fields that must agree), albums
   (`album_file`), thumbnails, video and movies (`thumbnail`, `video`, `movie`),
   settings (`config`).
-- `crates/pico` — the egui app: library (`app`, `grid`), collages
+- `crates/picco` — the egui app: library (`app`, `grid`), collages
   (`collage_view`), properties and tags (`info`), viewing and editing
   (`viewer`, `tools`), video (`player`), slideshow (`slideshow`), translations
   (`i18n`, the texts in `po/`), windowless UI tests (`tests`, screenshots in
@@ -426,7 +426,7 @@ Creative Kit effects follow Picnik's recipes (Google, Apache License 2.0).
 Place names come from [GeoNames](https://www.geonames.org/) (`cities1000`,
 CC BY 4.0) and [Natural Earth](https://www.naturalearthdata.com/) (countries,
 seas, continents; public domain). They are packed into
-`crates/pico-core/data/places.bin` by `crates/pico-core/data/make_places.py`
+`crates/picco-core/data/places.bin` by `crates/picco-core/data/make_places.py`
 (`make places`).
 Metadata in the properties panel is read according to the format
 specifications:
@@ -434,7 +434,7 @@ specifications:
 - EXIF — the [CIPA DC-008 (Exif 3.0)](https://www.cipa.jp/e/std/std-sec.html)
   standard; names and types of the tags of the main directory, EXIF, DNG and
   Interoperability follow the [exiv2 reference](https://exiv2.org/tags.html)
-  (`crates/pico-core/src/exif_tags.rs`, `make exif-tags`), GPS tags and their
+  (`crates/picco-core/src/exif_tags.rs`, `make exif-tags`), GPS tags and their
   values follow [ExifTool](https://exiftool.org/TagNames/GPS.html), and the
   meaning of codes (Exposure Program, Metering Mode, Flash…) follows the
   [ExifTool EXIF table](https://exiftool.org/TagNames/EXIF.html).
@@ -454,14 +454,16 @@ specifications:
   [ISO/IEC 23008-12](https://www.iso.org/standard/83650.html).
 - The camera makers' notes (MakerNote) — entry names and value meanings from
   [ExifRead](https://github.com/ianare/exif-py)'s tables (BSD-3-Clause;
-  `crates/pico-core/src/maker_tags.rs`, `make maker-tags`), the arithmetic
+  `crates/picco-core/src/maker_tags.rs`, `make maker-tags`), the arithmetic
   after [ExifTool's tag tables](https://exiftool.org/TagNames/). What the notes
   say is checked against EXIF and XMP, and fields that disagree get a "!".
 
 All third-party packages and the texts of their licenses are shown in
-**Help → About**; the list lives in `crates/pico/assets/licenses.txt` and is
+**Help → About**; the list lives in `crates/picco/assets/licenses.txt` and is
 updated with `make licenses` after the dependencies change.
 
 ## License
 
-Pico is licensed under the [Apache License 2.0](LICENSE).
+Picco is licensed under the [Apache License 2.0](LICENSE).
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/miamibc)

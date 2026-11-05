@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <title>Pico</title>
+  <title>Picco</title>
   <rect x="40" y="40" width="160" height="168" rx="12" fill="#7c3aed" transform="rotate(-16 120 124)"/>
   <rect x="56" y="40" width="160" height="168" rx="12" fill="#f59e0b" transform="rotate(10 136 124)"/>
   <rect x="48" y="44" width="160" height="168" rx="12" fill="#ffffff" stroke="#1e293b" stroke-width="8"/>

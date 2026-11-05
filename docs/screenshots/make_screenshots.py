@@ -22,7 +22,7 @@ import urllib.request
 
 from PIL import Image
 
-UA = {"User-Agent": "pico-demo-screenshots/1.0 (https://github.com/miamibc/pico)"}
+UA = {"User-Agent": "picco-demo-screenshots/1.0 (https://github.com/miamibc/picco)"}
 
 # Folder -> (file name, title on Wikimedia Commons). All are CC0.
 PHOTOS = {

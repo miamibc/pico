@@ -1,4 +1,4 @@
-"""Builds testdata/library: folders covering the .picasa.ini variants Pico must handle.
+"""Builds testdata/library: folders covering the .picasa.ini variants Picco must handle.
 
 Run from anywhere:  python3 testdata/make_testdata.py [SOURCE_PICTURES_DIR]
 Needs Pillow and ffmpeg. Source photos default to ~/Pictures; only pictures
@@ -191,7 +191,7 @@ caption=EXIF 8 + Picasa rotate(3)
 rotate=rotate(3)
 """)
 
-    # 07: edits Pico cannot draw yet must survive saving.
+    # 07: edits Picco cannot draw yet must survive saving.
     f = folder("07-picnik-and-unknown-filters")
     for src in (ISCHIA, TYPEWRITER, OWL, ROSE):
         copy(src, f)
@@ -237,7 +237,7 @@ star=yes
         im.save(f / f"ischia.{ext}")
     copy(PALM, f, "palm-transparent.png")
     copy(TRIANGLES, f, "triangles-rgba.png")
-    (f / "not-a-photo.txt").write_text("Pico should ignore this file.\n")
+    (f / "not-a-photo.txt").write_text("Picco should ignore this file.\n")
     (f / "broken.jpg").write_bytes(b"\xff\xd8\xff\xe0 this is not really a JPEG")
 
     # 10: crop and rotate on the giraffe; each copy is a separate INI section.

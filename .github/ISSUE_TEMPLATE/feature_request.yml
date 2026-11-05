@@ -1,0 +1,16 @@
+name: Idea
+description: Something Picco could do, or do better
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What you would like to do, and why.
+    validations:
+      required: true
+  - type: textarea
+    id: picasa
+    attributes:
+      label: How Picasa did it
+      description: If Picasa 3 had this, how it worked there. Screenshots welcome.

@@ -1,5 +1,5 @@
-<img src="docs/logo/pico-logo-with-title-paths.svg#gh-light-mode-only" width="100%" alt="Pico, the photo organizer you remember">
-<img src="docs/logo/pico-logo-with-title-paths-dark.svg#gh-dark-mode-only" width="100%" alt="Pico, the photo organizer you remember">
+<img src="docs/logo/picco-logo-with-title-paths.svg#gh-light-mode-only" width="100%" alt="Picco, the photo organizer you remember">
+<img src="docs/logo/picco-logo-with-title-paths-dark.svg#gh-dark-mode-only" width="100%" alt="Picco, the photo organizer you remember">
 
 [English](README.md) · **Русский**
 
@@ -8,16 +8,16 @@
 
 Google закрыл Picasa в 2016 году, но в миллионах папок с фотографиями до сих
 пор лежат её файлы `.picasa.ini` со звёздочками, подписями, альбомами и
-правками. **Pico** — новый органайзер фотографий, написанный с нуля на Rust.
+правками. **Picco** — новый органайзер фотографий, написанный с нуля на Rust.
 Он читает и записывает эти файлы, поэтому библиотека, собранная в Picasa много
-лет назад, открывается в Pico такой, какой была, и работает в обе стороны.
+лет назад, открывается в Picco такой, какой была, и работает в обе стороны.
 
-Pico небольшой (один файл, установка не нужна) и работает полностью без
+Picco небольшой (один файл, установка не нужна) и работает полностью без
 интернета: ничего никуда не загружается, а оригиналы не меняются, пока вы сами
 не нажмёте **Сохранить**.
 
-<img src="docs/screenshots/pico-1.webp#gh-dark-mode-only" width="100%" alt="Библиотека: все папки одной сплошной лентой">
-<img src="docs/screenshots/pico-1-light.webp#gh-light-mode-only" width="100%" alt="Библиотека: все папки одной сплошной лентой">
+<img src="docs/screenshots/picco-1.webp#gh-dark-mode-only" width="100%" alt="Библиотека: все папки одной сплошной лентой">
+<img src="docs/screenshots/picco-1-light.webp#gh-light-mode-only" width="100%" alt="Библиотека: все папки одной сплошной лентой">
 
 ## Библиотека
 
@@ -31,8 +31,8 @@ Pico небольшой (один файл, установка не нужна) 
 - Перетаскивание между папками и альбомами, выделение рамкой, контекстные
   меню, прокрутка по инерции.
 
-<img src="docs/screenshots/pico-4.webp#gh-dark-mode-only" width="100%" alt="Места: фото по месту съёмки">
-<img src="docs/screenshots/pico-4-light.webp#gh-light-mode-only" width="100%" alt="Места: фото по месту съёмки">
+<img src="docs/screenshots/picco-4.webp#gh-dark-mode-only" width="100%" alt="Места: фото по месту съёмки">
+<img src="docs/screenshots/picco-4-light.webp#gh-light-mode-only" width="100%" alt="Места: фото по месту съёмки">
 
 ## Правка
 
@@ -46,19 +46,19 @@ Pico небольшой (один файл, установка не нужна) 
 - Правки ничего не портят и хранятся так же, как их хранила Picasa; пока
   зажата кнопка **Оригинал**, видно фото до правок.
 
-<img src="docs/screenshots/pico-2.webp#gh-dark-mode-only" width="100%" alt="Правка: основные исправления, настройка и эффекты">
-<img src="docs/screenshots/pico-2-light.webp#gh-light-mode-only" width="100%" alt="Правка: основные исправления, настройка и эффекты">
+<img src="docs/screenshots/picco-2.webp#gh-dark-mode-only" width="100%" alt="Правка: основные исправления, настройка и эффекты">
+<img src="docs/screenshots/picco-2-light.webp#gh-light-mode-only" width="100%" alt="Правка: основные исправления, настройка и эффекты">
 
 ## Свойства для любопытных
 
-Pico показывает **все** поля метаданных: EXIF, XMP, IPTC, ICC, PNG, WebP,
+Picco показывает **все** поля метаданных: EXIF, XMP, IPTC, ICC, PNG, WebP,
 потоки видео и **заметки производителей камер** Canon, Nikon, Olympus,
 Fujifilm, Sony, Apple, DJI и других. Поля, которые должны совпадать в разных
 видах метаданных, но не совпадают, получают значок **!** — так легко отличить
 отредактированный файл от снятого камерой.
 
-<img src="docs/screenshots/pico-3.webp#gh-dark-mode-only" width="100%" alt="Свойства: все поля метаданных, сверенные между собой">
-<img src="docs/screenshots/pico-3-light.webp#gh-light-mode-only" width="100%" alt="Свойства: все поля метаданных, сверенные между собой">
+<img src="docs/screenshots/picco-3.webp#gh-dark-mode-only" width="100%" alt="Свойства: все поля метаданных, сверенные между собой">
+<img src="docs/screenshots/picco-3-light.webp#gh-light-mode-only" width="100%" alt="Свойства: все поля метаданных, сверенные между собой">
 
 ## Создать
 
@@ -69,8 +69,8 @@ Fujifilm, Sony, Apple, DJI и других. Поля, которые должн�
 - **Слайд-шоу**, в которых играют и видео, **экспорт** с уменьшением и
   выбором качества JPEG.
 
-<img src="docs/screenshots/pico-5.webp#gh-dark-mode-only" width="100%" alt="Коллаж из выбранных фото">
-<img src="docs/screenshots/pico-5-light.webp#gh-light-mode-only" width="100%" alt="Коллаж из выбранных фото">
+<img src="docs/screenshots/picco-5.webp#gh-dark-mode-only" width="100%" alt="Коллаж из выбранных фото">
+<img src="docs/screenshots/picco-5-light.webp#gh-light-mode-only" width="100%" alt="Коллаж из выбранных фото">
 
 ## И ещё
 
@@ -88,15 +88,15 @@ AMD берут одни и те же сборки `x86_64` (64 бита) или 
 
 | Система | 64 бита | 32 бита | ARM |
 |---|---|---|---|
-| Linux (glibc 2.28+, 2019 г. и новее) | `pico-linux-x86_64` | `pico-linux-x86` | `pico-linux-arm64`, `pico-linux-armv7` (32-бит, Raspberry Pi) |
-| Windows 10/11 | `pico-windows-x86_64` | `pico-windows-x86` | `pico-windows-arm64` |
-| macOS 11+ | `pico-macos` — одна программа для Apple Silicon и Intel | — | — |
+| Linux (glibc 2.28+, 2019 г. и новее) | `picco-linux-x86_64` | `picco-linux-x86` | `picco-linux-arm64`, `picco-linux-armv7` (32-бит, Raspberry Pi) |
+| Windows 10/11 | `picco-windows-x86_64` | `picco-windows-x86` | `picco-windows-arm64` |
+| macOS 11+ | `picco-macos` — одна программа для Apple Silicon и Intel | — | — |
 
 Сборка для macOS не подписана сертификатом Apple: при первом запуске
-откройте `Pico.app` через правый клик → **Open** (или **System Settings →
+откройте `Picco.app` через правый клик → **Open** (или **System Settings →
 Privacy & Security → Open Anyway**). Для видео, HEIC, AVIF и JPEG XL
 установите ffmpeg через `brew install ffmpeg` или положите `ffmpeg`, `ffprobe`
-и `ffplay` в `Pico.app/Contents/MacOS`.
+и `ffplay` в `Picco.app/Contents/MacOS`.
 
 Релизы собирает `.github/workflows/release.yml`. Пока он включён только для
 Linux x86_64, arm64 и armv7, Windows x86_64 и macOS. Каждый push в `main` собирает программу один
@@ -112,22 +112,22 @@ Linux x86_64, arm64 и armv7, Windows x86_64 и macOS. Каждый push в `mai
 Нужен Rust 1.95 или новее (`rustup`). Для видео, HEIC, AVIF и JPEG XL нужен
 `ffmpeg` (вместе с `ffprobe`; для звука — `ffplay`) в `PATH` или рядом с
 программой. Без него всё остальное работает, в том числе RAW-файлы камер:
-Pico показывает JPEG, который камера хранит внутри них (Sony ARW, Nikon NEF,
+Picco показывает JPEG, который камера хранит внутри них (Sony ARW, Nikon NEF,
 Canon CR2, DNG, Fujifilm RAF и другие RAW на основе TIFF).
 
 ```sh
 make release          # или: cargo build --release
 make run              # открыть ~/Pictures
-./target/release/pico ~/Photos ~/Downloads   # открыть свои папки
+./target/release/picco ~/Photos ~/Downloads   # открыть свои папки
 ```
 
-Готовая программа — один файл `target/release/pico`, его можно скопировать
+Готовая программа — один файл `target/release/picco`, его можно скопировать
 куда угодно. `make install` ставит её в `~/.cargo/bin`.
 
-**Windows.** `make windows` собирает `pico.exe` прямо на Linux (через zig,
+**Windows.** `make windows` собирает `picco.exe` прямо на Linux (через zig,
 настройка — в комментарии в `Makefile`); на самой Windows работает обычный
 `cargo build --release`. Программе нужны только системные DLL Windows 10/11.
-Для видео положите `ffmpeg.exe`, `ffprobe.exe`, `ffplay.exe` рядом с `pico.exe`.
+Для видео положите `ffmpeg.exe`, `ffprobe.exe`, `ffplay.exe` рядом с `picco.exe`.
 
 **macOS** собирается на Mac (`cargo build --release`) или в GitHub Actions.
 `.github/workflows/build.yml` на каждый push проверяет и собирает Linux,
@@ -146,8 +146,8 @@ Windows и macOS (Intel и Apple Silicon) и выкладывает програ
   **Places** (фото с GPS, сгруппированные по месту: ближайший город, иначе
   страна, море или океан, континент; без сети) и **Folders**.
   Папки, указанные при запуске или добавленные через
-  **File → Add Folder to Pico…**, запоминаются. В Folder Manager слева дерево диска, справа для выбранной
-  папки — **Watch for photos** или **Leave out of Pico**. Правило ближайшей
+  **File → Add Folder to Picco…**, запоминаются. В Folder Manager слева дерево диска, справа для выбранной
+  папки — **Watch for photos** или **Leave out of Picco**. Правило ближайшей
   папки главнее: можно следить за `~/Pictures`, но выключить
   `~/Pictures/Скриншоты`, а внутри неё снова включить одну папку. Путь можно
   ввести вручную или выбрать системным диалогом (**Browse…**). Дерево сразу
@@ -167,15 +167,15 @@ Windows и macOS (Intel и Apple Silicon) и выкладывает програ
 - Выделять можно рамкой: протяните мышью прямоугольник по миниатюрам (с
   **Ctrl** — добавить к выделенному). У края окна сетка прокручивается сама.
 - **Перетаскивание.** Миниатюры (выделенные — все сразу) можно бросить на
-  папку слева — Pico спросит и перенесёт файлы вместе с подписями, звёздочками,
+  папку слева — Picco спросит и перенесёт файлы вместе с подписями, звёздочками,
   правками и сохранённым оригиналом; на альбом — добавить в альбом; на лоток (если
   он включён) — положить в лоток. Папки (и файлы — по их папке) из файлового менеджера можно
-  бросить прямо в окно Pico, они добавятся в библиотеку.
+  бросить прямо в окно Picco, они добавятся в библиотеку.
 - Правый щелчок по миниатюре — меню: звёздочка, поворот, альбом, скрыть,
   экспорт, показать на диске, переименовать, копировать путь, в корзину. Если
   фото не было выделено, меню работает только с ним; иначе — со всем выделенным.
   Правый щелчок по папке слева — слайд-шоу, показать на диске, копировать путь,
-  пересканировать, убрать из Pico.
+  пересканировать, убрать из Picco.
 - Разделы слева (**Albums**, **Folders**, **Timeline**, **Places**)
   сворачиваются. Кнопка **…** у **Folders**:
   плоский список или дерево (папки там, где они лежат на диске), сортировка по
@@ -199,7 +199,7 @@ Windows и macOS (Intel и Apple Silicon) и выкладывает програ
   масштаб в процентах с ползунком от 30% до 300% внутри. Проценты показывают
   масштаб на экране; щелчок по ним, ползунок или Ctrl+колесо закрепляют этот
   масштаб. Выбранный режим сохраняется при листании и между запусками.
-  Увеличенное фото двигается мышью. При увеличении большого снимка Pico
+  Увеличенное фото двигается мышью. При увеличении большого снимка Picco
   подгружает его в полном разрешении, так что 1:1 показывает настоящие пиксели.
   По два фото с каждой стороны готовятся заранее, поэтому при листании нет
   пустого кадра.
@@ -218,7 +218,7 @@ Windows и macOS (Intel и Apple Silicon) и выкладывает програ
   файлов и папок, подписи, ключевые слова.
 - Строка состояния внизу справа: имя, дата съёмки и размер фото под курсором
   (или выделенного), а для нескольких — сколько выделено и сколько они весят.
-  Пока Pico ищет фото, там же видно, сколько уже найдено.
+  Пока Picco ищет фото, там же видно, сколько уже найдено.
 - Значки в углу миниатюры: **✏** — у фото есть правки, **📍** — известно, где
   оно снято (то же написано во всплывающей подсказке).
 - Кнопка **★** рядом с поиском показывает только отмеченные фото, **▶** — только
@@ -233,7 +233,7 @@ Windows и macOS (Intel и Apple Silicon) и выкладывает програ
   с гистограммой фото (красный, зелёный, синий, с правками; одна и та же в
   библиотеке и просмотре), свойствами (размер, разрешение, камера, выдержка,
   ISO, GPS…) и тегами. Ниже — все метаданные файла по разделам (какие открыты, а какие
-  свёрнуты, Pico помнит между запусками): все поля EXIF (служебные и
+  свёрнуты, Picco помнит между запусками): все поля EXIF (служебные и
   двоичные — в hex), XMP, IPTC, ICC-профиль, заголовки JPEG, PNG и WebP, теги
   видео и заметки производителя камеры (MakerNote: Canon, Nikon, Olympus,
   Fujifilm, Sony, Casio, Apple, DJI), расшифрованные, где известно их значение.
@@ -259,7 +259,7 @@ New Album…** создаёт альбом из выделенных фото, *
 добавляет в существующий, **Remove from Album** или **Delete** (когда альбом
 открыт) убирает из альбома, не трогая файл. Фото в альбоме можно расставить
 перетаскиванием — сортировка переключится на **View → Sort → Custom Order**.
-Фото из папок, которых нет в Pico, показываются чёрными плитками с кнопкой
+Фото из папок, которых нет в Picco, показываются чёрными плитками с кнопкой
 **Add Folder**. Правый щелчок по альбому слева — **Rename Album…** и **Delete
 Album…** (фото остаются на месте).
 
@@ -302,7 +302,7 @@ Album…** (фото остаются на месте).
 сохраняет текущий кадр рядом с видео. В слайд-шоу видео проигрывается целиком, с начала, и плавно
 сменяется следующим слайдом, продолжая играть.
 Видео, повёрнутое кнопками поворота, играет повёрнутым, в слайд-шоу тоже, и
-кадры из него сохраняются так же. Видео в Pico не редактируются: **Edit** для
+кадры из него сохраняются так же. Видео в Picco не редактируются: **Edit** для
 них неактивна.
 
 ### Фильм из фото
@@ -372,33 +372,33 @@ XDG: GNOME, KDE и другие) и меняется сразу, без пере
 летящую звёздочку и прокрутку «с весом».
 
 **Language**: как в системе (по умолчанию), английский или русский; меняется
-сразу. Переводы — файлы gettext `.po` в `crates/pico/po`; как добавить язык,
-написано в `crates/pico/po/README.md`.
+сразу. Переводы — файлы gettext `.po` в `crates/picco/po`; как добавить язык,
+написано в `crates/picco/po/README.md`.
 
 ## Где что хранится
 
 - `.picasa.ini` в каждой папке — звёздочки, подписи, правки (совместимо с Picasa).
 - `.picasaoriginals/` — оригиналы фото, сохранённых через **Save**.
-- `~/.config/pico/watched_folders.txt` и `excluded_folders.txt` — папки
+- `~/.config/picco/watched_folders.txt` и `excluded_folders.txt` — папки
   библиотеки и исключённые из неё.
-- `~/.config/pico/settings.txt` — что Pico помнит между запусками: размер
+- `~/.config/picco/settings.txt` — что Picco помнит между запусками: размер
   миниатюр, подписи, сортировку, ленту, лоток, вид списка папок, панель
   свойств, режим масштаба, тему, язык, анимации, размер окна, ширину левой и правой панелей, какие разделы слева и в панели
   свойств открыты, и последнюю открытую папку (строки `ключ=значение`, можно
   править руками; записываются через секунду после изменения и при закрытии).
-- `~/.config/pico/<токен>.pal` — альбомы в формате Picasa: название, описание,
+- `~/.config/picco/<токен>.pal` — альбомы в формате Picasa: название, описание,
   дата и фото в порядке альбома.
-- `~/.cache/pico/thumbs/` — кэш миниатюр, можно удалять.
+- `~/.cache/picco/thumbs/` — кэш миниатюр, можно удалять.
 
 ## Для разработчиков
 
-- `crates/pico-core` — всё без интерфейса: `.picasa.ini` (`ini`, `meta`), коллажи (`collage`),
+- `crates/picco-core` — всё без интерфейса: `.picasa.ini` (`ini`, `meta`), коллажи (`collage`),
   стек правок (`filters`, `rect64`), эффекты (`adjust`, `effects`, `ops`,
   `render`), файлы (`media`, `library`, `export`, `fileops`), метаданные (`exif`,
   `exif_tags`, `maker_notes`, `maker_tags`, `xmp`, `metadata` и `agree` — поля,
   которые должны совпадать), альбомы (`album_file`),
   миниатюры, видео и фильмы (`thumbnail`, `video`, `movie`), настройки (`config`).
-- `crates/pico` — приложение egui: библиотека (`app`, `grid`), коллажи (`collage_view`), свойства и
+- `crates/picco` — приложение egui: библиотека (`app`, `grid`), коллажи (`collage_view`), свойства и
   теги (`info`), просмотр и правка (`viewer`, `tools`), видео (`player`), слайд-шоу (`slideshow`),
   переводы (`i18n`, тексты в `po/`), UI-тесты без окна (`tests`, скриншоты в `target/ui-shots/`).
 - `docs/` — заметки проекта, описания релизов
@@ -410,13 +410,13 @@ XDG: GNOME, KDE и другие) и меняется сразу, без пере
 Названия мест — из [GeoNames](https://www.geonames.org/) (`cities1000`,
 CC BY 4.0) и [Natural Earth](https://www.naturalearthdata.com/) (страны, моря,
 континенты; общественное достояние). Они упакованы в
-`crates/pico-core/data/places.bin` скриптом `crates/pico-core/data/make_places.py`
+`crates/picco-core/data/places.bin` скриптом `crates/picco-core/data/make_places.py`
 (`make places`).
 Метаданные в панели свойств читаются по описаниям форматов:
 
 - EXIF — стандарт [CIPA DC-008 (Exif 3.0)](https://www.cipa.jp/e/std/std-sec.html);
   названия и типы тегов основного каталога, EXIF, DNG и Interoperability — по
-  [справочнику exiv2](https://exiv2.org/tags.html) (`crates/pico-core/src/exif_tags.rs`,
+  [справочнику exiv2](https://exiv2.org/tags.html) (`crates/picco-core/src/exif_tags.rs`,
   `make exif-tags`),
   GPS-теги и значения их полей — по [ExifTool](https://exiftool.org/TagNames/GPS.html),
   расшифровка кодов (Exposure Program, Metering Mode, Flash…) — по
@@ -435,14 +435,16 @@ CC BY 4.0) и [Natural Earth](https://www.naturalearthdata.com/) (страны, 
   [ISO/IEC 23008-12](https://www.iso.org/standard/83650.html).
 - Заметки производителей камер (MakerNote) — названия записей и значения из
   таблиц [ExifRead](https://github.com/ianare/exif-py) (BSD-3-Clause;
-  `crates/pico-core/src/maker_tags.rs`, `make maker-tags`), расчёты — по
+  `crates/picco-core/src/maker_tags.rs`, `make maker-tags`), расчёты — по
   [таблицам ExifTool](https://exiftool.org/TagNames/). Сказанное в заметках
   сверяется с EXIF и XMP, и расходящиеся поля получают значок «!».
 
 Все сторонние пакеты и тексты их лицензий видны в **Help → About**; список
-лежит в `crates/pico/assets/licenses.txt` и обновляется командой
+лежит в `crates/picco/assets/licenses.txt` и обновляется командой
 `make licenses` после смены зависимостей.
 
 ## Лицензия
 
-Pico распространяется по [лицензии Apache 2.0](LICENSE).
+Picco распространяется по [лицензии Apache 2.0](LICENSE).
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/miamibc)
