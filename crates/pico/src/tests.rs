@@ -2322,7 +2322,8 @@ fn tools_duplicates_folder_manager_and_options() {
     wait_until(&mut harness, "the rescan", |app| app.folder_count() == 1);
     assert_eq!(harness.state().watched_count(), 1);
 
-    harness.get_by_label("File").click();
+    // Now from the menu of the Folders section.
+    harness.get_by_label("…").click();
     harness.step();
     harness.step();
     harness.get_by_label("Add Folder to Pico…").click();

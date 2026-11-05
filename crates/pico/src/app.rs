@@ -2510,6 +2510,10 @@ impl PicoApp {
     }
 
     fn folder_list_options(&mut self, ui: &mut egui::Ui) {
+        if ui.button(tr!("Add Folder to Pico…")).clicked() {
+            self.open_folder_manager();
+        }
+        ui.separator();
         ui.radio_value(&mut self.folder_tree, false, tr!("Flat List"));
         ui.radio_value(&mut self.folder_tree, true, tr!("Tree")).on_hover_text(tr!("Folders where they are on disk"));
         ui.separator();
