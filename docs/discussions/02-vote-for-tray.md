@@ -2,7 +2,7 @@
 
 Plans. It's not so hard to reproduce best features of original application, but hard to do this clever. I know that Picasa has overloaded UI and not-easy-to-use-by-new-people. Maybe. I try to use my skills to make it easier.
 
-Pico is not 1-to-1 copy or Picasa, this is only replacement besed on top of it's ideas. Some ugly functions can be removed...
+Picco is not 1-to-1 copy or Picasa, this is only replacement besed on top of it's ideas. Some ugly functions can be removed...
 
 <img width="825" height="131" alt="image" src="https://github.com/user-attachments/assets/13708502-e11f-4f69-a81d-f4fd431487b1" alt="Few photos kept in Picasa tray" />
 

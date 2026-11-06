@@ -1,0 +1,45 @@
+name: Bug report
+description: Something in Picco doesn't work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time. The more exact the steps, the sooner it gets fixed.
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options: [Linux, Windows, macOS]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Picco version
+      description: Shown in Help → About.
+      placeholder: 0.6.0
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: And what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a folder with…
+        2. Click…
+        3. See…
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots, files, .picasa.ini
+      description: >
+        Drop screenshots here. If the problem is about edits, stars or albums,
+        the photo's section of `.picasa.ini` helps a lot. Output from the
+        terminal is welcome too.

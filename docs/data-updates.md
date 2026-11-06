@@ -2,7 +2,7 @@
 
 **English** · [Русский](data-updates.ru.md)
 
-Some of Pico's data comes not from the code but from external references:
+Some of Picco's data comes not from the code but from external references:
 place names, the list of EXIF tags, dependency licenses. These references
 change slowly, so updating them about once a year or before a big release is
 enough. The program never goes online while running: everything is downloaded
@@ -24,9 +24,9 @@ What it does: downloads `cities1000.zip` (every populated place with at least
 outlines of countries, seas and oceans, and continents
 (`ne_50m_admin_0_countries`, `ne_10m_geography_marine_polys`,
 `ne_50m_geography_regions_polys`) from Natural Earth, then packs everything
-with `crates/pico-core/data/make_places.py` into
-`crates/pico-core/data/places.bin`. The file is embedded into the program at
-build time (`crates/pico-core/src/geo.rs`). The file format is described at the
+with `crates/picco-core/data/make_places.py` into
+`crates/picco-core/data/places.bin`. The file is embedded into the program at
+build time (`crates/picco-core/src/geo.rs`). The file format is described at the
 top of the script.
 
 Then:
@@ -36,9 +36,9 @@ Then:
    whether the source format has changed.
 2. `make check` — the `geo.rs` tests check that the file loads and that known
    points are found (city, country, sea, continent).
-3. Run Pico and open the **Places** section on photos with GPS.
+3. Run Picco and open the **Places** section on photos with GPS.
 4. If a source or a license has changed, fix the header of
-   `crates/pico/assets/make_licenses.py` (the DATA AND RECIPES section), run
+   `crates/picco/assets/make_licenses.py` (the DATA AND RECIPES section), run
    `make licenses` and fix the paragraph about data in `README.md` and `README.ru.md`.
 5. Commit `places.bin` (and the script, if it changed).
 
@@ -55,15 +55,15 @@ make exif-tags
 What it does: downloads the exiv2 tag reference (<https://exiv2.org/tags.html>,
 groups Image, Photo, Iop) and the ExifTool GPS tag table
 (<https://exiftool.org/TagNames/GPS.html>), and
-`crates/pico-core/data/make_exif_tags.py` writes
-`crates/pico-core/src/exif_tags.rs`: the tag number, the name as in XMP
+`crates/picco-core/data/make_exif_tags.py` writes
+`crates/picco-core/src/exif_tags.rs`: the tag number, the name as in XMP
 (`ExposureTime`) and a human-readable title (`Exposure Time`). GPS tags are
 stored as 0x1_0000 + number, Interoperability tags as 0x2_0000 + number. This
 file is not edited by hand.
 
 Then:
 
-1. `git diff crates/pico-core/src/exif_tags.rs` — usually a few new tags are
+1. `git diff crates/picco-core/src/exif_tags.rs` — usually a few new tags are
    added (new DNG or EXIF versions). If many lines disappeared, the page layout
    most likely changed, and the regular expressions in
    `exiv2_tags()`/`gps_tags()` need adjusting.
@@ -74,7 +74,7 @@ Then:
 3. `make check` and look at **Properties** on a few photos.
 4. Commit `exif_tags.rs`, and the script if it changed.
 
-Not generated but written by hand in `crates/pico-core/src/exif.rs`:
+Not generated but written by hand in `crates/picco-core/src/exif.rs`:
 
 - `tag_name()` — more familiar names for the most common tags (they win over
   the table in `exif_tags.rs`);
@@ -98,19 +98,19 @@ make maker-tags
 
 What it does: downloads ExifRead (a Python EXIF reader under BSD-3-Clause,
 <https://github.com/ianare/exif-py>; the version is `EXIFREAD` in the
-`Makefile`) and `crates/pico-core/data/make_maker_tags.py` reads its makers'
+`Makefile`) and `crates/picco-core/data/make_maker_tags.py` reads its makers'
 tables (Canon, Nikon, Olympus, Fujifilm, Sony, Casio, Apple, DJI) into
-`crates/pico-core/src/maker_tags.rs`: entry names and what their values mean.
+`crates/picco-core/src/maker_tags.rs`: entry names and what their values mean.
 The tables are Python dict literals and are read with `ast`, never run.
 
-Pico reads the notes in `crates/pico-core/src/maker_notes.rs`. What is
+Picco reads the notes in `crates/picco-core/src/maker_notes.rs`. What is
 written there by hand comes first: names of the entries compared with EXIF,
 and values that take arithmetic (Canon's EV, ISO and times, Nikon's clock and
 time zone, Olympus's directories). The generated tables fill in the rest.
 
 Then:
 
-1. `git diff crates/pico-core/src/maker_tags.rs` — new cameras in Canon's
+1. `git diff crates/picco-core/src/maker_tags.rs` — new cameras in Canon's
    Model ID, new entries.
 2. ExifRead is not ExifTool: where a table disagrees with what cameras
    write (Canon's AF Info 2 is one place off), leave it out or cut it in
@@ -124,7 +124,7 @@ Then:
 make licenses
 ```
 
-Rebuilds `crates/pico/assets/licenses.txt` (the list in **Help → About**) from
+Rebuilds `crates/picco/assets/licenses.txt` (the list in **Help → About**) from
 `cargo metadata`. Run it after any change of dependencies in `Cargo.toml` or a
 `cargo update`, then commit `licenses.txt`.
 
@@ -134,7 +134,7 @@ A photo can store the same thing — a title, an author, a date — in EXIF, XMP
 IPTC and PNG text chunks at once. When such fields exist in several places and
 disagree, the **Properties** panel puts a "!" badge next to each of them, and
 the tooltip shows what each one says. The rules are in
-`crates/pico-core/src/agree.rs` (`GROUPS`).
+`crates/picco-core/src/agree.rs` (`GROUPS`).
 
 Groups of fields that must agree:
 
@@ -152,7 +152,7 @@ Groups of fields that must agree:
 | Rating | Rating | Rating | — | — | number |
 | Lens | Lens Model | Lens Model, Lens | — | — | text |
 
-The camera maker's notes (MakerNote, read in `crates/pico-core/src/maker_notes.rs`)
+The camera maker's notes (MakerNote, read in `crates/picco-core/src/maker_notes.rs`)
 show in the EXIF section under the maker's name and are checked against EXIF:
 
 | What | EXIF | Maker's notes | Compared as |

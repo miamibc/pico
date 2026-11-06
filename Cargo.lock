@@ -2904,29 +2904,30 @@ dependencies = [
 ]
 
 [[package]]
-name = "pico"
-version = "0.6.0"
+name = "picco"
+version = "0.7.0"
 dependencies = [
  "arboard",
  "eframe",
  "egui",
  "egui_kittest",
  "egui_system_font_provider",
- "pico-core",
+ "picco-core",
  "rfd",
  "sys-locale",
  "zbus",
 ]
 
 [[package]]
-name = "pico-core"
-version = "0.6.0"
+name = "picco-core"
+version = "0.7.0"
 dependencies = [
  "ab_glyph",
  "chrono",
  "epaint_default_fonts",
  "image",
  "miniz_oxide 0.8.9",
+ "rayon",
 ]
 
 [[package]]

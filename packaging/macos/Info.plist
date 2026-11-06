@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>Pico</string>
+	<string>Picco</string>
 	<key>CFBundleDisplayName</key>
-	<string>Pico</string>
+	<string>Picco</string>
 	<key>CFBundleIdentifier</key>
-	<string>net.blackcrystal.pico</string>
+	<string>net.blackcrystal.picco</string>
 	<key>CFBundleExecutable</key>
-	<string>pico</string>
+	<string>picco</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleVersion</key>
@@ -23,12 +23,12 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSDesktopFolderUsageDescription</key>
-	<string>Pico shows the photos in folders you add to it.</string>
+	<string>Picco shows the photos in folders you add to it.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
-	<string>Pico shows the photos in folders you add to it.</string>
+	<string>Picco shows the photos in folders you add to it.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
-	<string>Pico shows the photos in folders you add to it.</string>
+	<string>Picco shows the photos in folders you add to it.</string>
 	<key>NSRemovableVolumesUsageDescription</key>
-	<string>Pico shows the photos on memory cards and drives you add to it.</string>
+	<string>Picco shows the photos on memory cards and drives you add to it.</string>
 </dict>
 </plist>
