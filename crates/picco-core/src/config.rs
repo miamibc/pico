@@ -8,40 +8,80 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub fn config_dir() -> Option<PathBuf> {
-    let env = |name: &str| std::env::var_os(name).filter(|v| !v.is_empty()).map(PathBuf::from);
-    let base = if cfg!(windows) {
-        env("APPDATA")
-    } else if cfg!(target_os = "macos") {
-        env("HOME").map(|home| home.join("Library/Application Support"))
-    } else {
-        env("XDG_CONFIG_HOME").or_else(|| env("HOME").map(|home| home.join(".config")))
-    }?;
-    Some(own_dir(&base))
+    take_over_pico();
+    Some(config_base()?.join("picco"))
 }
 
 /// Where disposable data such as thumbnails goes.
 pub fn cache_dir() -> Option<PathBuf> {
-    let env = |name: &str| std::env::var_os(name).filter(|v| !v.is_empty()).map(PathBuf::from);
-    let base = if cfg!(windows) {
-        env("LOCALAPPDATA")
-    } else if cfg!(target_os = "macos") {
-        env("HOME").map(|home| home.join("Library/Caches"))
-    } else {
-        env("XDG_CACHE_HOME").or_else(|| env("HOME").map(|home| home.join(".cache")))
-    }?;
-    Some(own_dir(&base))
+    take_over_pico();
+    Some(cache_base()?.join("picco"))
 }
 
-/// Picco's folder in `base`. The program used to be called Pico: its folder,
-/// with the folder list, settings and albums, is taken over under the new
-/// name the first time.
-fn own_dir(base: &Path) -> PathBuf {
-    let dir = base.join("picco");
-    let old = base.join("pico");
-    if !dir.exists() && old.is_dir() {
-        let _ = std::fs::rename(&old, &dir);
+fn env_dir(name: &str) -> Option<PathBuf> {
+    std::env::var_os(name).filter(|v| !v.is_empty()).map(PathBuf::from)
+}
+
+/// The platform's folder for settings, where Picco keeps its own.
+fn config_base() -> Option<PathBuf> {
+    if cfg!(windows) {
+        env_dir("APPDATA")
+    } else if cfg!(target_os = "macos") {
+        env_dir("HOME").map(|home| home.join("Library/Application Support"))
+    } else {
+        env_dir("XDG_CONFIG_HOME").or_else(|| env_dir("HOME").map(|home| home.join(".config")))
     }
-    dir
+}
+
+/// The platform's folder for caches.
+fn cache_base() -> Option<PathBuf> {
+    if cfg!(windows) {
+        env_dir("LOCALAPPDATA")
+    } else if cfg!(target_os = "macos") {
+        env_dir("HOME").map(|home| home.join("Library/Caches"))
+    } else {
+        env_dir("XDG_CACHE_HOME").or_else(|| env_dir("HOME").map(|home| home.join(".cache")))
+    }
+}
+
+/// Once per run, before Picco's folders are used: see [`take_over`].
+fn take_over_pico() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        if let (Some(config), Some(cache)) = (config_base(), cache_base()) {
+            take_over(&config, &cache);
+        }
+    });
+}
+
+/// The program used to be called Pico. Its settings folder (with the folder
+/// list, settings and albums) and its cache are taken over under the new name
+/// the first time — but only when the settings folder is Pico's: other
+/// programs called pico (the text editor) keep theirs.
+fn take_over(config: &Path, cache: &Path) {
+    let (old, new) = (config.join("pico"), config.join("picco"));
+    if new.exists() || !is_ours(&old) {
+        return;
+    }
+    if std::fs::rename(&old, &new).is_err() {
+        return;
+    }
+    let (old, new) = (cache.join("pico"), cache.join("picco"));
+    if !new.exists() && old.is_dir() {
+        let _ = std::fs::rename(&old, &new);
+    }
+}
+
+/// Whether a settings folder holds Pico's files: its folder lists, or its
+/// `settings.txt` with keys only Pico writes.
+fn is_ours(dir: &Path) -> bool {
+    if ["watched_folders.txt", "excluded_folders.txt"].iter().any(|name| dir.join(name).is_file()) {
+        return true;
+    }
+    std::fs::read_to_string(dir.join("settings.txt")).is_ok_and(|text| {
+        let settings = parse_settings(&text);
+        ["sidebar_width", "thumb_size", "left_sections"].iter().any(|key| settings.contains_key(*key))
+    })
 }
 
 fn list_file(name: &str) -> Option<PathBuf> {
@@ -131,18 +171,32 @@ mod tests {
     }
 
     #[test]
-    fn takes_over_the_folder_of_pico() {
-        let base = std::env::temp_dir().join(format!("picco-test-own-dir-{}", std::process::id()));
+    fn takes_over_only_the_folders_of_our_pico() {
+        let base = std::env::temp_dir().join(format!("picco-test-take-over-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(base.join("pico")).unwrap();
-        std::fs::write(base.join("pico/settings.txt"), "theme=dark\n").unwrap();
-        let dir = own_dir(&base);
-        assert_eq!(std::fs::read_to_string(dir.join("settings.txt")).unwrap(), "theme=dark\n");
-        assert!(!base.join("pico").exists());
+        let (config, cache) = (base.join("config"), base.join("cache"));
+        let make = |dir: &Path, file: &str, text: &str| {
+            std::fs::create_dir_all(dir).unwrap();
+            std::fs::write(dir.join(file), text).unwrap();
+        };
+
+        // Another program's pico (the text editor): left alone, cache too.
+        make(&config.join("pico"), "settings.txt", "fill=72\n");
+        make(&cache.join("pico"), "search_history", "x\n");
+        take_over(&config, &cache);
+        assert!(config.join("pico").exists() && !config.join("picco").exists());
+        assert!(cache.join("pico").exists() && !cache.join("picco").exists());
+
+        // Our Pico: the settings and the cache move.
+        make(&config.join("pico"), "settings.txt", "theme=dark\nsidebar_width=260\n");
+        take_over(&config, &cache);
+        assert!(!config.join("pico").exists() && config.join("picco/settings.txt").is_file());
+        assert!(!cache.join("pico").exists() && cache.join("picco/search_history").is_file());
+
         // Once there, an old folder appearing again is left alone.
-        std::fs::create_dir_all(base.join("pico")).unwrap();
-        assert_eq!(own_dir(&base), dir);
-        assert!(base.join("pico").exists() && dir.join("settings.txt").exists());
+        make(&config.join("pico"), "watched_folders.txt", "/photos\n");
+        take_over(&config, &cache);
+        assert!(config.join("pico/watched_folders.txt").is_file());
         std::fs::remove_dir_all(&base).unwrap();
     }
 }
