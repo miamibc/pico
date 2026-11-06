@@ -281,7 +281,9 @@ next, star, rotate and the caption field (saved on Enter).
 
 The **Edit** button opens the editing panel:
 
-- **Basic Fixes**: Crop (with a frame, with ready-made proportions),
+- **Basic Fixes**: Crop (a frame you draw, move and pull by its edges and
+  corners; the proportions of Picasa 3 — print sizes, 4:3, 16:10, 16:9, 5:3, as
+  shot, as the screen — and the last one picked stays for the next photo),
   Straighten (level the horizon), I'm Feeling Lucky, Auto Contrast, Auto Color.
 - **Tuning**: fill light, highlights, shadows, color temperature.
 - **Effects**: Picasa effects (sharpen, sepia, B&W, warmify, film grain, tint,
@@ -289,9 +291,13 @@ The **Edit** button opens the editing panel:
 - **Creative Kit**: Picnik effects (HDR-ish, Lomo, Holga, vignette, frames,
   Polaroid, Pencil Sketch, Duo-Tone and more).
 
-Effects with settings open a panel with sliders; the effect's center is set by
-clicking the photo. **Enter** applies, **Esc** cancels. **Undo** removes the
-last edit, **Undo All Edits** removes them all.
+Effects with settings open a panel with sliders, and handles on the photo: the
+center of focal effects is dragged or set with a click, their circle is pulled
+to size, and a graduated tint has a solid line where the tint is full and a
+dashed one where it ends. While a slider moves, the picture follows it on a
+smaller copy, so even a long stack of edits keeps up. **Enter** applies,
+**Esc** cancels. **Undo** removes the last edit, **Undo All Edits** removes
+them all.
 
 Edits are stored in `.picasa.ini`; the file itself does not change. To write
 them into the file, use **File → Save** (the original is kept in
@@ -335,7 +341,7 @@ also sets it as the wallpaper (GNOME).
 ### Slideshow
 
 **Ctrl+4** or **View → Slideshow** — full screen. **Space** — pause, arrows —
-previous and next, **−/+** — display time, **Esc** — exit. On a video, a click
+previous and next, **−/+** — display time (kept for the next show), **Esc** — exit. On a video, a click
 on the picture also pauses and plays it, and ▶ / ⏸ show when the mouse moves.
 
 ### Files
@@ -344,7 +350,8 @@ on the picture also pauses and plays it, and ▶ / ⏸ show when the mouse moves
   the chosen folder, with downsizing and a choice of JPEG quality.
 - **Rename…** (**F2**), **Locate on Disk** (**Ctrl+Enter**), **Open in Editor**
   (**Ctrl+Shift+O**), **Move to Trash…** (**Delete**; the Linux, Windows and
-  macOS trash).
+  macOS trash; *Don't ask again* skips the question, **Tools → Options…**
+  brings it back).
 - **Tools → Show Duplicate Files** finds identical files across the whole
   library.
 - **Tools → Options…** — theme, animations, language, size and cleanup of the

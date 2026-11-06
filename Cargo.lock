@@ -2905,7 +2905,7 @@ dependencies = [
 
 [[package]]
 name = "picco"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "arboard",
  "eframe",
@@ -2920,7 +2920,7 @@ dependencies = [
 
 [[package]]
 name = "picco-core"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ab_glyph",
  "chrono",
